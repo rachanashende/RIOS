@@ -1,9 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
 import pool from "../db.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { sendVerificationEmail } from "../lib/email.js";
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -12,7 +10,7 @@ router.use(requireAuth, requireAdmin);
 router.get("/clients", async (req, res, next) => {
   try {
     const { rows: clients } = await pool.query(
-      "SELECT id, email, name, company, created_at, email_verified FROM users WHERE role = 'client' ORDER BY created_at DESC"
+      "SELECT id, email, name, company, created_at FROM users WHERE role = 'client' ORDER BY created_at DESC"
     );
     const withProgress = await Promise.all(
       clients.map(async (c) => {
@@ -42,18 +40,10 @@ router.post("/clients", async (req, res, next) => {
     if (existing.length) return res.status(409).json({ error: "A user with that email already exists." });
 
     const password_hash = bcrypt.hashSync(password, 10);
-    const verificationToken = crypto.randomBytes(32).toString("hex");
-    const verificationExpiry = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48h
-
     const { rows } = await pool.query(
-      `INSERT INTO users (email, password_hash, name, role, company, verification_token, verification_token_expiry)
-       VALUES ($1, $2, $3, 'client', $4, $5, $6) RETURNING id`,
-      [normalizedEmail, password_hash, name, company || null, verificationToken, verificationExpiry]
+      "INSERT INTO users (email, password_hash, name, role, company) VALUES ($1, $2, $3, 'client', $4) RETURNING id",
+      [normalizedEmail, password_hash, name, company || null]
     );
-
-    sendVerificationEmail(normalizedEmail, name, verificationToken).catch((err) => {
-      console.error("Failed to send verification email:", err);
-    });
 
     res.status(201).json({ id: rows[0].id, email: normalizedEmail, name, company });
   } catch (err) {

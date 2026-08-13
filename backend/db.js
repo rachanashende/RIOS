@@ -43,15 +43,6 @@ export async function initSchema() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE(user_id, question_id)
     );
-
-    -- Email verification + password reset. ADD COLUMN IF NOT EXISTS makes
-    -- this safe to run against a users table that already existed before
-    -- this feature was added (i.e. your live Supabase database).
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token TEXT;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_expiry TIMESTAMPTZ;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMPTZ;
   `);
 }
 

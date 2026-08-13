@@ -1,3 +1,4 @@
 node_modules
 rios.db
 .env
+.env.example
