@@ -37,18 +37,18 @@ npm run dev                  # starts the API on http://localhost:4000
 ```
 
 Seeded accounts:
-| Role   | Email                    | Password  |
+| Role | Email | Password |
 |--------|--------------------------|-----------|
-| Admin  | `admin@rios.demo`        | `admin123`|
-| Client | `client@demo.retailer`   | `client123`|
+| Admin | `admin@rios.demo` | `admin123`|
+| Client | `client@demo.retailer` | `client123`|
 
 There's also a **Reliance Trends** demo client pre-loaded with a full,
 realistic 165-question scorecard (see "Sample data" below) rather than
 random numbers — good for showing someone the dashboards without making
 them click through the assessment first:
-| Role   | Email                  | Password |
+| Role | Email | Password |
 |--------|------------------------|----------|
-| Client | `reliance@test.com`    | `temp123`|
+| Client | `reliance@test.com` | `temp123`|
 
 **If your project folder lives inside OneDrive/Dropbox/Google Drive**, move
 it outside the synced folder before running `npm install` (e.g. to
@@ -80,6 +80,7 @@ SQLite file on Render's disk — your data survives redeploys and restarts;
 nothing here wipes it. Push this project to a GitHub repo first, then:
 
 **1. Deploy the backend**
+
 - Render dashboard → **New +** → **Web Service** → connect your repo
 - Root Directory: `backend`
 - Build Command: `npm install`
@@ -91,6 +92,7 @@ nothing here wipes it. Push this project to a GitHub repo first, then:
 - Once it's live, copy its URL (something like `https://rios-backend-xxxx.onrender.com`)
 
 **2. Deploy the frontend**
+
 - **New +** → **Static Site** → same repo
 - Root Directory: `frontend`
 - Build Command: `npm install && npm run build`
