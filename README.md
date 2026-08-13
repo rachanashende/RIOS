@@ -144,6 +144,30 @@ values and re-run to build a different persona.
   (FR-2). New client accounts are created by an admin from the Manage
   Clients screen.
 
+## Email verification & password reset
+
+Set up once via [resend.com](https://resend.com) (free tier: 3,000
+emails/month) — sign up, create an API key, add it to `backend/.env` as
+`RESEND_API_KEY`. Without it set, the backend logs a warning and skips
+sending instead of crashing, so the rest of the app still works.
+
+- **Verification** — every new client account gets a verification email
+  automatically when an admin creates it. The link expires in 48 hours.
+  Logged-in clients with an unverified email see a banner with a "Resend
+  verification email" button.
+- **Password reset** — "Forgot password?" on the login screen. The
+  response is identical whether or not the email exists, so this can't be
+  used to check which emails have accounts. Reset links expire in 1 hour.
+- **Domain note** — until you verify a custom domain in Resend's
+  dashboard, the default sender (`onboarding@resend.dev`) can only
+  actually deliver to the email address of your own Resend account —
+  fine for testing the whole flow yourself, not for real client emails.
+  Verifying a domain (Resend dashboard → Domains → add the DNS records
+  it gives you) lifts that restriction.
+- **`APP_URL`** in `backend/.env` controls what the links inside these
+  emails point at — set it to your deployed frontend's URL in production
+  (defaults to `http://localhost:5173` for local dev).
+
 ## Exporting
 
 From My Scorecard (client) or a client's scorecard (admin), **Export Excel**

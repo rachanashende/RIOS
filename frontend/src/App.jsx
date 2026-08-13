@@ -222,7 +222,7 @@ function PricingView() {
 }
 
 /* ---------------- Login ---------------- */
-function LoginView({ onLogin }) {
+function LoginView({ onLogin, setView }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -252,7 +252,12 @@ function LoginView({ onLogin }) {
         <form onSubmit={submit}>
           <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink }}>Email</label>
           <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required autoFocus style={inputStyle} />
-          <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink, marginTop: 14, display: "block" }}>Password</label>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14 }}>
+            <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink }}>Password</label>
+            <button type="button" onClick={() => setView("forgot-password")} style={{
+              background: "none", border: "none", cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontSize: 12, color: BRAND.coral, fontWeight: 600,
+            }}>Forgot password?</button>
+          </div>
           <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required style={inputStyle} />
           {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: BRAND.coralDark, marginTop: 12 }}>{error}</div>}
           <button type="submit" disabled={loading} style={{
@@ -268,6 +273,162 @@ function LoginView({ onLogin }) {
             <button type="button" onClick={() => fillDemo("client")} style={demoBtnStyle}>Fill client</button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ForgotPasswordView({ setView }) {
+  const [email, setEmail] = useState("");
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setError(""); setLoading(true);
+    try {
+      await api.forgotPassword(email);
+      setSent(true);
+    } catch (err) {
+      setError(err.message || "Something went wrong — try again.");
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <div style={{ maxWidth: 420, margin: "70px auto", padding: "0 24px" }}>
+      <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 32, background: "#fff" }}>
+        <button onClick={() => setView("login")} style={{
+          display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer",
+          fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F", fontWeight: 600, marginBottom: 16, padding: 0,
+        }}><ChevronLeft size={13} /> Back to login</button>
+
+        {sent ? (
+          <>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 20, color: BRAND.ink, marginBottom: 8 }}>Check your inbox</div>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13.5, color: "#7A746F", lineHeight: 1.6 }}>
+              If <strong>{email}</strong> has an account, a password reset link is on its way — it expires in 1 hour.
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 20, color: BRAND.ink, marginBottom: 4 }}>Reset your password</div>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 22 }}>Enter the email on your account and we'll send a reset link.</div>
+            <form onSubmit={submit}>
+              <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink }}>Email</label>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required autoFocus style={inputStyle} />
+              {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: BRAND.coralDark, marginTop: 12 }}>{error}</div>}
+              <button type="submit" disabled={loading} style={{
+                width: "100%", marginTop: 20, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, background: BRAND.coral, color: "#fff",
+                border: "none", borderRadius: 9, padding: "12px 0", cursor: loading ? "default" : "pointer", opacity: loading ? 0.7 : 1,
+              }}>{loading && <Loader2 size={14} className="rios-spin" />} Send reset link</button>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ResetPasswordView({ token, setView }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    if (password !== confirm) { setError("Passwords don't match."); return; }
+    setLoading(true);
+    try {
+      await api.resetPassword(token, password);
+      setDone(true);
+    } catch (err) {
+      setError(err.message || "That link may have expired — request a new one.");
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <div style={{ maxWidth: 420, margin: "70px auto", padding: "0 24px" }}>
+      <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 32, background: "#fff" }}>
+        {done ? (
+          <>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 20, color: BRAND.ink, marginBottom: 8 }}>Password updated</div>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13.5, color: "#7A746F", lineHeight: 1.6, marginBottom: 20 }}>
+              Your password has been changed. Log in with your new password.
+            </div>
+            <button onClick={() => setView("login")} style={{
+              width: "100%", fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, background: BRAND.coral, color: "#fff",
+              border: "none", borderRadius: 9, padding: "12px 0", cursor: "pointer",
+            }}>Go to login</button>
+          </>
+        ) : (
+          <>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 20, color: BRAND.ink, marginBottom: 4 }}>Set a new password</div>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 22 }}>Choose something you haven't used before.</div>
+            <form onSubmit={submit}>
+              <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink }}>New password</label>
+              <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required autoFocus style={inputStyle} />
+              <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink, marginTop: 14, display: "block" }}>Confirm new password</label>
+              <input value={confirm} onChange={(e) => setConfirm(e.target.value)} type="password" required style={inputStyle} />
+              {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: BRAND.coralDark, marginTop: 12 }}>{error}</div>}
+              <button type="submit" disabled={loading} style={{
+                width: "100%", marginTop: 20, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, background: BRAND.coral, color: "#fff",
+                border: "none", borderRadius: 9, padding: "12px 0", cursor: loading ? "default" : "pointer", opacity: loading ? 0.7 : 1,
+              }}>{loading && <Loader2 size={14} className="rios-spin" />} Update password</button>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function VerifyEmailView({ token, setView }) {
+  const [status, setStatus] = useState("checking"); // checking | success | error
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!token) { setStatus("error"); setMessage("Missing verification token."); return; }
+    api.verifyEmail(token)
+      .then(() => setStatus("success"))
+      .catch((err) => { setStatus("error"); setMessage(err.message || "Verification failed."); });
+  }, [token]);
+
+  return (
+    <div style={{ maxWidth: 420, margin: "70px auto", padding: "0 24px", textAlign: "center" }}>
+      <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 32, background: "#fff" }}>
+        {status === "checking" && (
+          <>
+            <Loader2 size={24} className="rios-spin" color={BRAND.coral} style={{ margin: "0 auto" }} />
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14, color: "#7A746F", marginTop: 14 }}>Verifying your email…</div>
+          </>
+        )}
+        {status === "success" && (
+          <>
+            <CheckCircle2 size={28} color="#2E9E6B" style={{ margin: "0 auto" }} />
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 18, color: BRAND.ink, marginTop: 12 }}>Email verified</div>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13.5, color: "#7A746F", marginTop: 6, marginBottom: 20 }}>You're all set — log in to continue.</div>
+            <button onClick={() => setView("login")} style={{
+              width: "100%", fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, background: BRAND.coral, color: "#fff",
+              border: "none", borderRadius: 9, padding: "12px 0", cursor: "pointer",
+            }}>Go to login</button>
+          </>
+        )}
+        {status === "error" && (
+          <>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 18, color: BRAND.ink }}>Couldn't verify</div>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13.5, color: BRAND.coralDark, marginTop: 8, marginBottom: 20 }}>{message}</div>
+            <button onClick={() => setView("login")} style={{
+              width: "100%", fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, background: "#fff", color: BRAND.ink,
+              border: `1px solid ${BRAND.line}`, borderRadius: 9, padding: "12px 0", cursor: "pointer",
+            }}>Back to login</button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -631,8 +792,28 @@ export default function RiosApp() {
   const [moduleIdx, setModuleIdx] = useState(0);
   const [viewingClient, setViewingClient] = useState(null); // admin viewing a specific client
   const [ready, setReady] = useState(false);
+  const [emailActionToken, setEmailActionToken] = useState(null);
+  const [resendStatus, setResendStatus] = useState("idle"); // idle | sending | sent
   const saveTimer = useRef(null);
   const skipNextSave = useRef(true);
+
+  // Links from verification/reset emails land here as
+  // ?action=verify-email&token=... or ?action=reset-password&token=...
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get("action");
+    const token = params.get("token");
+    if (action === "verify-email" && token) {
+      setEmailActionToken(token);
+      setView("verify-email");
+    } else if (action === "reset-password" && token) {
+      setEmailActionToken(token);
+      setView("reset-password");
+    }
+    if (action) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   // Load the instrument once (public)
   useEffect(() => {
@@ -672,8 +853,18 @@ export default function RiosApp() {
     if (v !== "dashboard") setViewingClient(null);
     setView(v);
   }
+  async function handleResendVerification() {
+    setResendStatus("sending");
+    try {
+      await api.resendVerification();
+      setResendStatus("sent");
+    } catch {
+      setResendStatus("idle");
+    }
+  }
 
   const stats = [{ value: "165", label: "diagnostic questions" }, { value: "19", label: "operating modules" }, { value: "5", label: "maturity bands" }];
+  const showUnverifiedBanner = user && user.role === "client" && user.emailVerified === false && (view === "assess" || view === "dashboard");
 
   return (
     <div style={{ fontFamily: "'Poppins',sans-serif", background: BRAND.cream, minHeight: "100%" }}>
@@ -695,8 +886,26 @@ export default function RiosApp() {
         }
       `}</style>
       <NavBar view={view} setView={goToView} user={user} onLogout={handleLogout} />
+      {showUnverifiedBanner && (
+        <div style={{
+          background: "#FCEEE1", borderBottom: `1px solid ${BRAND.line}`, padding: "10px 24px",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 14, flexWrap: "wrap",
+        }}>
+          <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: BRAND.ink }}>Your email isn't verified yet — check your inbox for a link.</span>
+          {resendStatus === "sent" ? (
+            <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, color: "#2E9E6B" }}>Sent — check your inbox</span>
+          ) : (
+            <button onClick={handleResendVerification} disabled={resendStatus === "sending"} style={{
+              background: "none", border: "none", cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 700, color: BRAND.coralDark, textDecoration: "underline", padding: 0,
+            }}>{resendStatus === "sending" ? "Sending…" : "Resend verification email"}</button>
+          )}
+        </div>
+      )}
       {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip /><ModuleGrid modules={modules} questions={questions} setView={goToView} /></>)}
-      {view === "login" && <LoginView onLogin={handleLogin} />}
+      {view === "login" && <LoginView onLogin={handleLogin} setView={setView} />}
+      {view === "forgot-password" && <ForgotPasswordView setView={setView} />}
+      {view === "reset-password" && <ResetPasswordView token={emailActionToken} setView={setView} />}
+      {view === "verify-email" && <VerifyEmailView token={emailActionToken} setView={setView} />}
       {view === "pricing" && <PricingView />}
       {view === "about" && <AboutRivSite onBackToRios={() => goToView("home")} />}
       {view === "assess" && user?.role === "client" && ready && (

@@ -43,6 +43,10 @@ async function request(path, { method = "GET", body, raw } = {}) {
 export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
   me: () => request("/auth/me"),
+  verifyEmail: (token) => request("/auth/verify-email", { method: "POST", body: { token } }),
+  resendVerification: () => request("/auth/resend-verification", { method: "POST" }),
+  forgotPassword: (email) => request("/auth/forgot-password", { method: "POST", body: { email } }),
+  resetPassword: (token, password) => request("/auth/reset-password", { method: "POST", body: { token, password } }),
 
   getQuestions: () => request("/questions"),
   getResponses: () => request("/responses"),
