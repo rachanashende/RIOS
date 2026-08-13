@@ -5,10 +5,12 @@ import { QUESTIONS } from "../lib/scoring.js";
 
 const router = Router();
 
-// Pick a current model at https://docs.claude.com/en/docs/about-claude/models
-// if this ever needs to change — Sonnet is a reasonable default balance of
-// quality and per-rating cost for a short 2–4 turn interview.
-const CLAUDE_MODEL = "claude-sonnet-5";
+// Groq (console.groq.com) — free tier, no credit card required, OpenAI-
+// compatible endpoint. If this model is ever retired, swap it for another
+// from https://console.groq.com/docs/models (the free tier's model list
+// changes occasionally; the endpoint/auth shape below stays the same).
+const GROQ_MODEL = "llama-3.3-70b-versatile";
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 function buildSystemPrompt(question, idea) {
   return `You are the AI jury assistant inside "Ideas.RIV", a retail-innovation ideas platform. You help a jury member (a company leader) evaluate an employee-submitted idea, using the CRIT prompting method: Context, Role, Interview me, Task.
@@ -41,8 +43,8 @@ Base the four scores on what the jury member told you during the interview, not 
  */
 router.post("/crit-turn", requireAuth, requireRole("jury", "admin"), async (req, res, next) => {
   try {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return res.status(500).json({ error: "ANTHROPIC_API_KEY is not configured on the server." });
+    if (!process.env.GROQ_API_KEY) {
+      return res.status(500).json({ error: "GROQ_API_KEY is not configured on the server." });
     }
 
     const { ideaId, messages } = req.body || {};
@@ -56,34 +58,37 @@ router.post("/crit-turn", requireAuth, requireRole("jury", "admin"), async (req,
     if (!question) return res.status(404).json({ error: "Underlying opportunity question not found." });
 
     const history = Array.isArray(messages) ? messages : [];
-    const apiMessages = history.length
-      ? history.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.text || "") }))
-      : [{ role: "user", content: "Begin the interview with your first question." }];
+    // Groq's chat endpoint is OpenAI-shaped: the system prompt is a message
+    // in the array (role: "system"), not a separate top-level field like
+    // Anthropic's API.
+    const chatMessages = [
+      { role: "system", content: buildSystemPrompt(question, idea) },
+      ...(history.length
+        ? history.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.text || "") }))
+        : [{ role: "user", content: "Begin the interview with your first question." }]),
+    ];
 
-    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+    const groqRes = await fetch(GROQ_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        model: CLAUDE_MODEL,
+        model: GROQ_MODEL,
         max_tokens: 1000,
-        system: buildSystemPrompt(question, idea),
-        messages: apiMessages,
+        messages: chatMessages,
       }),
     });
 
-    if (!anthropicRes.ok) {
-      const detail = await anthropicRes.text().catch(() => "");
-      console.error("Anthropic API error:", anthropicRes.status, detail);
+    if (!groqRes.ok) {
+      const detail = await groqRes.text().catch(() => "");
+      console.error("Groq API error:", groqRes.status, detail);
       return res.status(502).json({ error: "The AI jury assistant is unavailable right now — please try again." });
     }
 
-    const data = await anthropicRes.json();
-    const textBlock = (data.content || []).find((b) => b.type === "text");
-    const text = (textBlock ? textBlock.text : "").trim();
+    const data = await groqRes.json();
+    const text = (data.choices?.[0]?.message?.content || "").trim();
     const cleaned = text.replace(/^```json\s*|```$/g, "").trim();
 
     let parsed = null;
