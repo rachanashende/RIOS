@@ -3,6 +3,7 @@ import {
   Globe, Lightbulb, Search, ArrowLeft, ArrowRight, Handshake, Building2,
   TrendingUp, Users, Rocket, Target, Award, Sparkles, ShoppingBag,
   HeartHandshake, Sprout, Store, Wallet, Network, LineChart, Layers, LogOut,
+  Zap, Smile, Settings, User, CheckCircle2, Ear,
 } from "lucide-react";
 import { BRAND } from "./brand.js";
 
@@ -424,35 +425,288 @@ function StartupsPage() {
   );
 }
 
-function RetailersPage() {
+/* ---------------- Retailers page — shared small building blocks ---------------- */
+function ImagePanel({ icon: Icon, height = 340 }) {
+  return (
+    <div style={{
+      height, borderRadius: 18, background: `linear-gradient(135deg, ${BRAND.ink} 0%, #3a3432 100%)`,
+      display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden",
+    }}>
+      <div style={{ position: "absolute", top: -50, right: -50, width: 180, height: 180, borderRadius: "50%", background: `radial-gradient(circle, ${BRAND.blue}55 0%, transparent 70%)` }} />
+      <Icon size={56} color="rgba(255,255,255,0.5)" strokeWidth={1.2} />
+    </div>
+  );
+}
+
+function IconBullet({ icon: Icon, title, desc, color = BRAND.coral }) {
+  return (
+    <div style={{ marginBottom: 30 }}>
+      <Icon size={26} color={color} strokeWidth={1.6} />
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 18, color: BRAND.ink, marginTop: 12 }}>{title}</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13.5, color: "#7A746F", marginTop: 6, lineHeight: 1.6, maxWidth: 380 }}>{desc}</div>
+    </div>
+  );
+}
+
+function StatCard4({ value, title, desc }) {
+  return (
+    <div style={{ textAlign: "center" }}>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 34, color: BRAND.ink }}>{value}</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 14.5, color: BRAND.ink, marginTop: 6 }}>{title}</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#7A746F", marginTop: 6, lineHeight: 1.55 }}>{desc}</div>
+    </div>
+  );
+}
+
+function SectionHeading({ children, color = BRAND.coral, size = "clamp(24px,3.2vw,32px)" }) {
+  return <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: size, color, lineHeight: 1.25 }}>{children}</div>;
+}
+
+function PinkCard({ title, desc, borderColor = BRAND.coral }) {
+  return (
+    <div style={{ border: `1px solid ${BRAND.line}`, borderLeft: `3px solid ${borderColor}`, borderRadius: 10, padding: "20px 22px" }}>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 16, color: BRAND.ink }}>{title}</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#7A746F", marginTop: 8, lineHeight: 1.6 }}>{desc}</div>
+    </div>
+  );
+}
+
+function ChevronStep({ icon: Icon, title, desc }) {
+  return (
+    <div style={{ display: "flex", gap: 20, alignItems: "flex-start", marginBottom: 26 }}>
+      <div style={{
+        width: 64, height: 64, background: "#FBEAEA", borderRadius: 12, flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <Icon size={24} color={BRAND.ink} strokeWidth={1.6} />
+      </div>
+      <div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 17, color: BRAND.ink }}>{title}</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13.5, color: "#7A746F", marginTop: 4, lineHeight: 1.55 }}>{desc}</div>
+      </div>
+    </div>
+  );
+}
+
+function NumberedStep({ n, title, desc }) {
+  return (
+    <div style={{ display: "flex", gap: 18, marginBottom: 4 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div style={{
+          width: 34, height: 34, borderRadius: 8, background: "#FBEAEA", color: BRAND.coral,
+          display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 15, flexShrink: 0,
+        }}>{n}</div>
+        <div style={{ width: 1.5, flex: 1, background: BRAND.line, marginTop: 4, marginBottom: 4, minHeight: 30 }} />
+      </div>
+      <div style={{ paddingBottom: 26 }}>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 16, color: BRAND.ink }}>{title}</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13.5, color: "#7A746F", marginTop: 5, lineHeight: 1.6 }}>{desc}</div>
+      </div>
+    </div>
+  );
+}
+
+function MatterCard({ title, color, desc }) {
+  return (
+    <div style={{ background: "#FBEAEA", borderRadius: 12, padding: "22px 24px" }}>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 17, color }}>{title}</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13.5, color: BRAND.ink, marginTop: 8, lineHeight: 1.6 }}>{desc}</div>
+    </div>
+  );
+}
+
+function NextStepPill({ icon: Icon, title, desc }) {
+  return (
+    <div>
+      <div style={{
+        height: 64, background: "#FBEAEA", borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <Icon size={24} color={BRAND.ink} strokeWidth={1.6} />
+      </div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 16, color: BRAND.ink, marginTop: 16 }}>{title}</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#7A746F", marginTop: 6, lineHeight: 1.55 }}>{desc}</div>
+    </div>
+  );
+}
+
+function RetailersPage({ onBackToRios }) {
   const pillars = [
     { icon: Globe, title: "Global Capability Centre Setup", desc: "Centralise technology expertise and scale operations globally." },
     { icon: Lightbulb, title: "Innovation Ecosystems", desc: "Drive internal innovation and startup-ecosystem collaboration for breakthrough solutions." },
     { icon: Search, title: "Hackathon Hiring", desc: "Recruit top talent through competitive innovation challenges." },
   ];
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "72px 24px 90px" }}>
-      <h1 style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: "clamp(26px,3.6vw,38px)", color: BRAND.coral, lineHeight: 1.2 }}>Three pillars of retail excellence: unlocking growth &amp; innovation</h1>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 20, marginTop: 40 }}>
-        {pillars.map((p) => (
-          <div key={p.title} style={{ borderTop: `2px solid ${BRAND.coral}`, paddingTop: 16 }}>
-            <p.icon size={20} color={BRAND.ink} strokeWidth={1.6} />
-            <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 16, color: BRAND.ink, marginTop: 12 }}>{p.title}</div>
-            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#7A746F", marginTop: 6, lineHeight: 1.55 }}>{p.desc}</div>
-          </div>
-        ))}
+    <div>
+      {/* Intro + 3 pillars */}
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "72px 24px 0" }}>
+        <SectionHeading size="clamp(28px,3.8vw,42px)">Three Pillars of Retail Excellence: Unlocking Growth &amp; Innovation</SectionHeading>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 20, marginTop: 40 }}>
+          {pillars.map((p) => (
+            <div key={p.title} style={{ borderTop: `2px solid ${BRAND.coral}`, paddingTop: 16 }}>
+              <p.icon size={20} color={BRAND.ink} strokeWidth={1.6} />
+              <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 16, color: BRAND.ink, marginTop: 12 }}>{p.title}</div>
+              <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#7A746F", marginTop: 6, lineHeight: 1.55 }}>{p.desc}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div style={{ marginTop: 56, paddingTop: 40, borderTop: `1px solid ${BRAND.line}` }}>
-        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 22, color: BRAND.coral }}>Pillar 1: Global Capability Centre Setup</div>
-        <div style={{ display: "flex", gap: 14, alignItems: "flex-start", marginTop: 22 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 8, background: "#FCEEE1", flexShrink: 0 }} />
-          <div>
-            <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 15, color: BRAND.ink }}>Centralised Excellence</div>
-            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#7A746F", marginTop: 4 }}>Unified technology platform across all markets.</div>
+      {/* Pillar 1 */}
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "56px 24px 0" }}>
+        <div style={{ borderTop: `1px solid ${BRAND.line}`, paddingTop: 40 }}>
+          <SectionHeading>Pillar 1: Global Capability Centre Setup</SectionHeading>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, marginTop: 32, alignItems: "center" }} className="riv-ret-grid">
+            <div>
+              <IconBulletDot title="Centralised Excellence" desc="Unified technology platform across all markets." />
+              <IconBulletDot title="Global Talent Access" desc="Premium expertise at competitive costs." />
+              <IconBulletDot title="Digital Transformation" desc="Advanced analytics and streamlined processes." />
+            </div>
+            <ImagePanel icon={Layers} />
           </div>
         </div>
+      </div>
+
+      {/* Benefits of GCCs */}
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "56px 24px 0" }}>
+        <SectionHeading color={BRAND.blue} size="clamp(22px,2.8vw,28px)">Benefits of Global Capability Centres for Retailers</SectionHeading>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 24, marginTop: 32 }}>
+          <StatCard4 value="30%" title="Cost Reduction" desc="Operational savings through process standardisation and automation" />
+          <StatCard4 value="50%" title="Faster Innovation" desc="Accelerated time-to-market for new retail technologies" />
+          <StatCard4 value="24/7" title="Global Support" desc="Round-the-clock operational excellence" />
+          <StatCard4 value="3x" title="Talent Pool" desc="Access to diverse, skilled professionals worldwide" />
+        </div>
+        <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14, color: BRAND.ink, marginTop: 32, lineHeight: 1.75, maxWidth: 900 }}>
+          Enhanced customer experience through data-driven insights, personalised solutions, and resilient operations that withstand supply chain and market disruptions with global reach.
+        </p>
+      </div>
+
+      {/* Pillar 2 */}
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "56px 24px 0" }}>
+        <div style={{ borderTop: `1px solid ${BRAND.line}`, paddingTop: 40 }}>
+          <SectionHeading>Pillar 2: Innovation — Internal &amp; Open Innovation Models</SectionHeading>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 20, marginTop: 32 }}>
+            <PinkCard title="Internal Innovation Culture" desc="Foster continuous innovation within your organisation through design thinking and agile methodologies. Empower teams to rapidly prototype and scale breakthrough retail solutions." />
+            <PinkCard title="External Ecosystem Access" desc="Tap into dynamic networks of startups, academic institutions, and technology partners. Harness collective intelligence for game-changing ideas and development." />
+          </div>
+        </div>
+      </div>
+
+      {/* Innovation value for retailers */}
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "56px 24px 0" }}>
+        <SectionHeading color={BRAND.blue} size="clamp(22px,2.8vw,28px)">Innovation Value for Retailers</SectionHeading>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, marginTop: 32, alignItems: "center" }} className="riv-ret-grid">
+          <div>
+            <IconBullet icon={TrendingUp} title="Revenue Growth" desc="Launch differentiated products and services faster to capture new market opportunities" />
+            <IconBullet icon={Smile} title="Customer Excellence" desc="Stay ahead of evolving expectations with cutting-edge, personalised solutions" />
+            <IconBullet icon={Settings} title="Operational Efficiency" desc="Transform operations through AI, automation, and IoT-enabled retail environments" />
+          </div>
+          <ImagePanel icon={Sparkles} />
+        </div>
+        <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14, color: BRAND.ink, marginTop: 8, lineHeight: 1.75, maxWidth: 900 }}>
+          Build unshakeable brand loyalty by delivering immersive shopping experiences that captivate and engage customers at every touchpoint.
+        </p>
+      </div>
+
+      {/* Pillar 3 */}
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "56px 24px 0" }}>
+        <div style={{ borderTop: `1px solid ${BRAND.line}`, paddingTop: 40 }}>
+          <SectionHeading>Pillar 3: Hiring Through Hackathons</SectionHeading>
+          <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14.5, color: BRAND.ink, marginTop: 18, lineHeight: 1.75, maxWidth: 820 }}>
+            Transform your talent acquisition strategy by using hackathons to identify and recruit top technology talent passionate about solving retail challenges. Engage diverse problem solvers to co-create innovative solutions in real-time whilst accelerating recruitment cycles.
+          </p>
+          <div style={{ marginTop: 36, maxWidth: 560 }}>
+            <ChevronStep icon={Search} title="Talent Discovery" desc="Identify exceptional candidates through practical challenges" />
+            <ChevronStep icon={Zap} title="Rapid Hiring" desc="Accelerate recruitment cycles and reduce traditional hiring costs" />
+            <ChevronStep icon={Ear} title="Cultural Fit" desc="Assess creativity, problem-solving, and team dynamics" />
+          </div>
+
+          <SectionHeading color={BRAND.blue} size="clamp(20px,2.4vw,24px)">Hackathon Hiring Benefits for Retailers</SectionHeading>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 20, marginTop: 24 }}>
+            <PinkCard title="Global Talent Pool Access" desc="Connect with skilled developers, data scientists, and UX designers from around the world, bringing diverse perspectives to retail challenges." />
+            <PinkCard title="Skills-Based Evaluation" desc="Assess candidates' technical abilities and problem-solving in practical, high-pressure environments that mirror real work environments." />
+            <PinkCard title="Employer Branding Excellence" desc="Position your company as an innovation-driven, tech-forward retailer that attracts top talent and industry recognition." />
+            <PinkCard title="Entrepreneurial Mindsets" desc="Build internal innovation teams with fresh perspectives and entrepreneurial drive to accelerate digital transformation initiatives." />
+          </div>
+        </div>
+      </div>
+
+      {/* Case study */}
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "56px 24px 0" }}>
+        <div style={{ borderTop: `1px solid ${BRAND.line}`, paddingTop: 40 }}>
+          <SectionHeading>Case Study Snapshot: Transformation Journey</SectionHeading>
+          <div style={{ marginTop: 32, maxWidth: 720 }}>
+            <NumberedStep n="1" title="Global Centre Launch" desc="Established a Technology Capability Centre in Bangalore for an Australian fashion brand with seamless team integration." />
+            <NumberedStep n="2" title="Innovation Challenge Success" desc="Launched an open innovation program generating 15 viable retail technology pilots in just 6 months." />
+            <NumberedStep n="3" title="Hackathon Hiring Triumph" desc="Recruited 20 exceptional performers through competitive hackathons, accelerating digital project delivery by 40%." />
+          </div>
+          <div style={{
+            display: "flex", gap: 12, alignItems: "flex-start", marginTop: 8, padding: "16px 20px",
+            background: "#EAF8F1", borderRadius: 12, maxWidth: 820,
+          }}>
+            <CheckCircle2 size={18} color="#1B7A5A" style={{ flexShrink: 0, marginTop: 2 }} />
+            <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13.5, color: BRAND.ink, lineHeight: 1.65 }}>
+              The combined strategy delivered measurable results: reduced costs, accelerated innovation, and enhanced capabilities across all retail operations.
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Why these pillars matter now */}
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "56px 24px 0" }}>
+        <div style={{ borderTop: `1px solid ${BRAND.line}`, paddingTop: 40 }}>
+          <SectionHeading>Why These Three Pillars Matter Now</SectionHeading>
+          <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14.5, color: BRAND.ink, marginTop: 18, lineHeight: 1.75, maxWidth: 900 }}>
+            Retail operates in an era of constant disruption: supply chain shocks, inflation pressures, and rapidly shifting consumer behaviours demand immediate adaptation. Digital capabilities and strategic talent acquisition have become the key differentiators in a competitive global marketplace.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 20, marginTop: 28 }}>
+            <MatterCard title="Market Disruption" color={BRAND.coral} desc="Economic volatility requires resilient, adaptable operations." />
+            <MatterCard title="Digital Imperative" color={BRAND.blue} desc="Technology capabilities drive competitive advantage." />
+            <MatterCard title="Sustainable Growth" color="#1B7A5A" desc="Innovation ecosystems create lasting market leadership." />
+          </div>
+          <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14.5, color: BRAND.ink, marginTop: 24, lineHeight: 1.75, maxWidth: 900 }}>
+            Combining global scale, innovation ecosystems, and agile hiring practices creates the foundation for sustainable growth and operational resilience.
+          </p>
+        </div>
+      </div>
+
+      {/* Next step */}
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "56px 24px 90px" }}>
+        <div style={{ borderTop: `1px solid ${BRAND.line}`, paddingTop: 40 }}>
+          <SectionHeading size="clamp(28px,3.6vw,40px)">Your Next Step: Partner to Build the Future of Retail</SectionHeading>
+          <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14.5, color: BRAND.ink, marginTop: 18, lineHeight: 1.75, maxWidth: 900 }}>
+            Embrace these three transformational pillars to revolutionise your retail operations and elevate customer engagement to unprecedented levels. The future of retail belongs to organisations that act decisively today.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 20, marginTop: 32 }}>
+            <NextStepPill icon={Handshake} title="Strategic Collaboration" desc="Partner with us to design your tailored transformation roadmap" />
+            <NextStepPill icon={User} title="Comprehensive Planning" desc="Develop your Global Capability Centre and innovation strategy" />
+            <NextStepPill icon={Rocket} title="Market Leadership" desc="Unlock new value, agility, and dominance in retail's next era" />
+          </div>
+
+          <div style={{ borderLeft: `3px solid ${BRAND.coral}`, paddingLeft: 22, marginTop: 44 }}>
+            <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14.5, color: BRAND.ink, lineHeight: 1.75, maxWidth: 800 }}>
+              Together, we'll transform challenges into competitive advantages and position your brand at the forefront of retail innovation.
+            </p>
+            <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14.5, color: BRAND.ink, marginTop: 10, lineHeight: 1.75, maxWidth: 800 }}>
+              Please fill out a quick profile of your retail enterprise on RIOS and we'll get back to you.
+            </p>
+            <button onClick={onBackToRios} style={{
+              marginTop: 20, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, background: BRAND.coral, color: "#fff",
+              border: "none", borderRadius: 9, padding: "13px 24px", cursor: "pointer",
+            }}>Get Your AI &amp; Innovation Audit</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IconBulletDot({ title, desc }) {
+  return (
+    <div style={{ display: "flex", gap: 14, alignItems: "flex-start", marginBottom: 26 }}>
+      <div style={{ width: 14, height: 14, borderRadius: 4, background: "#FCEEE1", marginTop: 4, flexShrink: 0 }} />
+      <div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 16, color: BRAND.ink }}>{title}</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13.5, color: "#7A746F", marginTop: 4, lineHeight: 1.55 }}>{desc}</div>
       </div>
     </div>
   );
@@ -516,6 +770,7 @@ export default function AboutRivSite({ onBackToRios }) {
           .riv-experts-grid { grid-template-columns: 1fr !important; }
           .riv-benefits-grid { grid-template-columns: 1fr !important; }
           .riv-footer-grid { grid-template-columns: 1fr !important; }
+          .riv-ret-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
       <SubNav tab={tab} setTab={setTab} onBackToRios={onBackToRios} />
@@ -523,7 +778,7 @@ export default function AboutRivSite({ onBackToRios }) {
       {tab === "aboutus" && <AboutUsPage />}
       {tab === "investors" && <InvestorsPage />}
       {tab === "startups" && <StartupsPage />}
-      {tab === "retailers" && <RetailersPage />}
+      {tab === "retailers" && <RetailersPage onBackToRios={onBackToRios} />}
       <Footer setTab={setTab} />
     </div>
   );
