@@ -3,7 +3,8 @@ import {
   Globe, Lightbulb, Search, ArrowLeft, ArrowRight, Handshake, Building2,
   TrendingUp, Users, Rocket, Target, Award, Sparkles, ShoppingBag,
   HeartHandshake, Sprout, Store, Wallet, Network, LineChart, Layers, LogOut,
-  Zap, Smile, Settings, User, CheckCircle2, Ear,
+  Zap, Smile, Settings, User, CheckCircle2, Ear, Activity, Briefcase,
+  Compass, ArrowUpDown, Shield, Landmark,
 } from "lucide-react";
 import { BRAND } from "./brand.js";
 
@@ -317,6 +318,75 @@ function WhyWeDoItSection() {
   );
 }
 
+/* ---------------- shared small pieces for About Us / Investors / Startups ---------------- */
+function SubHeading({ children, color = BRAND.coral }) {
+  return <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: "clamp(24px,3vw,32px)", color, marginTop: 56 }}>{children}</div>;
+}
+
+function IconRow({ icon: Icon, title, desc }) {
+  return (
+    <div style={{ display: "flex", gap: 16, alignItems: "flex-start", marginTop: 24 }}>
+      <div style={{ width: 44, height: 44, borderRadius: 10, background: "#FBEAEA", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <Icon size={20} color={BRAND.ink} strokeWidth={1.6} />
+      </div>
+      <div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 16, color: BRAND.ink }}>{title}</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13.5, color: "#7A746F", marginTop: 4, lineHeight: 1.6 }}>{desc}</div>
+      </div>
+    </div>
+  );
+}
+
+function ValueCard({ icon: Icon, title, desc }) {
+  return (
+    <div style={{ background: "#FBEAEA", borderRadius: 14, padding: 28 }}>
+      <div style={{ width: 46, height: 46, borderRadius: "50%", background: BRAND.coral, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Icon size={20} color="#fff" strokeWidth={1.6} />
+      </div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 18, color: BRAND.ink, marginTop: 16 }}>{title}</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13.5, color: "#5a4f4d", marginTop: 8, lineHeight: 1.6 }}>{desc}</div>
+    </div>
+  );
+}
+
+function InfoCard({ title, desc, color }) {
+  return (
+    <div style={{ background: "#FBEAEA", borderRadius: 12, padding: "22px 24px" }}>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 16, color: color || BRAND.ink }}>{title}</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#5a4f4d", marginTop: 8, lineHeight: 1.6 }}>{desc}</div>
+    </div>
+  );
+}
+
+function AudienceCard({ icon: Icon, title, desc }) {
+  return (
+    <div style={{ background: "#FBEAEA", borderRadius: 14, padding: 28 }}>
+      <div style={{ width: 52, height: 52, borderRadius: "50%", background: BRAND.coral, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Icon size={22} color="#fff" strokeWidth={1.6} />
+      </div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 18, color: BRAND.ink, marginTop: 18 }}>{title}</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13.5, color: "#5a4f4d", marginTop: 8, lineHeight: 1.65 }}>{desc}</div>
+    </div>
+  );
+}
+
+function ApartCard({ icon: Icon, title, desc }) {
+  return (
+    <div style={{ border: `2px solid ${BRAND.coral}`, borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ height: 4, background: BRAND.coral, position: "relative" }}>
+        <div style={{
+          position: "absolute", top: -18, left: 24, width: 36, height: 36, borderRadius: "50%", background: BRAND.coral,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}><Icon size={16} color="#fff" strokeWidth={1.8} /></div>
+      </div>
+      <div style={{ padding: "34px 24px 24px" }}>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 17, color: BRAND.ink }}>{title}</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13.5, color: "#7A746F", marginTop: 8, lineHeight: 1.6 }}>{desc}</div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Pages ---------------- */
 function HomePage({ setTab }) {
   const teamRef = useRef(null);
@@ -333,40 +403,94 @@ function HomePage({ setTab }) {
 }
 
 function AboutUsPage() {
+  const strategyItems = [
+    { icon: Globe, title: "Global Investor Network", desc: "Building worldwide connections and partnerships to strengthen funding opportunities" },
+    { icon: Sprout, title: "Early Stage Investment", desc: "Supporting startups from pre-seed to Series A with targeted capital" },
+    { icon: Activity, title: "Active Nurturing", desc: "Providing hands-on mentorship, guidance, and critical support to fast-track growth" },
+    { icon: Briefcase, title: "Business Expansion", desc: "Helping scale operations and accelerate market penetration" },
+    { icon: Compass, title: "Global Market Access", desc: "Opening doors to international opportunities and new markets" },
+  ];
+  const values = [
+    { icon: Shield, title: "Integrity", desc: "We operate with unwavering honesty, transparency, and ethics in everything we do" },
+    { icon: Lightbulb, title: "Innovation", desc: "We push boundaries, challenge the status quo, and back breakthrough ideas" },
+    { icon: Compass, title: "Purpose", desc: "We are driven by a strong purpose behind what we do" },
+    { icon: ArrowUpDown, title: "Potential", desc: "We identify, unlock and amplify potential to create maximum and lasting impact" },
+  ];
+
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "72px 24px 90px" }}>
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "72px 24px 90px" }}>
       <h1 style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: "clamp(28px,3.6vw,40px)", lineHeight: 1.2, textAlign: "center" }}>
         <span style={{ color: BRAND.coral }}>Retail Innovation Ventures</span> — <span style={{ color: BRAND.blue }}>accelerating the future of retail</span>
       </h1>
-      <div style={{ marginTop: 56 }}>
-        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 13, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.06em" }}>Our mission</div>
-        <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 16, color: BRAND.ink, lineHeight: 1.75, marginTop: 12 }}>
-          We exist to accelerate the development and deployment of retail innovation that actually gets used — pairing evidence from the RIOS diagnostic with capital, mentorship, and a live network of startups, investors, and enterprises, so good ideas move from a slide to a shop floor.
-        </p>
+
+      <SubHeading>Our Mission</SubHeading>
+      <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 15.5, color: BRAND.ink, marginTop: 14, lineHeight: 1.75 }}>
+        At Retail Innovation Ventures, our mission is to accelerate the development and deployment of groundbreaking retail solutions by fostering collaboration between cutting-edge technology, pioneering innovation, and strategic investment. We are dedicated to improving the global retail landscape and delighting retail shoppers.
+      </p>
+
+      <SubHeading>Our Value Proposition</SubHeading>
+      <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 15.5, color: BRAND.ink, marginTop: 14, lineHeight: 1.75 }}>
+        Retail Innovation Ventures provides a unique and powerful ecosystem that connects advanced technological advancements with innovative retail ventures and essential investment capital. We empower founders and innovators to overcome complex retail challenges, scale their solutions, and make a significant global impact.
+      </p>
+
+      <SubHeading>Our Strategy</SubHeading>
+      <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 15.5, color: BRAND.ink, marginTop: 14, lineHeight: 1.75 }}>
+        A clear, multi-faceted approach designed to support early-stage retail startups, ensuring groundbreaking innovations scale to their market potential.
+      </p>
+      {strategyItems.map((it) => <IconRow key={it.title} {...it} />)}
+
+      <SubHeading>Our Ecosystem</SubHeading>
+      <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 15.5, color: BRAND.ink, marginTop: 14, lineHeight: 1.75, textAlign: "center" }}>
+        We are fostering a comprehensive innovation ecosystem keeping startups at the centre, helping them accomplish their strategic objectives.
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 28, marginTop: 32 }}>
+        <IconRow icon={Rocket} title="Premier Accelerators & Incubators" desc="We work jointly with premier accelerators and incubators, offering funding, mentorship, and critical support to fast-track growth." />
+        <IconRow icon={Handshake} title="Co-investments & Strategic Partnerships" desc="Through co-investments with angel networks, family offices, and VC funds, we strengthen sector-focused portfolios with targeted retail expertise." />
+        <IconRow icon={Globe} title="Retail Industry Collaborations" desc="Our collaborations with retail enterprises, SMEs and distributors enable business expansion in both current and new markets in India and beyond." />
       </div>
-      <div style={{ marginTop: 44 }}>
-        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 13, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.06em" }}>How we work</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16, marginTop: 16 }}>
-          {[
-            { icon: Search, title: "Diagnose", desc: "RIOS scores where a retailer actually stands on AI and innovation maturity — evidence, not opinion." },
-            { icon: Rocket, title: "Connect", desc: "We match diagnosed gaps to vetted startups, technology partners, and capability centres already in the network." },
-            { icon: Target, title: "Prove", desc: "Pilots run to a measured business case, not a demo — ROI is tracked back against the original diagnostic." },
-          ].map((c) => (
-            <div key={c.title} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: 20 }}>
-              <c.icon size={20} color={BRAND.blue} />
-              <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 15, color: BRAND.ink, marginTop: 12 }}>{c.title}</div>
-              <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#7A746F", marginTop: 6, lineHeight: 1.55 }}>{c.desc}</div>
-            </div>
-          ))}
-        </div>
+
+      <SubHeading>Our Values</SubHeading>
+      <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14.5, color: "#7A746F", marginTop: 10 }}>
+        The principles that guide everything we do at <span style={{ color: BRAND.coral, fontWeight: 600 }}>Retail Innovation Ventures</span>.
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 20, marginTop: 24 }}>
+        {values.map((v) => <ValueCard key={v.title} {...v} />)}
       </div>
     </div>
   );
 }
 
 function InvestorsPage() {
+  const audiences = [
+    { icon: User, title: "Individual Investors", desc: "Retail industry enthusiasts and visionary leaders including CXOs, founders, and professionals uniting to power the future of retail." },
+    { icon: Building2, title: "Retail Companies", desc: "Innovation ecosystem including corporates, retail SMEs, and growth/late-stage startups building custom portfolios." },
+    { icon: Landmark, title: "Institutional Investors", desc: "Family offices, venture funds, and investment firms seeking differentiated retail exposure through a sector-focused early-stage fund." },
+  ];
+  const apart = [
+    { icon: Search, title: "Unique Sectoral Focus", desc: "Focused thesis and deep networks unlock first-mover advantage in a high-growth sector." },
+    { icon: Award, title: "Expertise and Leadership", desc: "Retail expertise with hands-on operating and investing experience for smarter choices." },
+    { icon: Handshake, title: "Strategic Partnerships", desc: "Work with prominent incubators, industry, and global investors in co-shaping companies." },
+    { icon: Layers, title: "Diversification", desc: "Invest across a wide range of retail sub-sectors for a well-balanced risk-return profile." },
+    { icon: Shield, title: "Transparency and Governance", desc: "Strong governance and transparent operations maximising value creation." },
+    { icon: ArrowUpDown, title: "Active Portfolio Monitoring", desc: "Hands-on portfolio management and data-driven exit strategies." },
+  ];
+  const whyInvest = [
+    { title: "The World's Largest Consumer Opportunity", desc: "Retail is a $30+ trillion global market (2024), growing steadily at 5% CAGR — touching every consumer, every day." },
+    { title: "Tech is Rewriting Shopping", desc: "AI-driven personalisation, AR/VR commerce, and social shopping are driving an $8T+ digital retail shift by 2030." },
+    { title: "Brands Define Culture", desc: "D2C and new-age retail brands are attracting record capital, with India's consumer market set to hit $6T by 2030." },
+    { title: "Resilient Growth, Endless Scale", desc: "From essentials to experiences, retail has shown defensibility across downturns and offers multi-decade scale." },
+  ];
+  const themes = [
+    { title: "AI-Powered Retail Intelligence", desc: "Harnessing AI and data to personalise, predict, and transform consumer experiences." },
+    { title: "Consumer Brands of Tomorrow (D2C)", desc: "Backing tech-enabled, purpose-driven brands that reshape how people discover and buy." },
+    { title: "Retail SaaS & Infrastructure", desc: "Cloud, AI, and automation platforms powering efficiency, visibility, and decision-making." },
+    { title: "Smart & Sustainable Supply Chains", desc: "IoT, blockchain, and AI to build transparent, resilient, and eco-conscious systems." },
+    { title: "Experiential & Immersive Commerce", desc: "Turning transactions into immersive experiences that inspire loyalty and delight." },
+    { title: "Sustainable & Inclusive Retail", desc: "Investing in models that create conscious consumption and equitable access." },
+  ];
+
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "72px 24px 40px" }}>
+    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "72px 24px 90px" }}>
       <h1 style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: "clamp(30px,4.2vw,46px)", color: BRAND.coral, lineHeight: 1.15 }}>Investing in the future of retail</h1>
       <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 15.5, color: BRAND.ink, marginTop: 18, maxWidth: 640, lineHeight: 1.7 }}>
         At <strong>Retail Innovation Ventures</strong>, we back ground-breaking retail innovation that solves problems real operators actually have — sourced through a diagnostic pipeline instead of cold inbound.
@@ -387,11 +511,53 @@ function InvestorsPage() {
           ))}
         </div>
       </div>
+
+      <SubHeading>Our Investments</SubHeading>
+      <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14.5, color: BRAND.ink, marginTop: 12, lineHeight: 1.7, maxWidth: 700 }}>
+        Focused on the retail sector only, including e-commerce, supply chain, D2C, digital and allied sectors.
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 16, marginTop: 20 }}>
+        <InfoCard title="Investment Focus" desc="Early Stage" color={BRAND.coral} />
+        <InfoCard title="Sector Focus" desc="Retail and Consumer" color={BRAND.coral} />
+      </div>
+
+      <SubHeading>Who Can Invest With Us?</SubHeading>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 20, marginTop: 24 }}>
+        {audiences.map((a) => <AudienceCard key={a.title} {...a} />)}
+      </div>
+
+      <SubHeading>What Sets Us Apart?</SubHeading>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 24, marginTop: 30 }}>
+        {apart.map((a) => <ApartCard key={a.title} {...a} />)}
+      </div>
+
+      <SubHeading>Why Invest In Retail?</SubHeading>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 20, marginTop: 24 }}>
+        {whyInvest.map((w) => <InfoCard key={w.title} {...w} />)}
+      </div>
+
+      <SubHeading>Key Investment Themes</SubHeading>
+      <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14.5, color: BRAND.ink, marginTop: 12, lineHeight: 1.7, maxWidth: 800 }}>
+        We invest in early-stage retail startups from pre-seed to Series A, focused on high-impact themes with strong differentiation, IP, and early traction.
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 20, marginTop: 24 }}>
+        {themes.map((t) => <InfoCard key={t.title} {...t} />)}
+      </div>
+      <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14.5, color: BRAND.ink, marginTop: 28, lineHeight: 1.7, maxWidth: 800 }}>
+        We back A-rated founding teams building scalable businesses with large market potential and a clear path to profitability.
+      </p>
     </div>
   );
 }
 
-function StartupsPage() {
+function StartupsPage({ onBackToRios }) {
+  const support = [
+    { icon: Wallet, title: "Funding & Strategic Investments", desc: "Capital investment, co-investment and strategic support for follow-on funding, helping you align capital with impact, scale, and long-term success." },
+    { icon: Lightbulb, title: "Expert Mentorship & Business Growth", desc: "Guidance on winning strategies, unlocking opportunities with enterprise clients, and driving growth post early product-market fit." },
+    { icon: Handshake, title: "Industry Access & Strategic Partnerships", desc: "Access a powerful ecosystem of retailers, influencers, and the broader industry to sharpen your GTM strategy and drive adoption." },
+    { icon: Globe, title: "Global Entry & Market Expansion", desc: "Strategic support to navigate international markets and forge partnerships beyond borders — expanding reach while improving unit economics." },
+  ];
+
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto", padding: "72px 24px 90px" }}>
       <h1 style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: "clamp(30px,4.2vw,46px)", color: BRAND.coral, lineHeight: 1.15 }}>Powering retail startups</h1>
@@ -421,6 +587,26 @@ function StartupsPage() {
           ))}
         </div>
       </div>
+
+      <SubHeading>Our Comprehensive Support System</SubHeading>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 32, marginTop: 30 }}>
+        {support.map((s) => <IconRow key={s.title} {...s} />)}
+      </div>
+
+      <SubHeading>What We Look For</SubHeading>
+      <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 15.5, color: BRAND.ink, marginTop: 14, lineHeight: 1.75 }}>
+        We invest with purpose and back bold teams solving systemic challenges and creating lasting value in the areas that truly matter.
+      </p>
+      <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 15.5, color: BRAND.ink, marginTop: 12, lineHeight: 1.75 }}>
+        We look for a compelling need, real differentiation, strong market validation, and the potential for scale. We back teams with conviction, clarity of purpose, and the grit to go the distance. Great teams build great companies — and we're here for those who are all in.
+      </p>
+
+      <SubHeading>Ready to Transform Retail?</SubHeading>
+      <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14.5, color: BRAND.ink, marginTop: 12 }}>Submit your details in the form.</p>
+      <button onClick={onBackToRios} style={{
+        marginTop: 18, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, background: BRAND.coral, color: "#fff",
+        border: "none", borderRadius: 9, padding: "13px 24px", cursor: "pointer",
+      }}>Raise Capital &amp; Win Customers</button>
     </div>
   );
 }
@@ -777,7 +963,7 @@ export default function AboutRivSite({ onBackToRios }) {
       {tab === "home" && <HomePage setTab={setTab} />}
       {tab === "aboutus" && <AboutUsPage />}
       {tab === "investors" && <InvestorsPage />}
-      {tab === "startups" && <StartupsPage />}
+      {tab === "startups" && <StartupsPage onBackToRios={onBackToRios} />}
       {tab === "retailers" && <RetailersPage onBackToRios={onBackToRios} />}
       <Footer setTab={setTab} />
     </div>
