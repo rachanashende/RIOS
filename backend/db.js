@@ -7,10 +7,14 @@ const { Pool } = pg;
 // configured at all. Auto-detect Supabase by hostname so this works
 // against both without extra configuration; override with PGSSL=true
 // or PGSSL=false if you're pointing at something else.
+// Covers both connection styles Supabase hands out:
+//   direct:  db.xxxx.supabase.co
+//   pooler:  aws-0-region.pooler.supabase.com
 function wantsSsl() {
   if (process.env.PGSSL === "true") return true;
   if (process.env.PGSSL === "false") return false;
-  return (process.env.DATABASE_URL || "").includes("supabase.co");
+  const url = process.env.DATABASE_URL || "";
+  return url.includes("supabase.co") || url.includes("supabase.com");
 }
 
 export const pool = new Pool({
