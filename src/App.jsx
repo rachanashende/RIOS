@@ -12,6 +12,7 @@ import {
 import { api, getToken, getStoredUser, setSession, clearSession } from "./api.js";
 import { computeScores, tierFor, fmtMoney, computeCategoryScores } from "./scoring.js";
 import { BRAND } from "./brand.js";
+import IdeasRivApp from "./IdeasRiv.jsx";
 
 const MATURITY_LABELS = [
   { v: 0, label: "No capability", desc: "Not in place, not planned" },
@@ -49,7 +50,7 @@ function Logo() {
 
 function NavBar({ view, setView, user, onLogout }) {
   const [open, setOpen] = useState(false);
-  const publicItems = [{ id: "home", label: "Overview" }, { id: "pricing", label: "Tiers" }];
+  const publicItems = [{ id: "home", label: "Overview" }, { id: "pricing", label: "Tiers" }, { id: "ideas-riv", label: "Ideas.RIV" }];
   const clientItems = [{ id: "assess", label: "Discover Assessment" }, { id: "dashboard", label: "My Scorecard" }];
   const adminItems = [{ id: "admin", label: "Manage Clients" }];
   const items = [...publicItems, ...(user?.role === "client" ? clientItems : []), ...(user?.role === "admin" ? adminItems : [])];
@@ -698,6 +699,7 @@ export default function RiosApp() {
       {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip /><ModuleGrid modules={modules} questions={questions} setView={goToView} /></>)}
       {view === "login" && <LoginView onLogin={handleLogin} />}
       {view === "pricing" && <PricingView />}
+      {view === "ideas-riv" && <IdeasRivApp />}
       {view === "assess" && user?.role === "client" && ready && (
         <AssessmentView questions={questions} modules={modules} responses={responses} setResponses={setResponses} moduleIdx={moduleIdx} setModuleIdx={setModuleIdx} />
       )}

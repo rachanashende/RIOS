@@ -20,6 +20,17 @@ export function requireAdmin(req, res, next) {
   next();
 }
 
+// requireRole("employee") — only the roles listed are let through; pass
+// "admin" explicitly too if admins should also have access to a route.
+export function requireRole(...roles) {
+  return function (req, res, next) {
+    if (!roles.includes(req.user?.role)) {
+      return res.status(403).json({ error: `Requires one of: ${roles.join(", ")}.` });
+    }
+    next();
+  };
+}
+
 export function signToken(user) {
   return jwt.sign(
     { id: user.id, email: user.email, name: user.name, role: user.role, company: user.company },
