@@ -87,6 +87,7 @@ export const api = {
   ideasLogin: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }), // same endpoint, token just isn't attached to anything yet here
   getOpportunities: () => ideasRequest("/ideas/opportunities"),
   getIdeas: (questionId) => ideasRequest(`/ideas${questionId ? `?questionId=${questionId}` : ""}`),
+  getIdeaRatings: (ideaId) => ideasRequest(`/ideas/${ideaId}/ratings`),
   getMyIdeas: () => ideasRequest("/ideas/mine"),
   submitIdeas: (ideas) => ideasRequest("/ideas", { method: "POST", body: { ideas } }),
   getMyRatingForIdea: (ideaId) => ideasRequest(`/ideas/${ideaId}/ratings/mine`),
