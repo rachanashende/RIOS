@@ -1,31 +1,15 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
-  Lightbulb, Plus, Trash2, LogOut, MessageSquare,
-  CheckCircle2, ArrowRight, Sparkles, Gavel, Send, ChevronRight,
+  Lightbulb, Plus, Trash2, LogOut,
+  CheckCircle2, ArrowRight, Sparkles, Gavel, ChevronRight,
   ChevronLeft, Loader2, Compass, Trophy, UserCircle2,
-  ClipboardList, BadgeCheck, AlertCircle,
+  ClipboardList, Star, AlertCircle,
 } from "lucide-react";
 import { api, getStoredIdeasUser, setIdeasSession, clearIdeasSession } from "./api.js";
 import { BRAND } from "./brand.js";
 
 const FONT = "'Poppins',sans-serif";
 const SERIF = "'Newsreader',Georgia,serif";
-
-// Rating criteria + weights — mirrors backend/lib/ideasScoring.js exactly.
-// Kept here only for the live preview while the interview is in progress;
-// the score that actually gets saved is always recomputed server-side.
-const CRITERIA = [
-  { key: "impact", label: "Impact", weight: 0.35 },
-  { key: "feasibility", label: "Feasibility", weight: 0.25 },
-  { key: "innovation", label: "Innovation", weight: 0.25 },
-  { key: "cost", label: "Cost-effectiveness", weight: 0.15 },
-];
-
-function weightedAvg(scores) {
-  let total = 0;
-  CRITERIA.forEach((c) => { total += (scores[c.key] || 0) * c.weight; });
-  return total;
-}
 
 function fmtMoney(n) {
   if (!n) return "$0";
@@ -129,7 +113,7 @@ function IdeasNavBar({ view, setView, session, onLogout }) {
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 30, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-            <div style={{ width: 30, height: 30, borderRadius: 8, background: BRAND.coral, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontWeight: 700, color: "#fff", fontSize: 15 }}>R</div>
+            <img src="/rios-logo-mark.png" alt="Retail Innovation Ventures" style={{ width: 32, height: 32, objectFit: "contain" }} />
             <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 17, letterSpacing: "-0.01em", color: BRAND.ink }}>Ideas<span style={{ color: BRAND.coral }}>.RIV</span></span>
           </div>
           <div style={{ display: "flex", gap: 4 }}>
@@ -208,8 +192,8 @@ function LandingView({ session, setView, opportunities, ideas, loading, error, s
           </h1>
           <p style={{ fontFamily: SERIF, fontStyle: "italic", fontSize: "clamp(15px,1.6vw,18px)", color: "#D8D3CF", maxWidth: 600, marginTop: 18, lineHeight: 1.6 }}>
             {sourceClient
-              ? `These five opportunities are the current Top 5 from ${sourceClient.company || sourceClient.name}'s scored audit. Employees submit ideas against each one; leaders sit as jury and rate them with the CRIT method.`
-              : "Employees submit ideas against each opportunity; leaders sit as jury and rate them with the CRIT method."}
+              ? `These five opportunities are the current Top 5 from ${sourceClient.company || sourceClient.name}'s scored audit. Employees submit ideas against each one; leaders sit as jury and rate them.`
+              : "Employees submit ideas against each opportunity; leaders sit as jury and rate them."}
           </p>
           {!session && (
             <div style={{ display: "flex", gap: 12, marginTop: 30, flexWrap: "wrap" }}>
@@ -389,7 +373,7 @@ function SubmitIdeasView({ opp, ideas, onIdeasChanged, setView }) {
       {justSubmitted && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 20, padding: "12px 16px", borderRadius: 12, background: "#E7F5EF", border: "1px solid #C7E8D8" }}>
           <CheckCircle2 size={16} color="#1B7A5A" />
-          <div style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.ink }}>Idea(s) submitted — the jury will rate these using the CRIT method.</div>
+          <div style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.ink }}>Idea(s) submitted — the jury will rate these.</div>
         </div>
       )}
 
@@ -472,7 +456,7 @@ function MyIdeasView({ myIdeas, loading, error }) {
           <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{idea.question?.module} · {idea.question?.submodule}</div>
           <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14.5, color: BRAND.ink, marginTop: 3 }}>{idea.title}</div>
           <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
-            {idea.avg_score !== null ? <Pill tone="blue">{idea.avg_score.toFixed(1)}/10 avg · {idea.rating_count} rating{idea.rating_count !== 1 ? "s" : ""}</Pill> : <Pill>Awaiting jury rating</Pill>}
+            {idea.avg_score !== null ? <Pill tone="blue">{idea.avg_score.toFixed(1)}/5 avg · {idea.rating_count} rating{idea.rating_count !== 1 ? "s" : ""}</Pill> : <Pill>Awaiting jury rating</Pill>}
           </div>
         </Card>
       ))}
@@ -497,7 +481,7 @@ function JuryListView({ opportunities, ideas, myRatings, loading, error, setActi
         <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 20, color: BRAND.ink }}>Rate submitted ideas</div>
       </div>
       <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 26 }}>
-        Each idea is rated using the <strong>CRIT method</strong> — Context, Role, Interview me, Task — an AI-guided conversation that ends in a structured, weighted score.
+        Rate each submitted idea out of 5. Ratings from all jury members are averaged into the leaderboard.
       </div>
 
       <ErrorBanner text={error} />
@@ -521,11 +505,11 @@ function JuryListView({ opportunities, ideas, myRatings, loading, error, setActi
                 </div>
                 {myRating ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <Pill tone="green">You rated {Number(myRating.score).toFixed(1)}/10</Pill>
-                    <GhostButton onClick={() => setActiveIdea(idea.id)} icon={MessageSquare}>Review</GhostButton>
+                    <Pill tone="green">You rated {Number(myRating.score)}/5</Pill>
+                    <GhostButton onClick={() => setActiveIdea(idea.id)} icon={Star}>Change rating</GhostButton>
                   </div>
                 ) : (
-                  <PrimaryButton onClick={() => setActiveIdea(idea.id)} icon={Gavel}>Rate with CRIT</PrimaryButton>
+                  <PrimaryButton onClick={() => setActiveIdea(idea.id)} icon={Star}>Rate idea</PrimaryButton>
                 )}
               </Card>
             );
@@ -537,107 +521,47 @@ function JuryListView({ opportunities, ideas, myRatings, loading, error, setActi
 }
 
 /* =========================================================================
-   CRIT RATING FLOW
+   SIMPLE RATING FLOW — jury rates an idea out of 5, no AI interview.
+   (The CRIT-guided flow this replaced is still fully intact server-side —
+   see backend/routes/critAssistant.js and lib/ideasScoring.js — so it can
+   be switched back on later without rebuilding anything.)
    ========================================================================= */
-const CRIT_STEPS = [
-  { key: "context", label: "Context" },
-  { key: "role", label: "Role" },
-  { key: "interview", label: "Interview me" },
-  { key: "task", label: "Task" },
-];
-
-function StepDots({ stepIdx }) {
+function StarPicker({ value, onChange }) {
+  const [hover, setHover] = useState(0);
   return (
-    <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
-      {CRIT_STEPS.map((s, i) => (
-        <div key={s.key} style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
-          <div style={{
-            width: 24, height: 24, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-            fontFamily: FONT, fontWeight: 700, fontSize: 11,
-            background: i < stepIdx ? "#1B7A5A" : i === stepIdx ? BRAND.blue : "#EFEAE4",
-            color: i <= stepIdx ? "#fff" : "#9B958F",
-          }}>{i < stepIdx ? <CheckCircle2 size={13} /> : i + 1}</div>
-          <div style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: i === stepIdx ? 700 : 500, color: i === stepIdx ? BRAND.ink : "#9B958F" }}>{s.label}</div>
-          {i < CRIT_STEPS.length - 1 && <div style={{ flex: 1, height: 1, background: BRAND.line, marginLeft: 4 }} />}
-        </div>
-      ))}
+    <div style={{ display: "flex", gap: 6 }}>
+      {[1, 2, 3, 4, 5].map((n) => {
+        const filled = n <= (hover || value);
+        return (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange(n)}
+            onMouseEnter={() => setHover(n)}
+            onMouseLeave={() => setHover(0)}
+            aria-label={`Rate ${n} out of 5`}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}
+          >
+            <Star size={30} color={filled ? BRAND.coral : "#D9D3CC"} fill={filled ? BRAND.coral : "none"} />
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function CritRatingView({ idea, existingRating, onSaveRating, onBack }) {
+function SimpleRatingView({ idea, existingRating, onSaveRating, onBack }) {
   const opp = idea.question;
-  const [stepIdx, setStepIdx] = useState(existingRating ? 3 : 0);
-  const [messages, setMessages] = useState(
-    existingRating?.transcript?.length ? existingRating.transcript : []
-  );
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [finalScores, setFinalScores] = useState(
-    existingRating ? { impact: Number(existingRating.impact), feasibility: Number(existingRating.feasibility), innovation: Number(existingRating.innovation), cost: Number(existingRating.cost), rationale: existingRating.rationale } : null
-  );
-  const [error, setError] = useState(null);
+  const [score, setScore] = useState(existingRating ? Number(existingRating.score) : 0);
   const [saving, setSaving] = useState(false);
-  const scrollRef = useRef(null);
-  const startedRef = useRef(false);
-
-  const callAssistant = useCallback(async (history) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await api.critTurn(idea.id, history);
-      if (result.type === "final") {
-        setFinalScores({
-          impact: clamp10(result.scores.impact),
-          feasibility: clamp10(result.scores.feasibility),
-          innovation: clamp10(result.scores.innovation),
-          cost: clamp10(result.scores.cost),
-          rationale: result.scores.rationale || "",
-        });
-        setStepIdx(3);
-      } else {
-        setMessages((ms) => [...ms, { role: "assistant", text: result.text }]);
-      }
-    } catch (e) {
-      setError(e.message || "Couldn't reach the AI jury assistant. You can try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, [idea.id]);
-
-  function clamp10(n) { n = Number(n); if (isNaN(n)) return 0; return Math.max(0, Math.min(10, n)); }
-
-  useEffect(() => {
-    if (stepIdx === 2 && !startedRef.current && !existingRating) {
-      startedRef.current = true;
-      callAssistant([]);
-    }
-  }, [stepIdx, callAssistant, existingRating]);
-
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, loading]);
-
-  function sendAnswer() {
-    if (!input.trim() || loading) return;
-    const next = [...messages, { role: "user", text: input.trim() }];
-    setMessages(next);
-    setInput("");
-    callAssistant(next);
-  }
+  const [error, setError] = useState(null);
 
   async function confirmSave() {
+    if (!score) { setError("Pick a star rating first."); return; }
     setSaving(true);
     setError(null);
     try {
-      const rating = await api.submitRating(idea.id, {
-        impact: finalScores.impact,
-        feasibility: finalScores.feasibility,
-        innovation: finalScores.innovation,
-        cost: finalScores.cost,
-        rationale: finalScores.rationale,
-        transcript: messages,
-      });
+      const rating = await api.submitRating(idea.id, { score });
       onSaveRating(rating.rating);
     } catch (e) {
       setError(e.message || "Couldn't save the rating — please try again.");
@@ -647,7 +571,7 @@ function CritRatingView({ idea, existingRating, onSaveRating, onBack }) {
   }
 
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto", padding: "36px 24px 100px" }}>
+    <div style={{ maxWidth: 620, margin: "0 auto", padding: "36px 24px 100px" }}>
       <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: FONT, fontSize: 12.5, color: "#9B958F", background: "none", border: "none", cursor: "pointer", marginBottom: 18 }}>
         <ChevronLeft size={14} /> All ideas to rate
       </button>
@@ -657,112 +581,25 @@ function CritRatingView({ idea, existingRating, onSaveRating, onBack }) {
       {idea.description && <div style={{ fontFamily: FONT, fontSize: 13, color: "#7A746F", marginTop: 6, lineHeight: 1.55 }}>{idea.description}</div>}
       <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 6 }}>Submitted by {idea.submitted_by_name}</div>
 
-      <div style={{ marginTop: 26 }}>
-        <StepDots stepIdx={stepIdx} />
-      </div>
+      <Card style={{ padding: 26, marginTop: 24, textAlign: "center" }}>
+        <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 16 }}>Your rating</div>
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <StarPicker value={score} onChange={setScore} />
+        </div>
+        {score > 0 && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginTop: 10 }}>{score} out of 5</div>}
 
-      <ErrorBanner text={error} />
+        <ErrorBanner text={error} />
 
-      {stepIdx === 0 && (
-        <Card style={{ padding: 22 }}>
-          <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 8 }}>Context</div>
-          <div style={{ fontFamily: FONT, fontSize: 13, color: "#7A746F", lineHeight: 1.6 }}>
-            This idea targets the opportunity <strong>&ldquo;{opp?.q}&rdquo;</strong>. That context, plus the idea's title and description, is passed to the AI jury assistant automatically — pulled fresh from the database, not from anything typed in this browser.
-          </div>
-          <PrimaryButton onClick={() => setStepIdx(1)} icon={ArrowRight} style={{ marginTop: 18 }}>Continue to Role</PrimaryButton>
-        </Card>
-      )}
-
-      {stepIdx === 1 && (
-        <Card style={{ padding: 22 }}>
-          <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 8 }}>Role</div>
-          <div style={{ fontFamily: FONT, fontSize: 13, color: "#7A746F", lineHeight: 1.6 }}>
-            The assistant will act as a sharp, fair retail-innovation jury advisor — candid and concise, never a yes-man. It'll interview <em>you</em>, then turn your answers into a scored recommendation.
-          </div>
-          <PrimaryButton onClick={() => setStepIdx(2)} icon={ArrowRight} style={{ marginTop: 18 }}>Start the interview</PrimaryButton>
-        </Card>
-      )}
-
-      {stepIdx === 2 && (
-        <Card style={{ padding: 0, overflow: "hidden" }}>
-          <div style={{ padding: "14px 18px", borderBottom: `1px solid ${BRAND.line}`, display: "flex", alignItems: "center", gap: 8 }}>
-            <MessageSquare size={15} color={BRAND.blue} />
-            <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: BRAND.ink }}>Interview me</div>
-          </div>
-          <div ref={scrollRef} style={{ height: 320, overflowY: "auto", padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
-            {messages.map((m, i) => (
-              <div key={i} style={{ alignSelf: m.role === "assistant" ? "flex-start" : "flex-end", maxWidth: "85%" }}>
-                <div style={{
-                  fontFamily: FONT, fontSize: 13, lineHeight: 1.55, padding: "10px 14px", borderRadius: 12,
-                  background: m.role === "assistant" ? BRAND.cream : BRAND.blue,
-                  color: m.role === "assistant" ? BRAND.ink : "#fff",
-                  border: m.role === "assistant" ? `1px solid ${BRAND.line}` : "none",
-                }}>{m.text}</div>
-              </div>
-            ))}
-            {loading && (
-              <div style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 6, color: "#9B958F", fontFamily: FONT, fontSize: 12 }}>
-                <Loader2 size={13} className="crit-spin" /> Thinking…
-              </div>
-            )}
-          </div>
-          <div style={{ display: "flex", gap: 8, padding: 14, borderTop: `1px solid ${BRAND.line}` }}>
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && sendAnswer()}
-              placeholder="Type your answer…"
-              disabled={loading}
-              style={{ flex: 1, fontFamily: FONT, fontSize: 13, padding: "10px 12px", borderRadius: 8, border: `1px solid ${BRAND.line}` }}
-            />
-            <PrimaryButton onClick={sendAnswer} disabled={loading || !input.trim()} icon={Send}>Send</PrimaryButton>
-          </div>
-        </Card>
-      )}
-
-      {stepIdx === 3 && finalScores && (
-        <Card style={{ padding: 22 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-            <BadgeCheck size={16} color="#1B7A5A" />
-            <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: BRAND.ink }}>Task — structured score</div>
-          </div>
-          <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginBottom: 16 }}>Generated from your interview answers. Review before saving — this is what feeds the leaderboard.</div>
-
-          {CRITERIA.map((c) => (
-            <div key={c.key} style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: FONT, fontSize: 12.5 }}>
-                <span style={{ color: BRAND.ink, fontWeight: 500 }}>{c.label} <span style={{ color: "#B7B2AE", fontWeight: 400 }}>({Math.round(c.weight * 100)}% weight)</span></span>
-                <span style={{ color: BRAND.ink, fontWeight: 700 }}>{finalScores[c.key].toFixed(1)}/10</span>
-              </div>
-              <div style={{ height: 6, borderRadius: 999, background: "#EFEAE4", marginTop: 5, overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${finalScores[c.key] * 10}%`, background: BRAND.coral, borderRadius: 999 }} />
-              </div>
-            </div>
-          ))}
-
-          {finalScores.rationale && (
-            <div style={{ fontFamily: SERIF, fontStyle: "italic", fontSize: 12.5, color: "#7A746F", marginTop: 12, borderTop: `1px solid ${BRAND.line}`, paddingTop: 12, lineHeight: 1.6 }}>
-              &ldquo;{finalScores.rationale}&rdquo;
-            </div>
-          )}
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 18, paddingTop: 16, borderTop: `1px solid ${BRAND.line}` }}>
-            <div>
-              <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F" }}>Weighted average</div>
-              <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 24, color: BRAND.ink }}>{weightedAvg(finalScores).toFixed(1)}<span style={{ fontSize: 13, color: "#9B958F", fontWeight: 500 }}>/10</span></div>
-            </div>
-            <PrimaryButton onClick={confirmSave} disabled={saving} icon={saving ? Loader2 : CheckCircle2}>
-              {saving ? "Saving…" : existingRating ? "Update rating" : "Save rating"}
-            </PrimaryButton>
-          </div>
-        </Card>
-      )}
+        <PrimaryButton onClick={confirmSave} disabled={saving} icon={saving ? Loader2 : CheckCircle2} style={{ marginTop: 22, marginLeft: "auto", marginRight: "auto" }}>
+          {saving ? "Saving…" : existingRating ? "Update rating" : "Save rating"}
+        </PrimaryButton>
+      </Card>
     </div>
   );
 }
 
 /* =========================================================================
-   LEADER DASHBOARD — top ideas by weighted average score
+   LEADER DASHBOARD — top ideas by average jury score
    ========================================================================= */
 function LeaderboardView({ leaderboard, loading, error }) {
   if (loading) return <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 24px" }}><Spinner /></div>;
@@ -774,13 +611,13 @@ function LeaderboardView({ leaderboard, loading, error }) {
         <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 20, color: BRAND.ink }}>Leader dashboard — top ideas</div>
       </div>
       <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 26 }}>
-        Ranked by overall weighted-average jury score. The top 3 are published below.
+        Ranked by average jury star rating. The top 3 are published below.
       </div>
 
       <ErrorBanner text={error} />
 
       {!loading && !error && leaderboard.length === 0 && (
-        <EmptyState icon={Trophy} title="No rated ideas yet" text="Once jury members rate ideas with CRIT, the top-scoring ones will publish here automatically." />
+        <EmptyState icon={Trophy} title="No rated ideas yet" text="Once jury members rate ideas, the top-scoring ones will publish here automatically." />
       )}
 
       {leaderboard.map((r, i) => (
@@ -801,7 +638,7 @@ function LeaderboardView({ leaderboard, loading, error }) {
             {r.published && <Pill tone="green">Published</Pill>}
             <div style={{ textAlign: "right" }}>
               <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: BRAND.ink }}>{r.avg_score.toFixed(1)}</div>
-              <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#9B958F" }}>/ 10 avg</div>
+              <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#9B958F" }}>/ 5 avg</div>
             </div>
           </div>
         </Card>
@@ -946,11 +783,11 @@ export default function IdeasRivApp() {
         <LeaderboardView leaderboard={leaderboard} loading={loadingBoard} error={error} />
       )}
 
-      {/* CRIT rating overlay */}
+      {/* Rating overlay */}
       {activeIdeaId && activeIdea && session?.role === "jury" && view === "jury" && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(39,37,37,0.5)", zIndex: 60, overflowY: "auto" }}>
           <div style={{ background: BRAND.cream, minHeight: "100%" }}>
-            <CritRatingView
+            <SimpleRatingView
               idea={activeIdea}
               existingRating={myRatings[activeIdea.id] || null}
               onSaveRating={handleSaveRating}
@@ -961,7 +798,7 @@ export default function IdeasRivApp() {
       )}
 
       <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: FONT, fontSize: 12, color: "#B7B2AE" }}>
-        Ideas.RIV — ratings use the CRIT method (Context · Role · Interview me · Task) with a live Claude interview.
+        Ideas.RIV — submit and rate innovation ideas from your live Discover Audit.
       </div>
     </div>
   );
