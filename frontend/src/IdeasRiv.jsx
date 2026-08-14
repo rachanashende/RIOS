@@ -5,7 +5,7 @@ import {
   ChevronLeft, Loader2, Compass, Trophy, UserCircle2,
   ClipboardList, BadgeCheck, AlertCircle,
 } from "lucide-react";
-import { api, getStoredUser, setSession, clearSession } from "./api.js";
+import { api, getStoredIdeasUser, setIdeasSession, clearIdeasSession } from "./api.js";
 import { BRAND } from "./brand.js";
 
 const FONT = "'Poppins',sans-serif";
@@ -278,7 +278,7 @@ function LoginView({ role, onLogin, setView }) {
         setSubmitting(false);
         return;
       }
-      setSession(token, user);
+      setIdeasSession(token, user);
       onLogin(user);
     } catch (e) {
       setError(e.message || "Login failed.");
@@ -816,7 +816,7 @@ function LeaderboardView({ leaderboard, loading, error }) {
 export default function IdeasRivApp() {
   const [view, setView] = useState("landing");
   const [session, setSessionState] = useState(() => {
-    const u = getStoredUser();
+    const u = getStoredIdeasUser();
     return u && (u.role === "employee" || u.role === "jury") ? u : null;
   });
 
@@ -889,7 +889,7 @@ export default function IdeasRivApp() {
     setView(user.role === "jury" ? "jury" : "landing");
   }
   function handleLogout() {
-    clearSession();
+    clearIdeasSession();
     setSessionState(null);
     setView("landing");
     setActiveOppId(null);
