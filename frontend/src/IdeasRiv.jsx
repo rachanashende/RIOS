@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
-  Lightbulb, Plus, Trash2, LogOut,
+  Lightbulb, Plus, Trash2, LogOut, MessageSquare, Send, BadgeCheck,
   CheckCircle2, ArrowRight, Sparkles, Gavel, ChevronRight,
   ChevronLeft, Loader2, Compass, Trophy, UserCircle2,
   ClipboardList, Star, AlertCircle,
@@ -545,7 +545,7 @@ function MyIdeasView({ myIdeas, loading, error }) {
 /* =========================================================================
    JURY — list of ideas to rate
    ========================================================================= */
-function JuryListView({ opportunities, ideas, myRatings, loading, error, setActiveIdea }) {
+function JuryListView({ opportunities, ideas, myRatings, loading, error, onOpenIdea }) {
   const grouped = opportunities
     .map((opp) => ({ opp, ideas: ideas.filter((i) => i.question_id === opp.id) }))
     .filter((g) => g.ideas.length > 0);
@@ -559,7 +559,7 @@ function JuryListView({ opportunities, ideas, myRatings, loading, error, setActi
         <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 20, color: BRAND.ink }}>Rate submitted ideas</div>
       </div>
       <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 26 }}>
-        Rate each submitted idea out of 5. Ratings from all jury members are averaged into the leaderboard.
+        Rate each submitted idea — either a quick 1-5 star pick, or the CRIT-guided AI interview. Ratings from all jury members are averaged into the leaderboard.
       </div>
 
       <ErrorBanner text={error} />
@@ -584,10 +584,10 @@ function JuryListView({ opportunities, ideas, myRatings, loading, error, setActi
                 {myRating ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <Pill tone="green">You rated {Number(myRating.score).toFixed(myRating.impact != null ? 1 : 0)}/{myRating.impact != null ? 10 : 5}</Pill>
-                    <GhostButton onClick={() => setActiveIdea(idea.id)} icon={Star}>Change rating</GhostButton>
+                    <GhostButton onClick={() => onOpenIdea(idea)} icon={Star}>Change rating</GhostButton>
                   </div>
                 ) : (
-                  <PrimaryButton onClick={() => setActiveIdea(idea.id)} icon={Star}>Rate idea</PrimaryButton>
+                  <PrimaryButton onClick={() => onOpenIdea(idea)} icon={Star}>Rate idea</PrimaryButton>
                 )}
               </Card>
             );
@@ -677,6 +677,299 @@ function SimpleRatingView({ idea, existingRating, onSaveRating, onBack }) {
 }
 
 /* =========================================================================
+   RATING METHOD CHOICE — jury picks quick stars or the CRIT interview
+   ========================================================================= */
+function MethodCard({ icon: Icon, title, desc, onClick, accent }) {
+  return (
+    <button onClick={onClick} style={{
+      display: "flex", alignItems: "flex-start", gap: 14, textAlign: "left",
+      border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 18, background: "#fff",
+      cursor: "pointer", width: "100%",
+    }}>
+      <div style={{ width: 38, height: 38, borderRadius: 10, background: accent === "coral" ? "#FCEEE1" : "#EAF0FE", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <Icon size={18} color={accent === "coral" ? BRAND.coralDark : BRAND.blue} />
+      </div>
+      <div>
+        <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14.5, color: BRAND.ink }}>{title}</div>
+        <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginTop: 3, lineHeight: 1.5 }}>{desc}</div>
+      </div>
+      <ChevronRight size={16} color="#B7B2AE" style={{ marginLeft: "auto", flexShrink: 0, marginTop: 10 }} />
+    </button>
+  );
+}
+
+function RatingMethodChoice({ idea, onChoose, onBack }) {
+  const opp = idea.question;
+  return (
+    <div style={{ maxWidth: 620, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: FONT, fontSize: 12.5, color: "#9B958F", background: "none", border: "none", cursor: "pointer", marginBottom: 18 }}>
+        <ChevronLeft size={14} /> All ideas to rate
+      </button>
+
+      <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{opp?.module} · {opp?.submodule}</div>
+      <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 21, color: BRAND.ink, marginTop: 4 }}>{idea.title}</div>
+      {idea.description && <div style={{ fontFamily: FONT, fontSize: 13, color: "#7A746F", marginTop: 6, lineHeight: 1.55 }}>{idea.description}</div>}
+      <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 6 }}>Submitted by {idea.submitted_by_name}</div>
+
+      <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: BRAND.ink, marginTop: 26, marginBottom: 12 }}>How do you want to rate this idea?</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <MethodCard
+          icon={Star} accent="coral"
+          title="Quick rating"
+          desc="Pick 1-5 stars. Done in seconds."
+          onClick={() => onChoose("simple")}
+        />
+        <MethodCard
+          icon={Sparkles} accent="blue"
+          title="CRIT-guided interview"
+          desc="Context, Role, Interview me, Task — a short AI-guided conversation that draws out your reasoning and ends in a structured, weighted score."
+          onClick={() => onChoose("crit")}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   CRIT RATING FLOW — Context, Role, Interview me, Task
+   ========================================================================= */
+const CRIT_CRITERIA = [
+  { key: "impact", label: "Impact", weight: 0.35 },
+  { key: "feasibility", label: "Feasibility", weight: 0.25 },
+  { key: "innovation", label: "Innovation", weight: 0.25 },
+  { key: "cost", label: "Cost-effectiveness", weight: 0.15 },
+];
+function critWeightedAvg(scores) {
+  let total = 0;
+  CRIT_CRITERIA.forEach((c) => { total += (scores[c.key] || 0) * c.weight; });
+  return total;
+}
+function clampCrit10(n) { n = Number(n); if (isNaN(n)) return 0; return Math.max(0, Math.min(10, n)); }
+
+const CRIT_STEPS = [
+  { key: "context", label: "Context" },
+  { key: "role", label: "Role" },
+  { key: "interview", label: "Interview me" },
+  { key: "task", label: "Task" },
+];
+
+function StepDots({ stepIdx }) {
+  return (
+    <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
+      {CRIT_STEPS.map((s, i) => (
+        <div key={s.key} style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+          <div style={{
+            width: 24, height: 24, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: FONT, fontWeight: 700, fontSize: 11,
+            background: i < stepIdx ? "#1B7A5A" : i === stepIdx ? BRAND.blue : "#EFEAE4",
+            color: i <= stepIdx ? "#fff" : "#9B958F",
+          }}>{i < stepIdx ? <CheckCircle2 size={13} /> : i + 1}</div>
+          <div style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: i === stepIdx ? 700 : 500, color: i === stepIdx ? BRAND.ink : "#9B958F" }}>{s.label}</div>
+          {i < CRIT_STEPS.length - 1 && <div style={{ flex: 1, height: 1, background: BRAND.line, marginLeft: 4 }} />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CritRatingView({ idea, existingRating, onSaveRating, onBack }) {
+  const opp = idea.question;
+  const hasExistingCrit = existingRating && existingRating.impact !== null && existingRating.impact !== undefined;
+  const [stepIdx, setStepIdx] = useState(hasExistingCrit ? 3 : 0);
+  const [messages, setMessages] = useState(
+    hasExistingCrit && existingRating.transcript?.length ? existingRating.transcript : []
+  );
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [finalScores, setFinalScores] = useState(
+    hasExistingCrit
+      ? { impact: Number(existingRating.impact), feasibility: Number(existingRating.feasibility), innovation: Number(existingRating.innovation), cost: Number(existingRating.cost), rationale: existingRating.rationale }
+      : null
+  );
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const scrollRef = useRef(null);
+  const startedRef = useRef(false);
+
+  const callAssistant = useCallback(async (history) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await api.critTurn(idea.id, history);
+      if (result.type === "final") {
+        setFinalScores({
+          impact: clampCrit10(result.scores.impact),
+          feasibility: clampCrit10(result.scores.feasibility),
+          innovation: clampCrit10(result.scores.innovation),
+          cost: clampCrit10(result.scores.cost),
+          rationale: result.scores.rationale || "",
+        });
+        setStepIdx(3);
+      } else {
+        setMessages((ms) => [...ms, { role: "assistant", text: result.text }]);
+      }
+    } catch (e) {
+      setError(e.message || "Couldn't reach the AI jury assistant. You can try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [idea.id]);
+
+  useEffect(() => {
+    if (stepIdx === 2 && !startedRef.current && !hasExistingCrit) {
+      startedRef.current = true;
+      callAssistant([]);
+    }
+  }, [stepIdx, callAssistant, hasExistingCrit]);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages, loading]);
+
+  function sendAnswer() {
+    if (!input.trim() || loading) return;
+    const next = [...messages, { role: "user", text: input.trim() }];
+    setMessages(next);
+    setInput("");
+    callAssistant(next);
+  }
+
+  async function confirmSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const rating = await api.submitRating(idea.id, {
+        impact: finalScores.impact,
+        feasibility: finalScores.feasibility,
+        innovation: finalScores.innovation,
+        cost: finalScores.cost,
+        rationale: finalScores.rationale,
+        transcript: messages,
+      });
+      onSaveRating(rating.rating);
+    } catch (e) {
+      setError(e.message || "Couldn't save the rating — please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 720, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: FONT, fontSize: 12.5, color: "#9B958F", background: "none", border: "none", cursor: "pointer", marginBottom: 18 }}>
+        <ChevronLeft size={14} /> All ideas to rate
+      </button>
+
+      <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{opp?.module} · {opp?.submodule}</div>
+      <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 21, color: BRAND.ink, marginTop: 4 }}>{idea.title}</div>
+      {idea.description && <div style={{ fontFamily: FONT, fontSize: 13, color: "#7A746F", marginTop: 6, lineHeight: 1.55 }}>{idea.description}</div>}
+      <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 6 }}>Submitted by {idea.submitted_by_name}</div>
+
+      <div style={{ marginTop: 26 }}>
+        <StepDots stepIdx={stepIdx} />
+      </div>
+
+      <ErrorBanner text={error} />
+
+      {stepIdx === 0 && (
+        <Card style={{ padding: 22 }}>
+          <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 8 }}>Context</div>
+          <div style={{ fontFamily: FONT, fontSize: 13, color: "#7A746F", lineHeight: 1.6 }}>
+            This idea targets the opportunity <strong>&ldquo;{opp?.q}&rdquo;</strong>. That context, plus the idea's title and description, is passed to the AI jury assistant automatically — pulled fresh from the database, not from anything typed in this browser.
+          </div>
+          <PrimaryButton onClick={() => setStepIdx(1)} icon={ArrowRight} style={{ marginTop: 18 }}>Continue to Role</PrimaryButton>
+        </Card>
+      )}
+
+      {stepIdx === 1 && (
+        <Card style={{ padding: 22 }}>
+          <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 8 }}>Role</div>
+          <div style={{ fontFamily: FONT, fontSize: 13, color: "#7A746F", lineHeight: 1.6 }}>
+            The assistant will act as a sharp, fair retail-innovation jury advisor — candid and concise, never a yes-man. It'll interview <em>you</em>, then turn your answers into a scored recommendation.
+          </div>
+          <PrimaryButton onClick={() => setStepIdx(2)} icon={ArrowRight} style={{ marginTop: 18 }}>Start the interview</PrimaryButton>
+        </Card>
+      )}
+
+      {stepIdx === 2 && (
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ padding: "14px 18px", borderBottom: `1px solid ${BRAND.line}`, display: "flex", alignItems: "center", gap: 8 }}>
+            <MessageSquare size={15} color={BRAND.blue} />
+            <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: BRAND.ink }}>Interview me</div>
+          </div>
+          <div ref={scrollRef} style={{ height: 320, overflowY: "auto", padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+            {messages.map((m, i) => (
+              <div key={i} style={{ alignSelf: m.role === "assistant" ? "flex-start" : "flex-end", maxWidth: "85%" }}>
+                <div style={{
+                  fontFamily: FONT, fontSize: 13, lineHeight: 1.55, padding: "10px 14px", borderRadius: 12,
+                  background: m.role === "assistant" ? BRAND.cream : BRAND.blue,
+                  color: m.role === "assistant" ? BRAND.ink : "#fff",
+                  border: m.role === "assistant" ? `1px solid ${BRAND.line}` : "none",
+                }}>{m.text}</div>
+              </div>
+            ))}
+            {loading && (
+              <div style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 6, color: "#9B958F", fontFamily: FONT, fontSize: 12 }}>
+                <Loader2 size={13} className="crit-spin" /> Thinking…
+              </div>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 8, padding: 14, borderTop: `1px solid ${BRAND.line}` }}>
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendAnswer()}
+              placeholder="Type your answer…"
+              disabled={loading}
+              style={{ flex: 1, fontFamily: FONT, fontSize: 13, padding: "10px 12px", borderRadius: 8, border: `1px solid ${BRAND.line}` }}
+            />
+            <PrimaryButton onClick={sendAnswer} disabled={loading || !input.trim()} icon={Send}>Send</PrimaryButton>
+          </div>
+        </Card>
+      )}
+
+      {stepIdx === 3 && finalScores && (
+        <Card style={{ padding: 22 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <BadgeCheck size={16} color="#1B7A5A" />
+            <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: BRAND.ink }}>Task — structured score</div>
+          </div>
+          <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginBottom: 16 }}>Generated from your interview answers. Review before saving — this is what feeds the leaderboard.</div>
+
+          {CRIT_CRITERIA.map((c) => (
+            <div key={c.key} style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: FONT, fontSize: 12.5 }}>
+                <span style={{ color: BRAND.ink, fontWeight: 500 }}>{c.label} <span style={{ color: "#B7B2AE", fontWeight: 400 }}>({Math.round(c.weight * 100)}% weight)</span></span>
+                <span style={{ color: BRAND.ink, fontWeight: 700 }}>{finalScores[c.key].toFixed(1)}/10</span>
+              </div>
+              <div style={{ height: 6, borderRadius: 999, background: "#EFEAE4", marginTop: 5, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${finalScores[c.key] * 10}%`, background: BRAND.coral, borderRadius: 999 }} />
+              </div>
+            </div>
+          ))}
+
+          {finalScores.rationale && (
+            <div style={{ fontFamily: SERIF, fontStyle: "italic", fontSize: 12.5, color: "#7A746F", marginTop: 12, borderTop: `1px solid ${BRAND.line}`, paddingTop: 12, lineHeight: 1.6 }}>
+              &ldquo;{finalScores.rationale}&rdquo;
+            </div>
+          )}
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 18, paddingTop: 16, borderTop: `1px solid ${BRAND.line}` }}>
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F" }}>Weighted average</div>
+              <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 24, color: BRAND.ink }}>{critWeightedAvg(finalScores).toFixed(1)}<span style={{ fontSize: 13, color: "#9B958F", fontWeight: 500 }}>/10</span></div>
+            </div>
+            <PrimaryButton onClick={confirmSave} disabled={saving} icon={saving ? Loader2 : CheckCircle2}>
+              {saving ? "Saving…" : existingRating ? "Update rating" : "Save rating"}
+            </PrimaryButton>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================================
    LEADER DASHBOARD — top ideas by average jury score
    ========================================================================= */
 function LeaderboardView({ leaderboard, loading, error }) {
@@ -749,6 +1042,7 @@ export default function IdeasRivApp() {
 
   const [activeOppId, setActiveOppId] = useState(null);
   const [activeIdeaId, setActiveIdeaId] = useState(null);
+  const [ratingMethod, setRatingMethod] = useState(null); // null (show choice) | "simple" | "crit"
 
   const activeOpp = opportunities.find((o) => o.id === activeOppId) || null;
   const activeIdea = ideas.find((i) => i.id === activeIdeaId) || null;
@@ -815,7 +1109,22 @@ export default function IdeasRivApp() {
   function handleSaveRating(rating) {
     setMyRatings((m) => ({ ...m, [rating.idea_id]: rating }));
     setActiveIdeaId(null);
+    setRatingMethod(null);
     refreshIdeas();
+  }
+
+  // Opening an idea that already has one of my ratings goes straight back
+  // into whichever method produced it (no point re-asking); a fresh idea
+  // shows the choice screen first.
+  function openRating(idea) {
+    const existing = myRatings[idea.id];
+    setActiveIdeaId(idea.id);
+    if (existing) setRatingMethod(existing.impact != null ? "crit" : "simple");
+    else setRatingMethod(null);
+  }
+  function closeRating() {
+    setActiveIdeaId(null);
+    setRatingMethod(null);
   }
 
   return (
@@ -853,7 +1162,7 @@ export default function IdeasRivApp() {
       {view === "jury" && session?.role === "jury" && (
         <JuryListView
           opportunities={opportunities} ideas={ideas} myRatings={myRatings}
-          loading={loadingIdeas} error={error} setActiveIdea={setActiveIdeaId}
+          loading={loadingIdeas} error={error} onOpenIdea={openRating}
         />
       )}
 
@@ -861,16 +1170,29 @@ export default function IdeasRivApp() {
         <LeaderboardView leaderboard={leaderboard} loading={loadingBoard} error={error} />
       )}
 
-      {/* Rating overlay */}
+      {/* Rating overlay: choice screen, then simple stars or the CRIT interview */}
       {activeIdeaId && activeIdea && session?.role === "jury" && view === "jury" && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(39,37,37,0.5)", zIndex: 60, overflowY: "auto" }}>
           <div style={{ background: BRAND.cream, minHeight: "100%" }}>
-            <SimpleRatingView
-              idea={activeIdea}
-              existingRating={myRatings[activeIdea.id] || null}
-              onSaveRating={handleSaveRating}
-              onBack={() => setActiveIdeaId(null)}
-            />
+            {ratingMethod === null && (
+              <RatingMethodChoice idea={activeIdea} onChoose={setRatingMethod} onBack={closeRating} />
+            )}
+            {ratingMethod === "simple" && (
+              <SimpleRatingView
+                idea={activeIdea}
+                existingRating={myRatings[activeIdea.id] || null}
+                onSaveRating={handleSaveRating}
+                onBack={closeRating}
+              />
+            )}
+            {ratingMethod === "crit" && (
+              <CritRatingView
+                idea={activeIdea}
+                existingRating={myRatings[activeIdea.id] || null}
+                onSaveRating={handleSaveRating}
+                onBack={closeRating}
+              />
+            )}
           </div>
         </div>
       )}
