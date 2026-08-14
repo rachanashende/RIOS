@@ -717,7 +717,7 @@ export default function IdeasRivApp({ session, onLogout }) {
   }
 
   return (
-    <div style={{ fontFamily: FONT, background: BRAND.cream, minHeight: "100%" }}>
+    <div style={{ fontFamily: FONT, background: BRAND.cream, minHeight: "100vh" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Newsreader:ital@1&display=swap');
         * { box-sizing: border-box; }
@@ -761,7 +761,7 @@ export default function IdeasRivApp({ session, onLogout }) {
       {/* Rating overlay */}
       {activeIdeaId && activeIdea && session.role === "jury" && view === "jury" && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(39,37,37,0.5)", zIndex: 60, overflowY: "auto" }}>
-          <div style={{ background: BRAND.cream, minHeight: "100%" }}>
+          <div style={{ background: BRAND.cream, minHeight: "100vh" }}>
             <CriteriaRatingView
               idea={activeIdea}
               existingRating={myRatings[activeIdea.id] || null}

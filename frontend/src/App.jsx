@@ -874,7 +874,7 @@ export default function RiosApp() {
   }
 
   return (
-    <div style={{ fontFamily: "'Poppins',sans-serif", background: BRAND.cream, minHeight: "100%" }}>
+    <div style={{ fontFamily: "'Poppins',sans-serif", background: BRAND.cream, minHeight: "100vh" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Newsreader:ital@1&display=swap');
         * { box-sizing: border-box; }
