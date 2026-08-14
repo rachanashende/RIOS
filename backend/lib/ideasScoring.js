@@ -22,3 +22,9 @@ export function clamp10(n) {
   if (isNaN(n)) return 0;
   return Math.max(0, Math.min(10, n));
 }
+
+export function clamp5(n) {
+  n = Number(n);
+  if (isNaN(n)) return 0;
+  return Math.max(0, Math.min(5, n));
+}
