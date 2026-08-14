@@ -41,10 +41,7 @@ async function downloadExport(path, fallbackName) {
 /* =========================== SMALL UI PIECES =========================== */
 function Logo() {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-      <img src="/rios-logo-mark.png" alt="Retail Innovation Ventures" style={{ width: 32, height: 32, objectFit: "contain" }} />
-      <span style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 17, letterSpacing: "-0.01em", color: BRAND.ink }}>RIoS</span>
-    </div>
+    <img src="/riv-logo-full.png" alt="Retail Innovation Ventures" style={{ height: 36, width: "auto", objectFit: "contain" }} />
   );
 }
 

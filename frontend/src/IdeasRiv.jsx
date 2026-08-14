@@ -112,10 +112,7 @@ function IdeasNavBar({ view, setView, session, onLogout }) {
     <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(251,249,246,0.95)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${BRAND.line}` }}>
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 30, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-            <img src="/rios-logo-mark.png" alt="Retail Innovation Ventures" style={{ width: 32, height: 32, objectFit: "contain" }} />
-            <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 17, letterSpacing: "-0.01em", color: BRAND.ink }}>Ideas<span style={{ color: BRAND.coral }}>.RIV</span></span>
-          </div>
+          <img src="/riv-logo-full.png" alt="Retail Innovation Ventures" style={{ height: 36, width: "auto", objectFit: "contain" }} />
           <div style={{ display: "flex", gap: 4 }}>
             {items.map((it) => (
               <button key={it.id} onClick={() => setView(it.id)} style={{
