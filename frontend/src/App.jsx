@@ -7,7 +7,7 @@ import {
   ChevronRight, ChevronLeft, Shuffle, RotateCcw, ArrowRight, LogOut, UserPlus,
   CheckCircle2, Circle, Sparkles, TrendingUp, Users, Target, Trash2, Download,
   LayoutDashboard, Menu, X, Award, Eye, EyeOff, FileSpreadsheet, FileText, Loader2,
-  Compass, AlertTriangle,
+  Compass, AlertTriangle, Gavel,
 } from "lucide-react";
 import { api, getToken, getStoredUser, setSession, clearSession } from "./api.js";
 import { computeScores, tierFor, fmtMoney, computeCategoryScores } from "./scoring.js";
@@ -337,6 +337,129 @@ function AdminView({ setView, setSelectedClient }) {
           <form onSubmit={createClient}>
             <input placeholder="Contact name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required style={{ ...inputStyle, marginTop: 0 }} />
             <input placeholder="Company" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} style={{ ...inputStyle, marginTop: 10 }} />
+            <input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
+            <input placeholder="Temporary password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
+            {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: BRAND.coralDark, marginTop: 10 }}>{error}</div>}
+            <button type="submit" disabled={busy} style={{ width: "100%", marginTop: 14, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>Create login</button>
+          </form>
+        </div>
+      </div>
+
+      <IdeasTeamPanel clients={clients} />
+    </div>
+  );
+}
+
+/* ---------------- Admin: Ideas.RIV team + source-client control ---------------- */
+function IdeasTeamPanel({ clients }) {
+  const [sourceClient, setSourceClient] = useState(null);
+  const [selectedClientId, setSelectedClientId] = useState("");
+  const [employees, setEmployees] = useState(null);
+  const [jury, setJury] = useState(null);
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "employee", company: "" });
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [savingSource, setSavingSource] = useState(false);
+
+  const refresh = useCallback(() => {
+    api.getIdeasSettings().then((d) => { setSourceClient(d.sourceClient); setSelectedClientId(d.sourceClient?.id ? String(d.sourceClient.id) : ""); }).catch(() => {});
+    api.listIdeasUsers("employee").then((d) => setEmployees(d.users)).catch(() => setEmployees([]));
+    api.listIdeasUsers("jury").then((d) => setJury(d.users)).catch(() => setJury([]));
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  async function saveSourceClient() {
+    setSavingSource(true);
+    try {
+      await api.setIdeasSourceClient(selectedClientId ? Number(selectedClientId) : null);
+      refresh();
+    } catch (err) { setError(err.message); } finally { setSavingSource(false); }
+  }
+
+  async function createUser(e) {
+    e.preventDefault();
+    setError(""); setBusy(true);
+    try {
+      await api.createIdeasUser(form);
+      setForm({ name: "", email: "", password: "", role: form.role, company: form.company });
+      refresh();
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
+  async function removeUser(id) {
+    if (!confirm("Remove this login?")) return;
+    await api.deleteIdeasUser(id);
+    refresh();
+  }
+
+  return (
+    <div style={{ marginTop: 44 }}>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>Ideas.RIV team</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Choose which client's scored audit feeds the 5 opportunities, then create employee and jury logins.</div>
+
+      <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 20, background: "#fff", marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}><Compass size={15} /> Opportunity source</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F", marginBottom: 12 }}>
+          {sourceClient ? <>Currently sourcing from <strong style={{ color: BRAND.ink }}>{sourceClient.company || sourceClient.name}</strong>.</> : "No source client set yet — Ideas.RIV will show no opportunities until you pick one."}
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <select value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} style={{ ...inputStyle, marginTop: 0, flex: 1, minWidth: 200 }}>
+            <option value="">— No source client —</option>
+            {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.company || c.name} ({c.answered}/165 scored)</option>)}
+          </select>
+          <button onClick={saveSourceClient} disabled={savingSource} style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.ink, color: "#fff", border: "none", borderRadius: 8, padding: "0 18px", cursor: "pointer", opacity: savingSource ? 0.7 : 1 }}>Save</button>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24 }} className="rios-admin-grid">
+        <div>
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink, marginBottom: 10 }}>Employees</div>
+          {employees === null ? (
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>Loading…</div>
+          ) : employees.length === 0 ? (
+            <div style={{ border: `1px dashed ${BRAND.line}`, borderRadius: 12, padding: 20, fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 20 }}>No employee logins yet.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 22 }}>
+              {employees.map((u) => (
+                <div key={u.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: 12, background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                  <div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink }}>{u.name}</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email} {u.company ? `· ${u.company}` : ""}</div>
+                  </div>
+                  <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink, marginBottom: 10 }}>Jury members</div>
+          {jury === null ? (
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>Loading…</div>
+          ) : jury.length === 0 ? (
+            <div style={{ border: `1px dashed ${BRAND.line}`, borderRadius: 12, padding: 20, fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>No jury logins yet.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {jury.map((u) => (
+                <div key={u.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: 12, background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                  <div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink }}>{u.name}</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email} {u.company ? `· ${u.company}` : ""}</div>
+                  </div>
+                  <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 20, background: "#fff", height: "fit-content" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 14 }}><Gavel size={15} /> New employee / jury login</div>
+          <form onSubmit={createUser}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              <button type="button" onClick={() => setForm({ ...form, role: "employee" })} style={{ flex: 1, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 12.5, padding: "9px 0", borderRadius: 8, cursor: "pointer", border: `1px solid ${BRAND.line}`, background: form.role === "employee" ? BRAND.ink : "#fff", color: form.role === "employee" ? "#fff" : BRAND.ink }}>Employee</button>
+              <button type="button" onClick={() => setForm({ ...form, role: "jury" })} style={{ flex: 1, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 12.5, padding: "9px 0", borderRadius: 8, cursor: "pointer", border: `1px solid ${BRAND.line}`, background: form.role === "jury" ? BRAND.ink : "#fff", color: form.role === "jury" ? "#fff" : BRAND.ink }}>Jury</button>
+            </div>
+            <input placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required style={{ ...inputStyle, marginTop: 0 }} />
+            <input placeholder="Company (optional)" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} style={{ ...inputStyle, marginTop: 10 }} />
             <input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             <input placeholder="Temporary password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: BRAND.coralDark, marginTop: 10 }}>{error}</div>}
