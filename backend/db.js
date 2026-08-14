@@ -54,6 +54,14 @@ export async function initSchema() {
   // We look up whatever the constraint is actually named (Postgres's
   // default naming can vary) rather than assuming "users_role_check",
   // drop it, and re-add it under a known name with the wider list.
+  //
+  // "employee" was renamed to "junior_employee". This needs two ALTER
+  // passes, not one: the CHECK constraint has to allow BOTH values before
+  // the UPDATE can move existing rows over (Postgres validates the UPDATE
+  // against whatever constraint is live at that moment), and only after
+  // that UPDATE can the constraint be tightened to drop "employee" for
+  // good (tightening first would fail validation against rows that still
+  // say "employee"). All three steps are safe to repeat every boot.
   await pool.query(`
     DO $$
     DECLARE
@@ -71,7 +79,16 @@ export async function initSchema() {
       END IF;
 
       ALTER TABLE users ADD CONSTRAINT users_role_check
-        CHECK (role IN ('admin','client','employee','jury'));
+        CHECK (role IN ('admin','client','employee','junior_employee','jury'));
+    END $$;
+  `);
+  await pool.query(`UPDATE users SET role = 'junior_employee' WHERE role = 'employee';`);
+  await pool.query(`
+    DO $$
+    BEGIN
+      ALTER TABLE users DROP CONSTRAINT users_role_check;
+      ALTER TABLE users ADD CONSTRAINT users_role_check
+        CHECK (role IN ('admin','client','junior_employee','jury'));
     END $$;
   `);
 
@@ -92,15 +109,28 @@ export async function initSchema() {
 
     -- One row per (idea, jury member) — a jury member can revise their
     -- own rating (upsert), but each idea can carry many jury ratings,
-    -- averaged into the leaderboard score.
+    -- averaged into the leaderboard score. criteria_scores holds the
+    -- current rating system: an object of 4-5 named criteria, each 1-5,
+    -- e.g. {"impact":4,"feasibility":5,"innovation":3,"cost":4,"strategicFit":5}.
+    -- score is always the plain average of those values, 1-5 scale.
+    --
+    -- impact/feasibility/innovation/cost/rationale/transcript below are
+    -- vestigial: they backed the CRIT AI-interview rating flow, which has
+    -- been removed. Left in place (nullable, unused by any current code)
+    -- rather than dropped, since dropping columns is irreversible and
+    -- there's no real cost to leaving them — but nothing writes to them
+    -- anymore, and any old CRIT-era rows are cleared below because they
+    -- used an incompatible 0-10 scale that can't be mixed with the
+    -- current 1-5 criteria system.
     CREATE TABLE IF NOT EXISTS idea_ratings (
       id SERIAL PRIMARY KEY,
       idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
       jury_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      impact NUMERIC NOT NULL,
-      feasibility NUMERIC NOT NULL,
-      innovation NUMERIC NOT NULL,
-      cost NUMERIC NOT NULL,
+      criteria_scores JSONB,
+      impact NUMERIC,
+      feasibility NUMERIC,
+      innovation NUMERIC,
+      cost NUMERIC,
       rationale TEXT,
       transcript JSONB,
       score NUMERIC NOT NULL,
@@ -121,6 +151,24 @@ export async function initSchema() {
       VALUES (1, NULL)
       ON CONFLICT (id) DO NOTHING;
   `);
+
+  // idea_ratings.criteria_scores didn't exist before this migration — add
+  // it for tables created under the old schema. Safe to run every boot.
+  await pool.query(`ALTER TABLE idea_ratings ADD COLUMN IF NOT EXISTS criteria_scores JSONB;`);
+  await pool.query(`
+    ALTER TABLE idea_ratings ALTER COLUMN impact DROP NOT NULL;
+    ALTER TABLE idea_ratings ALTER COLUMN feasibility DROP NOT NULL;
+    ALTER TABLE idea_ratings ALTER COLUMN innovation DROP NOT NULL;
+    ALTER TABLE idea_ratings ALTER COLUMN cost DROP NOT NULL;
+  `);
+
+  // The CRIT AI-interview rating flow is removed. Any ratings it produced
+  // used a 0-10 weighted-average scale that's incompatible with the
+  // current plain 1-5 criteria average, so they're cleared here rather
+  // than left to silently corrupt averages/leaderboards. Whoever gave
+  // that rating will need to re-rate under the new criteria system.
+  // Idempotent: matches nothing once already cleared.
+  await pool.query(`DELETE FROM idea_ratings WHERE impact IS NOT NULL AND criteria_scores IS NULL;`);
 }
 
 export default pool;

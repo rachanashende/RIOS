@@ -5,7 +5,7 @@ import { pool, initSchema } from "./db.js";
 const users = [
   { email: "admin@rios.demo", password: "admin123", name: "Saravana Mani", role: "admin", company: "Retailx Innovation Ventures" },
   { email: "client@demo.retailer", password: "client123", name: "Demo Client Contact", role: "client", company: "Demo Retailer Pvt Ltd" },
-  { email: "employee@demo.retailer", password: "employee123", name: "Demo Employee", role: "employee", company: "Demo Retailer Pvt Ltd" },
+  { email: "employee@demo.retailer", password: "employee123", name: "Demo Junior Employee", role: "junior_employee", company: "Demo Retailer Pvt Ltd" },
   { email: "jury@demo.retailer", password: "jury123", name: "Demo Jury Member", role: "jury", company: "Demo Retailer Pvt Ltd" },
 ];
 
@@ -44,7 +44,7 @@ async function seed() {
   console.log(`Seed complete — ${created} account(s) created.`);
   console.log("  Admin login:    admin@rios.demo / admin123");
   console.log("  Client login:   client@demo.retailer / client123");
-  console.log("  Employee login: employee@demo.retailer / employee123");
+  console.log("  Junior Employee login: employee@demo.retailer / employee123");
   console.log("  Jury login:     jury@demo.retailer / jury123");
   await pool.end();
 }

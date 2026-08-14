@@ -43,10 +43,10 @@ router.put("/settings", async (req, res, next) => {
   }
 });
 
-// GET /api/admin/ideas/users?role=employee — list employee or jury accounts
+// GET /api/admin/ideas/users?role=junior_employee — list junior_employee or jury accounts
 router.get("/users", async (req, res, next) => {
   try {
-    const role = req.query.role === "jury" ? "jury" : "employee";
+    const role = req.query.role === "jury" ? "jury" : "junior_employee";
     const { rows } = await pool.query(
       "SELECT id, email, name, company, created_at FROM users WHERE role = $1 ORDER BY created_at DESC",
       [role]
@@ -57,12 +57,12 @@ router.get("/users", async (req, res, next) => {
   }
 });
 
-// POST /api/admin/ideas/users — create an employee or jury login
+// POST /api/admin/ideas/users — create a junior_employee or jury login
 router.post("/users", async (req, res, next) => {
   try {
     const { email, password, name, role, company } = req.body || {};
-    if (!email || !password || !name || !["employee", "jury"].includes(role)) {
-      return res.status(400).json({ error: "Name, email, temporary password, and role ('employee' or 'jury') are required." });
+    if (!email || !password || !name || !["junior_employee", "jury"].includes(role)) {
+      return res.status(400).json({ error: "Name, email, temporary password, and role ('junior_employee' or 'jury') are required." });
     }
     const normalizedEmail = String(email).toLowerCase().trim();
 
@@ -83,7 +83,7 @@ router.post("/users", async (req, res, next) => {
 
 router.delete("/users/:id", async (req, res, next) => {
   try {
-    await pool.query("DELETE FROM users WHERE id = $1 AND role IN ('employee','jury')", [req.params.id]);
+    await pool.query("DELETE FROM users WHERE id = $1 AND role IN ('junior_employee','jury')", [req.params.id]);
     res.json({ ok: true });
   } catch (err) {
     next(err);

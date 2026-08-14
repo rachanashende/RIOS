@@ -1,30 +1,27 @@
-// Rating criteria + weights for the jury's weighted-average idea score.
-// Mirrors frontend/src/IdeasRiv.jsx's CRITERIA exactly — kept in sync
-// manually, same convention as lib/scoring.js vs frontend/src/scoring.js.
+// The 5 criteria a jury member rates every idea on. Each is a plain 1-5
+// star pick — no weighting, no AI interview. Overall score is just the
+// average of these five, always on a 1-5 scale.
 export const CRITERIA = [
-  { key: "impact", label: "Impact", weight: 0.35 },
-  { key: "feasibility", label: "Feasibility", weight: 0.25 },
-  { key: "innovation", label: "Innovation", weight: 0.25 },
-  { key: "cost", label: "Cost-effectiveness", weight: 0.15 },
+  { key: "impact", label: "Impact", question: "How much could this move the needle on the opportunity?" },
+  { key: "feasibility", label: "Feasibility", question: "How realistic is this to actually build and roll out?" },
+  { key: "innovation", label: "Innovation", question: "How novel is this compared to what's already out there?" },
+  { key: "cost", label: "Cost-effectiveness", question: "Is the likely payoff worth the likely investment?" },
+  { key: "strategicFit", label: "Strategic fit", question: "How directly does this address the specific gap the audit identified?" },
 ];
 
-export function weightedAvg(scores) {
-  let total = 0;
-  CRITERIA.forEach((c) => {
-    const v = Number(scores[c.key]);
-    total += (isNaN(v) ? 0 : v) * c.weight;
-  });
-  return total; // 0–10 scale
-}
-
-export function clamp10(n) {
-  n = Number(n);
-  if (isNaN(n)) return 0;
-  return Math.max(0, Math.min(10, n));
-}
-
+// A star rating is always a whole number 1-5.
 export function clamp5(n) {
-  n = Number(n);
-  if (isNaN(n)) return 0;
-  return Math.max(0, Math.min(5, n));
+  n = Math.round(Number(n));
+  if (isNaN(n)) return 1;
+  return Math.max(1, Math.min(5, n));
+}
+
+// Plain average across whichever criteria were actually rated (a rating
+// must include every criterion in CRITERIA, but this stays defensive in
+// case that ever changes). Returned on the same 1-5 scale as the inputs.
+export function averageScore(criteriaScores) {
+  const values = CRITERIA.map((c) => criteriaScores[c.key]).filter((v) => v !== undefined && v !== null);
+  if (!values.length) return 0;
+  const total = values.reduce((sum, v) => sum + v, 0);
+  return total / values.length;
 }

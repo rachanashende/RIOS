@@ -9,7 +9,6 @@ import responsesRoutes from "./routes/responses.js";
 import exportRoutes from "./routes/export.js";
 import ideasRoutes from "./routes/ideas.js";
 import ideasAdminRoutes from "./routes/ideasAdmin.js";
-import critAssistantRoutes from "./routes/critAssistant.js";
 
 const app = express();
 app.use(cors());
@@ -22,7 +21,6 @@ app.use("/api/admin", adminRoutes);
 app.use("/api", responsesRoutes);
 app.use("/api/export", exportRoutes);
 app.use("/api/ideas", ideasRoutes);
-app.use("/api/ideas", critAssistantRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);

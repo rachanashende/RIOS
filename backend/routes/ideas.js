@@ -2,7 +2,7 @@ import { Router } from "express";
 import pool from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { QUESTIONS, computeScores } from "../lib/scoring.js";
-import { weightedAvg, clamp10, clamp5 } from "../lib/ideasScoring.js";
+import { CRITERIA, clamp5, averageScore } from "../lib/ideasScoring.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -13,17 +13,14 @@ function questionById(id) {
 
 // Attach the static question text/module/submodule to a DB row that only
 // stores question_id, and coerce the aggregate columns Postgres returns
-// as strings (COUNT/AVG) back into numbers. has_crit_rating flags whether
-// any contributing rating came from the old CRIT-interview flow (0-10
-// scale) rather than the current default 1-5 star rating — the frontend
-// uses this to label the score "/10" instead of "/5" so it never shows
-// something impossible like "6.6/5".
+// as strings (COUNT/AVG) back into numbers. Every score is always on a
+// plain 1-5 scale now (the old CRIT 0-10 flow is gone), so there's no
+// per-row scale detection needed anymore.
 function enrich(row) {
   return {
     ...row,
     avg_score: row.avg_score != null ? Number(row.avg_score) : null,
     rating_count: row.rating_count != null ? Number(row.rating_count) : 0,
-    has_crit_rating: !!row.has_crit_rating,
     question: questionById(row.question_id),
   };
 }
@@ -36,7 +33,7 @@ function enrich(row) {
  * powers that client's own Discover Scorecard, so the numbers always
  * match what they see on their dashboard.
  */
-router.get("/opportunities", requireRole("employee", "jury", "admin"), async (req, res, next) => {
+router.get("/opportunities", requireRole("junior_employee", "jury", "admin"), async (req, res, next) => {
   try {
     const { rows: settingsRows } = await pool.query("SELECT source_client_id FROM ideas_settings WHERE id = 1");
     const sourceClientId = settingsRows[0]?.source_client_id;
@@ -69,11 +66,20 @@ router.get("/opportunities", requireRole("employee", "jury", "admin"), async (re
 });
 
 /**
+ * GET /api/ideas/criteria
+ * The 5 rating criteria (key, label, question) the jury rates every idea
+ * on — lets the frontend render the rating form without hardcoding them.
+ */
+router.get("/criteria", requireRole("junior_employee", "jury", "admin"), (req, res) => {
+  res.json({ criteria: CRITERIA });
+});
+
+/**
  * GET /api/ideas?questionId=123
  * All submitted ideas (optionally filtered to one opportunity), with each
  * idea's current rating count and average score.
  */
-router.get("/", requireRole("employee", "jury", "admin"), async (req, res, next) => {
+router.get("/", requireRole("junior_employee", "jury", "admin"), async (req, res, next) => {
   try {
     const { questionId } = req.query;
     const params = [];
@@ -81,8 +87,7 @@ router.get("/", requireRole("employee", "jury", "admin"), async (req, res, next)
       SELECT i.id, i.question_id, i.title, i.description, i.created_at,
              u.name AS submitted_by_name,
              COUNT(r.id)::int AS rating_count,
-             AVG(r.score) AS avg_score,
-             bool_or(r.impact IS NOT NULL) AS has_crit_rating
+             AVG(r.score) AS avg_score
       FROM ideas i
       JOIN users u ON u.id = i.submitted_by
       LEFT JOIN idea_ratings r ON r.idea_id = i.id
@@ -102,14 +107,13 @@ router.get("/", requireRole("employee", "jury", "admin"), async (req, res, next)
 
 /**
  * GET /api/ideas/mine
- * The logged-in employee's own submissions, for the "My submissions" tab.
+ * The logged-in junior employee's own submissions, for "My submissions".
  */
-router.get("/mine", requireRole("employee", "admin"), async (req, res, next) => {
+router.get("/mine", requireRole("junior_employee", "admin"), async (req, res, next) => {
   try {
     const { rows } = await pool.query(
       `SELECT i.id, i.question_id, i.title, i.description, i.created_at,
-              COUNT(r.id)::int AS rating_count, AVG(r.score) AS avg_score,
-              bool_or(r.impact IS NOT NULL) AS has_crit_rating
+              COUNT(r.id)::int AS rating_count, AVG(r.score) AS avg_score
        FROM ideas i
        LEFT JOIN idea_ratings r ON r.idea_id = i.id
        WHERE i.submitted_by = $1
@@ -129,7 +133,7 @@ router.get("/mine", requireRole("employee", "admin"), async (req, res, next) => 
  * Batch insert — this is the "1 idea, then + to add more" submission form:
  * the frontend always posts an array, even for a single idea.
  */
-router.post("/", requireRole("employee", "admin"), async (req, res, next) => {
+router.post("/", requireRole("junior_employee", "admin"), async (req, res, next) => {
   try {
     const { ideas } = req.body || {};
     if (!Array.isArray(ideas) || ideas.length === 0) {
@@ -164,16 +168,16 @@ router.post("/", requireRole("employee", "admin"), async (req, res, next) => {
 
 /**
  * GET /api/ideas/:id/ratings
- * Every individual jury rating for one idea, full detail included (score,
- * and — for any that came from the old CRIT flow — the criteria breakdown
- * and rationale). Powers the "why this score?" view; open to employee/
+ * Every individual jury rating for one idea — the 5-criteria breakdown
+ * for each. Powers the "why this score?" view; open to junior_employee/
  * jury/admin, not just the jury member who wrote it, since the whole
  * point is letting the idea's submitter see why it scored what it did.
  */
-router.get("/:id/ratings", requireRole("employee", "jury", "admin"), async (req, res, next) => {
+router.get("/:id/ratings", requireRole("junior_employee", "jury", "admin"), async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT r.*, u.name AS jury_name
+      `SELECT r.id, r.idea_id, r.jury_user_id, r.criteria_scores, r.score, r.created_at, r.updated_at,
+              u.name AS jury_name
        FROM idea_ratings r
        JOIN users u ON u.id = r.jury_user_id
        WHERE r.idea_id = $1
@@ -189,13 +193,12 @@ router.get("/:id/ratings", requireRole("employee", "jury", "admin"), async (req,
 /**
  * GET /api/ideas/:id/ratings/mine
  * Whether (and how) the logged-in jury member already rated this idea —
- * lets the frontend reopen an existing rating instead of starting a new
- * CRIT interview from scratch.
+ * lets the frontend pre-fill the star pickers instead of starting blank.
  */
 router.get("/:id/ratings/mine", requireRole("jury", "admin"), async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      "SELECT * FROM idea_ratings WHERE idea_id = $1 AND jury_user_id = $2",
+      "SELECT id, idea_id, jury_user_id, criteria_scores, score, created_at, updated_at FROM idea_ratings WHERE idea_id = $1 AND jury_user_id = $2",
       [Number(req.params.id), req.user.id]
     );
     res.json({ rating: rows[0] || null });
@@ -206,63 +209,39 @@ router.get("/:id/ratings/mine", requireRole("jury", "admin"), async (req, res, n
 
 /**
  * POST /api/ideas/:id/ratings
- *
- * Two accepted shapes, auto-detected from the body:
- *   1. Simple (current default UI):    { score }               — 1-5, clamped
- *   2. CRIT (dormant, not currently used by the frontend):
- *      { impact, feasibility, innovation, cost, rationale, transcript }
- *      — each 0-10, clamped, weighted-averaged into a 0-10 score server-side
- *
- * Either way the saved score is always computed/clamped here, never trusted
- * as-sent from the client. Keeping both paths means the CRIT-interview flow
- * can be switched back on later (see routes/critAssistant.js) just by
- * having the frontend send the criteria payload again — no backend change.
+ * Body: { criteria: { impact, feasibility, innovation, cost, strategicFit } }
+ * Every value 1-5. The overall score is always the plain average,
+ * recomputed here server-side — the client can't submit a fabricated
+ * overall score directly.
  */
 router.post("/:id/ratings", requireRole("jury", "admin"), async (req, res, next) => {
   try {
     const ideaId = Number(req.params.id);
-    const { impact, feasibility, innovation, cost, rationale, transcript, score: simpleScore } = req.body || {};
+    const { criteria } = req.body || {};
 
     const { rows: ideaRows } = await pool.query("SELECT id FROM ideas WHERE id = $1", [ideaId]);
     if (!ideaRows.length) return res.status(404).json({ error: "Idea not found." });
 
-    const usingCrit = [impact, feasibility, innovation, cost].every((v) => v !== undefined && v !== null);
-
-    let scores = { impact: null, feasibility: null, innovation: null, cost: null };
-    let score, rationaleToSave = null, transcriptToSave = "[]";
-
-    if (usingCrit) {
-      scores = {
-        impact: clamp10(impact),
-        feasibility: clamp10(feasibility),
-        innovation: clamp10(innovation),
-        cost: clamp10(cost),
-      };
-      score = weightedAvg(scores);
-      rationaleToSave = (rationale || "").trim() || null;
-      transcriptToSave = JSON.stringify(Array.isArray(transcript) ? transcript : []);
-    } else {
-      if (simpleScore === undefined || simpleScore === null) {
-        return res.status(400).json({ error: "score is required (1-5)." });
-      }
-      score = clamp5(simpleScore);
+    if (!criteria || typeof criteria !== "object") {
+      return res.status(400).json({ error: "criteria is required — an object with a 1-5 rating for each of: " + CRITERIA.map((c) => c.key).join(", ") });
     }
 
+    const missing = CRITERIA.filter((c) => criteria[c.key] === undefined || criteria[c.key] === null);
+    if (missing.length) {
+      return res.status(400).json({ error: `Missing rating for: ${missing.map((c) => c.label).join(", ")}` });
+    }
+
+    const clamped = {};
+    CRITERIA.forEach((c) => { clamped[c.key] = clamp5(criteria[c.key]); });
+    const score = averageScore(clamped);
+
     const { rows } = await pool.query(
-      `INSERT INTO idea_ratings (idea_id, jury_user_id, impact, feasibility, innovation, cost, rationale, transcript, score, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now())
+      `INSERT INTO idea_ratings (idea_id, jury_user_id, criteria_scores, score, updated_at)
+       VALUES ($1, $2, $3, $4, now())
        ON CONFLICT (idea_id, jury_user_id) DO UPDATE SET
-         impact = EXCLUDED.impact, feasibility = EXCLUDED.feasibility, innovation = EXCLUDED.innovation,
-         cost = EXCLUDED.cost, rationale = EXCLUDED.rationale, transcript = EXCLUDED.transcript,
-         score = EXCLUDED.score, updated_at = now()
-       RETURNING *`,
-      [
-        ideaId, req.user.id,
-        scores.impact, scores.feasibility, scores.innovation, scores.cost,
-        rationaleToSave,
-        transcriptToSave,
-        score,
-      ]
+         criteria_scores = EXCLUDED.criteria_scores, score = EXCLUDED.score, updated_at = now()
+       RETURNING id, idea_id, jury_user_id, criteria_scores, score, created_at, updated_at`,
+      [ideaId, req.user.id, JSON.stringify(clamped), score]
     );
     res.status(201).json({ rating: rows[0] });
   } catch (err) {
@@ -272,29 +251,22 @@ router.post("/:id/ratings", requireRole("jury", "admin"), async (req, res, next)
 
 /**
  * GET /api/ideas/leaderboard
- * Ideas ranked by average jury score (mean of every jury member's rating
- * for that idea — plain 1-5 stars by default, or a CRIT weighted 0-10 if
- * that flow is ever re-enabled; this query doesn't care which). Top 3 are
- * "published". Ideas with zero ratings are excluded — nothing to rank yet.
+ * Ideas ranked by average jury score (mean of every jury member's 1-5
+ * average for that idea). Top 3 are "published". Ideas with zero ratings
+ * are excluded — nothing to rank yet.
  */
-router.get("/leaderboard", requireRole("employee", "jury", "admin"), async (req, res, next) => {
+router.get("/leaderboard", requireRole("junior_employee", "jury", "admin"), async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
       SELECT i.id, i.question_id, i.title, i.description, i.created_at,
              u.name AS submitted_by_name,
              COUNT(r.id)::int AS rating_count,
-             AVG(r.score) AS avg_score,
-             bool_or(r.impact IS NOT NULL) AS has_crit_rating,
-             -- Rank fairly across mixed scales: a CRIT-era 6.6/10 (66%) must
-             -- not outrank a simple 4.5/5 (90%) just because its raw number
-             -- is bigger. avg_score/has_crit_rating above are still the raw
-             -- values used for display; this is ranking-only.
-             AVG(r.score) / (CASE WHEN bool_or(r.impact IS NOT NULL) THEN 10.0 ELSE 5.0 END) AS normalized_score
+             AVG(r.score) AS avg_score
       FROM ideas i
       JOIN users u ON u.id = i.submitted_by
       JOIN idea_ratings r ON r.idea_id = i.id
       GROUP BY i.id, u.name
-      ORDER BY normalized_score DESC
+      ORDER BY avg_score DESC
     `);
     const ranked = rows.map(enrich).map((row, i) => ({ ...row, published: i < 3 }));
     res.json({ leaderboard: ranked });

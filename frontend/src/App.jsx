@@ -874,7 +874,7 @@ export default function RiosApp() {
   }
 
   return (
-    <div style={{ fontFamily: "'Poppins',sans-serif", background: BRAND.cream, minHeight: "100vh" }}>
+    <div style={{ fontFamily: "'Poppins',sans-serif", background: BRAND.cream, minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Newsreader:ital@1&display=swap');
         * { box-sizing: border-box; }
@@ -893,16 +893,18 @@ export default function RiosApp() {
         }
       `}</style>
       <NavBar view={view} setView={goToView} user={user} onLogout={handleLogout} />
-      {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip /><ModuleGrid modules={modules} questions={questions} setView={goToView} /><PricingView /></>)}
-      {view === "login" && <LoginView onLogin={handleLogin} />}
-      {view === "signup" && <SignupView onSignup={handleSignup} setView={goToView} />}
-      {view === "assess" && user?.role === "client" && ready && (
-        <AssessmentView questions={questions} modules={modules} responses={responses} setResponses={setResponses} moduleIdx={moduleIdx} setModuleIdx={setModuleIdx} />
-      )}
-      {view === "admin" && user?.role === "admin" && <AdminView setView={goToView} setSelectedClient={setViewingClient} />}
-      {view === "dashboard" && user && ready && (
-        <DashboardView questions={questions} modules={modules} responses={responses} setView={goToView} user={user} viewingClient={viewingClient} />
-      )}
+      <div style={{ flex: 1 }}>
+        {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip /><ModuleGrid modules={modules} questions={questions} setView={goToView} /><PricingView /></>)}
+        {view === "login" && <LoginView onLogin={handleLogin} />}
+        {view === "signup" && <SignupView onSignup={handleSignup} setView={goToView} />}
+        {view === "assess" && user?.role === "client" && ready && (
+          <AssessmentView questions={questions} modules={modules} responses={responses} setResponses={setResponses} moduleIdx={moduleIdx} setModuleIdx={setModuleIdx} />
+        )}
+        {view === "admin" && user?.role === "admin" && <AdminView setView={goToView} setSelectedClient={setViewingClient} />}
+        {view === "dashboard" && user && ready && (
+          <DashboardView questions={questions} modules={modules} responses={responses} setView={goToView} user={user} viewingClient={viewingClient} />
+        )}
+      </div>
       <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#B7B2AE" }}>
         RIoS Discover — prototype build. Retail Innovation Ventures, Dubai · full-stack demo, not production-hardened.
         <br />

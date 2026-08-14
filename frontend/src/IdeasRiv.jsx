@@ -717,7 +717,7 @@ export default function IdeasRivApp({ session, onLogout }) {
   }
 
   return (
-    <div style={{ fontFamily: FONT, background: BRAND.cream, minHeight: "100vh" }}>
+    <div style={{ fontFamily: FONT, background: BRAND.cream, minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Newsreader:ital@1&display=swap');
         * { box-sizing: border-box; }
@@ -730,47 +730,52 @@ export default function IdeasRivApp({ session, onLogout }) {
 
       <IdeasNavBar view={view} setView={setView} session={session} onLogout={onLogout} />
 
-      {view === "landing" && (
-        <LandingView
-          session={session} setView={setView}
-          opportunities={opportunities} ideas={ideas}
-          loading={loadingOpps} error={error} sourceClient={sourceClient}
-          setActiveOpp={setActiveOppId}
-        />
-      )}
+      {/* flex: 1 makes this fill all leftover space, pushing the footer below
+          to the bottom of the viewport on short pages (e.g. an empty
+          leaderboard) while still scrolling normally on long ones. */}
+      <div style={{ flex: 1 }}>
+        {view === "landing" && (
+          <LandingView
+            session={session} setView={setView}
+            opportunities={opportunities} ideas={ideas}
+            loading={loadingOpps} error={error} sourceClient={sourceClient}
+            setActiveOpp={setActiveOppId}
+          />
+        )}
 
-      {view === "submit" && session.role === "junior_employee" && (
-        <SubmitIdeasView opp={activeOpp} ideas={ideas} onIdeasChanged={refreshIdeas} setView={setView} />
-      )}
+        {view === "submit" && session.role === "junior_employee" && (
+          <SubmitIdeasView opp={activeOpp} ideas={ideas} onIdeasChanged={refreshIdeas} setView={setView} />
+        )}
 
-      {view === "my-ideas" && session.role === "junior_employee" && (
-        <MyIdeasView myIdeas={myIdeas} loading={false} error={error} />
-      )}
+        {view === "my-ideas" && session.role === "junior_employee" && (
+          <MyIdeasView myIdeas={myIdeas} loading={false} error={error} />
+        )}
 
-      {view === "jury" && session.role === "jury" && (
-        <JuryListView
-          opportunities={opportunities} ideas={ideas} myRatings={myRatings}
-          loading={loadingIdeas} error={error} onOpenIdea={(idea) => setActiveIdeaId(idea.id)}
-        />
-      )}
+        {view === "jury" && session.role === "jury" && (
+          <JuryListView
+            opportunities={opportunities} ideas={ideas} myRatings={myRatings}
+            loading={loadingIdeas} error={error} onOpenIdea={(idea) => setActiveIdeaId(idea.id)}
+          />
+        )}
 
-      {view === "leaderboard" && session.role === "jury" && (
-        <LeaderboardView leaderboard={leaderboard} loading={loadingBoard} error={error} />
-      )}
+        {view === "leaderboard" && session.role === "jury" && (
+          <LeaderboardView leaderboard={leaderboard} loading={loadingBoard} error={error} />
+        )}
 
-      {/* Rating overlay */}
-      {activeIdeaId && activeIdea && session.role === "jury" && view === "jury" && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(39,37,37,0.5)", zIndex: 60, overflowY: "auto" }}>
-          <div style={{ background: BRAND.cream, minHeight: "100vh" }}>
-            <CriteriaRatingView
-              idea={activeIdea}
-              existingRating={myRatings[activeIdea.id] || null}
-              onSaveRating={handleSaveRating}
-              onBack={() => setActiveIdeaId(null)}
-            />
+        {/* Rating overlay */}
+        {activeIdeaId && activeIdea && session.role === "jury" && view === "jury" && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(39,37,37,0.5)", zIndex: 60, overflowY: "auto" }}>
+            <div style={{ background: BRAND.cream, minHeight: "100vh" }}>
+              <CriteriaRatingView
+                idea={activeIdea}
+                existingRating={myRatings[activeIdea.id] || null}
+                onSaveRating={handleSaveRating}
+                onBack={() => setActiveIdeaId(null)}
+              />
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: FONT, fontSize: 12, color: "#B7B2AE" }}>
         Ideas.RIV — submit and rate innovation ideas from your live Discover Audit. Questions? Write to <a href="mailto:contact@retailinnovation.ventures" style={{ color: BRAND.coralDark }}>contact@retailinnovation.ventures</a>.
