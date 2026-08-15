@@ -15,7 +15,7 @@ const SERIF = "'Newsreader',Georgia,serif";
 // manually, same convention as scoring.js's frontend/backend duplication
 // elsewhere in this project. Every idea is rated on these 5, each 1-5
 // stars; the overall score is always their plain average.
-const CRITERIA = [
+export const CRITERIA = [
   { key: "team", label: "Team", question: "Founder/team strength and relevant experience." },
   { key: "marketOpportunity", label: "Market Opportunity", question: "Size and timing of the market being addressed." },
   { key: "product", label: "Product", question: "Maturity, differentiation, and quality of the product." },

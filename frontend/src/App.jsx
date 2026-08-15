@@ -12,7 +12,7 @@ import {
 import { api, getToken, getStoredUser, setSession, clearSession } from "./api.js";
 import { computeScores, tierFor, fmtMoney, computeCategoryScores } from "./scoring.js";
 import { BRAND } from "./brand.js";
-import IdeasRivApp, { LeaderboardView } from "./IdeasRiv.jsx";
+import IdeasRivApp, { LeaderboardView, CRITERIA } from "./IdeasRiv.jsx";
 
 const MATURITY_LABELS = [
   { v: 0, label: "No capability", desc: "Not in place, not planned" },
@@ -491,7 +491,107 @@ function IdeasTeamPanel({ clients }) {
         </div>
       </div>
 
+      <AdminIdeasPanel />
       <AdminLeaderboardPanel />
+    </div>
+  );
+}
+
+/* ---------------- Admin: all submitted ideas + per-idea jury score breakdown ---------------- */
+function AdminIdeasPanel() {
+  const [ideas, setIdeas] = useState(null);
+  const [error, setError] = useState(null);
+  const [expanded, setExpanded] = useState({}); // ideaId -> bool
+  const [ratingsByIdea, setRatingsByIdea] = useState({}); // ideaId -> ratings[] | "loading"
+
+  useEffect(() => {
+    api.getIdeas()
+      .then((d) => setIdeas(d.ideas || []))
+      .catch((e) => setError(e.message));
+  }, []);
+
+  function toggle(idea) {
+    const nowOpen = !expanded[idea.id];
+    setExpanded((e) => ({ ...e, [idea.id]: nowOpen }));
+    if (nowOpen && !ratingsByIdea[idea.id]) {
+      setRatingsByIdea((m) => ({ ...m, [idea.id]: "loading" }));
+      api.getIdeaRatings(idea.id)
+        .then((d) => setRatingsByIdea((m) => ({ ...m, [idea.id]: d.ratings })))
+        .catch(() => setRatingsByIdea((m) => ({ ...m, [idea.id]: [] })));
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 44 }}>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>Submitted ideas</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Every idea submitted by a junior employee, with the individual jury scores behind it — the same breakdown jury members can't see for each other, admin can see for everyone.</div>
+
+      {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: BRAND.coralDark, marginBottom: 16 }}>{error}</div>}
+      {ideas === null && !error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>Loading…</div>}
+      {ideas && ideas.length === 0 && (
+        <div style={{ border: `1px dashed ${BRAND.line}`, borderRadius: 12, padding: 24, fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>No ideas submitted yet.</div>
+      )}
+
+      {ideas && ideas.map((idea) => {
+        const isOpen = !!expanded[idea.id];
+        const ratings = ratingsByIdea[idea.id];
+        return (
+          <div key={idea.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 16, marginBottom: 10, background: "#fff" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ minWidth: 240 }}>
+                <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{idea.question?.module} · {idea.question?.submodule}</div>
+                <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14.5, color: BRAND.ink, marginTop: 2 }}>{idea.title}</div>
+                {idea.description && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#7A746F", marginTop: 4, lineHeight: 1.5 }}>{idea.description}</div>}
+                <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F", marginTop: 6 }}>Submitted by {idea.submitted_by_name}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {idea.avg_score != null ? (
+                  <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 700, color: "#1B7A5A", background: "#E7F5EF", padding: "4px 10px", borderRadius: 999 }}>
+                    {Number(idea.avg_score).toFixed(1)}/5 · {idea.rating_count} rating{idea.rating_count !== 1 ? "s" : ""}
+                  </span>
+                ) : (
+                  <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 700, color: BRAND.ink, background: "#EFEAE4", padding: "4px 10px", borderRadius: 999 }}>Not yet rated</span>
+                )}
+                {idea.rating_count > 0 && (
+                  <button onClick={() => toggle(idea)} style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 12, color: BRAND.coralDark, background: "none", border: "none", cursor: "pointer" }}>
+                    {isOpen ? "Hide jury scores" : "View jury scores"}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {isOpen && (
+              ratings === "loading" || ratings === undefined ? (
+                <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F", marginTop: 14 }}>Loading…</div>
+              ) : (
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${BRAND.line}`, display: "flex", flexDirection: "column", gap: 14 }}>
+                  {ratings.map((r) => {
+                    const cs = r.criteria_scores || {};
+                    return (
+                      <div key={r.id}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 12.5, color: BRAND.ink }}>{r.jury_name}</div>
+                          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 13, color: BRAND.ink }}>{Number(r.score).toFixed(1)}/5</div>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8 }}>
+                          {CRITERIA.map((c) => (
+                            <div key={c.key} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: "#9B958F" }}>
+                              {c.label}: <span style={{ color: BRAND.ink, fontWeight: 600 }}>{cs[c.key] ?? "–"}/5</span>
+                            </div>
+                          ))}
+                        </div>
+                        {r.comment && (
+                          <div style={{ fontFamily: "'Newsreader',Georgia,serif", fontStyle: "italic", fontSize: 12, color: "#7A746F", marginTop: 8, lineHeight: 1.5 }}>&ldquo;{r.comment}&rdquo;</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
