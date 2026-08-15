@@ -2,9 +2,14 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import pool from "../db.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { QUESTIONS } from "../lib/scoring.js";
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
+
+function questionById(id) {
+  return QUESTIONS.find((q) => q.id === Number(id)) || null;
+}
 
 // GET current Ideas.RIV settings (which client's audit feeds the Top 5)
 router.get("/settings", async (req, res, next) => {
@@ -87,6 +92,43 @@ router.delete("/users/:id", async (req, res, next) => {
   try {
     await pool.query("DELETE FROM users WHERE id = $1 AND role IN ('junior_employee','jury')", [req.params.id]);
     res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/admin/ideas/users/:id/ideas
+ * One specific junior employee's submitted ideas, with the rating
+ * aggregate per idea — the dedicated per-employee view, mirroring
+ * GET /api/admin/clients/:id/responses for the client scorecard pattern.
+ */
+router.get("/users/:id/ideas", async (req, res, next) => {
+  try {
+    const { rows: userRows } = await pool.query(
+      "SELECT id, email, name, company, expertise FROM users WHERE id = $1 AND role = 'junior_employee'",
+      [req.params.id]
+    );
+    const employee = userRows[0];
+    if (!employee) return res.status(404).json({ error: "Junior employee not found." });
+
+    const { rows } = await pool.query(
+      `SELECT i.id, i.question_id, i.title, i.description, i.created_at,
+              COUNT(r.id)::int AS rating_count, AVG(r.score) AS avg_score
+       FROM ideas i
+       LEFT JOIN idea_ratings r ON r.idea_id = i.id
+       WHERE i.submitted_by = $1
+       GROUP BY i.id
+       ORDER BY i.created_at DESC`,
+      [req.params.id]
+    );
+    const ideas = rows.map((row) => ({
+      ...row,
+      avg_score: row.avg_score != null ? Number(row.avg_score) : null,
+      rating_count: Number(row.rating_count),
+      question: questionById(row.question_id),
+    }));
+    res.json({ employee, ideas });
   } catch (err) {
     next(err);
   }

@@ -81,4 +81,5 @@ export const api = {
   listIdeasUsers: (role) => request(`/admin/ideas/users?role=${role}`),
   createIdeasUser: (payload) => request("/admin/ideas/users", { method: "POST", body: payload }),
   deleteIdeasUser: (id) => request(`/admin/ideas/users/${id}`, { method: "DELETE" }),
+  getEmployeeIdeas: (userId) => request(`/admin/ideas/users/${userId}/ideas`),
 };

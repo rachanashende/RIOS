@@ -297,7 +297,7 @@ function SignupView({ onSignup, setView }) {
 }
 
 /* ---------------- Admin: Manage Clients ---------------- */
-function AdminView({ setView, setSelectedClient }) {
+function AdminView({ setView, setSelectedClient, setSelectedEmployee }) {
   const [clients, setClients] = useState(null);
   const [form, setForm] = useState({ name: "", email: "", company: "", password: "" });
   const [error, setError] = useState("");
@@ -365,13 +365,13 @@ function AdminView({ setView, setSelectedClient }) {
         </div>
       </div>
 
-      <IdeasTeamPanel clients={clients} />
+      <IdeasTeamPanel clients={clients} setView={setView} setSelectedEmployee={setSelectedEmployee} />
     </div>
   );
 }
 
 /* ---------------- Admin: Ideas.RIV team + source-client control ---------------- */
-function IdeasTeamPanel({ clients }) {
+function IdeasTeamPanel({ clients, setView, setSelectedEmployee }) {
   const [sourceClient, setSourceClient] = useState(null);
   const [selectedClientId, setSelectedClientId] = useState("");
   const [juniorEmployees, setJuniorEmployees] = useState(null);
@@ -410,6 +410,7 @@ function IdeasTeamPanel({ clients }) {
     await api.deleteIdeasUser(id);
     refresh();
   }
+  function viewEmployeeIdeas(u) { setSelectedEmployee(u); setView("employee-ideas"); }
 
   return (
     <div style={{ marginTop: 44 }}>
@@ -445,7 +446,10 @@ function IdeasTeamPanel({ clients }) {
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink }}>{u.name}</div>
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email} {u.company ? `· ${u.company}` : ""}</div>
                   </div>
-                  <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={() => viewEmployeeIdeas(u)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "7px 12px", borderRadius: 8, border: "none", cursor: "pointer", background: BRAND.ink, color: "#fff" }}>View ideas</button>
+                    <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -491,24 +495,23 @@ function IdeasTeamPanel({ clients }) {
         </div>
       </div>
 
-      <AdminIdeasPanel />
       <AdminLeaderboardPanel />
     </div>
   );
 }
 
 /* ---------------- Admin: all submitted ideas + per-idea jury score breakdown ---------------- */
-function AdminIdeasPanel() {
+function AdminEmployeeIdeasView({ employee, setView }) {
   const [ideas, setIdeas] = useState(null);
   const [error, setError] = useState(null);
   const [expanded, setExpanded] = useState({}); // ideaId -> bool
   const [ratingsByIdea, setRatingsByIdea] = useState({}); // ideaId -> ratings[] | "loading"
 
   useEffect(() => {
-    api.getIdeas()
+    api.getEmployeeIdeas(employee.id)
       .then((d) => setIdeas(d.ideas || []))
       .catch((e) => setError(e.message));
-  }, []);
+  }, [employee.id]);
 
   function toggle(idea) {
     const nowOpen = !expanded[idea.id];
@@ -522,14 +525,19 @@ function AdminIdeasPanel() {
   }
 
   return (
-    <div style={{ marginTop: 44 }}>
-      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>Submitted ideas</div>
-      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Every idea submitted by a junior employee, with the individual jury scores behind it — the same breakdown jury members can't see for each other, admin can see for everyone.</div>
+    <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 90px" }}>
+      <button onClick={() => setView("admin")} style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F", background: "none", border: "none", cursor: "pointer", marginBottom: 18 }}>
+        ← Back to Manage Clients
+      </button>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>{employee.name} — Ideas</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 30 }}>
+        {employee.email} {employee.company ? `· ${employee.company}` : ""} — every idea they've submitted, with the individual jury scores behind each one.
+      </div>
 
       {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: BRAND.coralDark, marginBottom: 16 }}>{error}</div>}
       {ideas === null && !error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>Loading…</div>}
       {ideas && ideas.length === 0 && (
-        <div style={{ border: `1px dashed ${BRAND.line}`, borderRadius: 12, padding: 24, fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>No ideas submitted yet.</div>
+        <div style={{ border: `1px dashed ${BRAND.line}`, borderRadius: 12, padding: 24, fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>{employee.name} hasn't submitted any ideas yet.</div>
       )}
 
       {ideas && ideas.map((idea) => {
@@ -542,7 +550,6 @@ function AdminIdeasPanel() {
                 <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{idea.question?.module} · {idea.question?.submodule}</div>
                 <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14.5, color: BRAND.ink, marginTop: 2 }}>{idea.title}</div>
                 {idea.description && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#7A746F", marginTop: 4, lineHeight: 1.5 }}>{idea.description}</div>}
-                <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F", marginTop: 6 }}>Submitted by {idea.submitted_by_name}</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 {idea.avg_score != null ? (
@@ -903,6 +910,7 @@ export default function RiosApp() {
   const [responses, setResponses] = useState({});
   const [moduleIdx, setModuleIdx] = useState(0);
   const [viewingClient, setViewingClient] = useState(null); // admin viewing a specific client
+  const [viewingEmployee, setViewingEmployee] = useState(null); // admin viewing a specific junior employee's ideas
   const [ready, setReady] = useState(false);
   const saveTimer = useRef(null);
   const skipNextSave = useRef(true);
@@ -993,7 +1001,10 @@ export default function RiosApp() {
         {view === "assess" && user?.role === "client" && ready && (
           <AssessmentView questions={questions} modules={modules} responses={responses} setResponses={setResponses} moduleIdx={moduleIdx} setModuleIdx={setModuleIdx} />
         )}
-        {view === "admin" && user?.role === "admin" && <AdminView setView={goToView} setSelectedClient={setViewingClient} />}
+        {view === "admin" && user?.role === "admin" && <AdminView setView={goToView} setSelectedClient={setViewingClient} setSelectedEmployee={setViewingEmployee} />}
+        {view === "employee-ideas" && user?.role === "admin" && viewingEmployee && (
+          <AdminEmployeeIdeasView employee={viewingEmployee} setView={goToView} />
+        )}
         {view === "dashboard" && user && ready && (
           <DashboardView questions={questions} modules={modules} responses={responses} setView={goToView} user={user} viewingClient={viewingClient} />
         )}
