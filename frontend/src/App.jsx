@@ -48,7 +48,7 @@ function Logo() {
 function NavBar({ view, setView, user, onLogout }) {
   const [open, setOpen] = useState(false);
   const publicItems = [{ id: "home", label: "Home" }];
-  const clientItems = [{ id: "assess", label: "Discover Assessment" }, { id: "dashboard", label: "My Scorecard" }];
+  const clientItems = [{ id: "assess", label: "Audit" }, { id: "dashboard", label: "My Scorecard" }];
   const adminItems = [{ id: "admin", label: "Manage Clients" }];
   const items = [...publicItems, ...(user?.role === "client" ? clientItems : []), ...(user?.role === "admin" ? adminItems : [])];
 
@@ -192,9 +192,9 @@ function ModuleGrid({ modules, questions, setView }) {
 
 function PricingView() {
   const tiers = [
-    { name: "Discover", price: "$20,000", cadence: "one-time", desc: "First-time buyer, wants proof before committing.", items: ["AI & Innovation Assessment", "Top 5 Innovation Opportunities", "Curated Startup Sourcing feed", "Live readout with the founder"] },
-    { name: "Accelerate", price: "$80,000", cadence: "/ year", featured: true, desc: "Retailer ready to build an active innovation pipeline.", items: ["Everything in Discover", "Quarterly re-assessment + trend tracking", "Ideathon & Innovation Challenges", "Experiment & Business Case Validation", "Demo Day + fundraise pitch-day access"] },
-    { name: "Transform", price: "$200,000", cadence: "/ year", desc: "Retailer treating innovation as an embedded capability.", items: ["Everything in Accelerate", "Enterprise Innovation Management (Kanban)", "Open Innovation & Startup Pilots", "Hackathons & Talent Acquisition", "Innovation Portfolio & ROI rollup", "Exclusive Demo Day + Global Startup Access"] },
+    { name: "Discover", price: "20,000", cadence: "one-time", desc: "First-time buyer, wants proof before committing.", items: ["AI & Innovation Assessment", "Top 5 Innovation Opportunities", "Curated Startup Sourcing feed", "Live readout with the founder"] },
+    { name: "Accelerate", price: "80,000", cadence: "/ year", featured: true, desc: "Retailer ready to build an active innovation pipeline.", items: ["Everything in Discover", "Quarterly re-assessment + trend tracking", "Ideathon & Innovation Challenges", "Experiment & Business Case Validation", "Demo Day + fundraise pitch-day access"] },
+    { name: "Transform", price: "200,000", cadence: "/ year", desc: "Retailer treating innovation as an embedded capability.", items: ["Everything in Accelerate", "Enterprise Innovation Management (Kanban)", "Open Innovation & Startup Pilots", "Hackathons & Talent Acquisition", "Innovation Portfolio & ROI rollup", "Exclusive Demo Day + Global Startup Access"] },
   ];
   return (
     <div id="tiers" style={{ maxWidth: 1180, margin: "0 auto", padding: "64px 24px 90px" }}>
@@ -306,7 +306,7 @@ function SignupView({ onSignup, setView }) {
     <div style={{ maxWidth: 420, margin: "70px auto", padding: "0 24px" }}>
       <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 32, background: "#fff" }}>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 22, color: BRAND.ink, marginBottom: 4 }}>Create your account</div>
-        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Sign up to start your Discover assessment. (Junior employee and jury accounts for Ideas.RIV are set up by your RIV admin, not here.)</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Sign up to start your Audit. (Junior employee and jury accounts for Ideas.RIV are set up by your RIV admin, not here.)</div>
         <form onSubmit={submit}>
           <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink }}>Your name</label>
           <input value={name} onChange={(e) => setName(e.target.value)} type="text" required autoFocus style={inputStyle} />
@@ -689,9 +689,9 @@ function DashboardView({ questions, modules, responses, setView, user, viewingCl
         <div style={{ width: 56, height: 56, borderRadius: 16, background: BRAND.cream, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", border: `1px solid ${BRAND.line}` }}><LayoutDashboard size={24} color={BRAND.coral} /></div>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 22, color: BRAND.ink }}>No scorecard yet</div>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14, color: "#9B958F", marginTop: 8, lineHeight: 1.6 }}>
-          {isAdminViewing ? `${viewingClient.name} hasn't scored any questions yet.` : `Score at least one question in the Discover Assessment to see this populate — or use "Quick-fill" for a full demo run.`}
+          {isAdminViewing ? `${viewingClient.name} hasn't scored any questions yet.` : `Score at least one question in the Audit to see this populate — or use "Quick-fill" for a full demo run.`}
         </div>
-        {!isAdminViewing && <button onClick={() => setView("assess")} style={{ marginTop: 24, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 9, padding: "12px 20px", cursor: "pointer" }}>Go to Discover Assessment</button>}
+        {!isAdminViewing && <button onClick={() => setView("assess")} style={{ marginTop: 24, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 9, padding: "12px 20px", cursor: "pointer" }}>Go to Audit</button>}
       </div>
     );
   }

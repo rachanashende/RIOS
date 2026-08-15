@@ -386,47 +386,7 @@ function SubmitIdeasView({ opp, ideas, onIdeasChanged, setView }) {
 /* =========================================================================
    MY SUBMISSIONS (junior employee)
    ========================================================================= */
-function RatingBreakdown({ ratings }) {
-  if (!ratings.length) return null;
-  return (
-    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BRAND.line}`, display: "flex", flexDirection: "column", gap: 12 }}>
-      {ratings.map((r) => {
-        const cs = r.criteria_scores || {};
-        return (
-          <div key={r.id}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.ink }}>{r.jury_name}</div>
-              <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: BRAND.ink }}>{Number(r.score).toFixed(1)}/5</div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8 }}>
-              {CRITERIA.map((c) => (
-                <div key={c.key} style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F" }}>
-                  {c.label}: <span style={{ color: BRAND.ink, fontWeight: 600 }}>{cs[c.key] ?? "–"}/5</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function MyIdeasView({ myIdeas, loading, error }) {
-  const [ratingsByIdea, setRatingsByIdea] = useState({}); // ideaId -> ratings[] | "loading"
-  const [expanded, setExpanded] = useState({}); // ideaId -> bool
-
-  function toggleWhy(idea) {
-    const nowOpen = !expanded[idea.id];
-    setExpanded((e) => ({ ...e, [idea.id]: nowOpen }));
-    if (nowOpen && !ratingsByIdea[idea.id]) {
-      setRatingsByIdea((m) => ({ ...m, [idea.id]: "loading" }));
-      api.getIdeaRatings(idea.id)
-        .then((d) => setRatingsByIdea((m) => ({ ...m, [idea.id]: d.ratings })))
-        .catch(() => setRatingsByIdea((m) => ({ ...m, [idea.id]: [] })));
-    }
-  }
-
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 100px" }}>
       <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 20, color: BRAND.ink, marginBottom: 18 }}>My submissions</div>
@@ -435,33 +395,13 @@ function MyIdeasView({ myIdeas, loading, error }) {
       {!loading && !error && myIdeas.length === 0 && (
         <EmptyState icon={Lightbulb} title="You haven't submitted any ideas yet" text="Pick an opportunity from the landing page to submit your first idea." />
       )}
-      {!loading && myIdeas.map((idea) => {
-        const isOpen = !!expanded[idea.id];
-        const ratings = ratingsByIdea[idea.id];
-        return (
-          <Card key={idea.id} style={{ padding: 16, marginBottom: 10 }}>
-            <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{idea.question?.module} · {idea.question?.submodule}</div>
-            <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14.5, color: BRAND.ink, marginTop: 3 }}>{idea.title}</div>
-            <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
-              {idea.avg_score !== null ? (
-                <>
-                  <Pill tone="blue">{idea.avg_score.toFixed(1)}/5 avg · {idea.rating_count} rating{idea.rating_count !== 1 ? "s" : ""}</Pill>
-                  <button onClick={() => toggleWhy(idea)} style={{ display: "flex", alignItems: "center", gap: 4, fontFamily: FONT, fontWeight: 600, fontSize: 11.5, color: BRAND.coralDark, background: "none", border: "none", cursor: "pointer" }}>
-                    {isOpen ? "Hide" : "Why this score?"} {isOpen ? <ChevronRight size={12} style={{ transform: "rotate(90deg)" }} /> : <ChevronRight size={12} />}
-                  </button>
-                </>
-              ) : <Pill>Awaiting jury rating</Pill>}
-            </div>
-            {isOpen && (
-              ratings === "loading" || ratings === undefined ? (
-                <div style={{ marginTop: 12 }}><Spinner label="Loading breakdown…" /></div>
-              ) : (
-                <RatingBreakdown ratings={ratings} />
-              )
-            )}
-          </Card>
-        );
-      })}
+      {!loading && myIdeas.map((idea) => (
+        <Card key={idea.id} style={{ padding: 16, marginBottom: 10 }}>
+          <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{idea.question?.module} · {idea.question?.submodule}</div>
+          <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14.5, color: BRAND.ink, marginTop: 3 }}>{idea.title}</div>
+          {idea.description && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A746F", marginTop: 4, lineHeight: 1.5 }}>{idea.description}</div>}
+        </Card>
+      ))}
     </div>
   );
 }

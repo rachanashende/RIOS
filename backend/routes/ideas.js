@@ -79,6 +79,14 @@ router.get("/criteria", requireRole("junior_employee", "jury", "admin"), (req, r
  * All submitted ideas (optionally filtered to one opportunity), with each
  * idea's current rating count and average score.
  */
+/**
+ * GET /api/ideas?questionId=123
+ * All submitted ideas (optionally filtered to one opportunity). Jury/admin
+ * get each idea's rating count and average score (needed to work the
+ * queue and see what's already scored). Junior employees get the same
+ * list but with score data stripped — they see what's been submitted,
+ * not how the jury has scored it.
+ */
 router.get("/", requireRole("junior_employee", "jury", "admin"), async (req, res, next) => {
   try {
     const { questionId } = req.query;
@@ -99,7 +107,11 @@ router.get("/", requireRole("junior_employee", "jury", "admin"), async (req, res
     sql += ` GROUP BY i.id, u.name ORDER BY i.created_at DESC`;
 
     const { rows } = await pool.query(sql, params);
-    res.json({ ideas: rows.map(enrich) });
+    let ideas = rows.map(enrich);
+    if (req.user.role === "junior_employee") {
+      ideas = ideas.map(({ rating_count, avg_score, ...rest }) => rest);
+    }
+    res.json({ ideas });
   } catch (err) {
     next(err);
   }
@@ -109,19 +121,22 @@ router.get("/", requireRole("junior_employee", "jury", "admin"), async (req, res
  * GET /api/ideas/mine
  * The logged-in junior employee's own submissions, for "My submissions".
  */
+/**
+ * GET /api/ideas/mine
+ * The logged-in junior employee's own submissions, for "My submissions".
+ * Deliberately excludes rating/score data — junior employees see only
+ * what they submitted, not how the jury scored it.
+ */
 router.get("/mine", requireRole("junior_employee", "admin"), async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT i.id, i.question_id, i.title, i.description, i.created_at,
-              COUNT(r.id)::int AS rating_count, AVG(r.score) AS avg_score
-       FROM ideas i
-       LEFT JOIN idea_ratings r ON r.idea_id = i.id
-       WHERE i.submitted_by = $1
-       GROUP BY i.id
-       ORDER BY i.created_at DESC`,
+      `SELECT id, question_id, title, description, created_at
+       FROM ideas
+       WHERE submitted_by = $1
+       ORDER BY created_at DESC`,
       [req.user.id]
     );
-    res.json({ ideas: rows.map(enrich) });
+    res.json({ ideas: rows.map((row) => ({ ...row, question: questionById(row.question_id) })) });
   } catch (err) {
     next(err);
   }
@@ -169,11 +184,10 @@ router.post("/", requireRole("junior_employee", "admin"), async (req, res, next)
 /**
  * GET /api/ideas/:id/ratings
  * Every individual jury rating for one idea — the 5-criteria breakdown
- * for each. Powers the "why this score?" view; open to junior_employee/
- * jury/admin, not just the jury member who wrote it, since the whole
- * point is letting the idea's submitter see why it scored what it did.
+ * for each. Jury/admin only: junior employees see only what they
+ * submitted, not how the jury scored it or why.
  */
-router.get("/:id/ratings", requireRole("junior_employee", "jury", "admin"), async (req, res, next) => {
+router.get("/:id/ratings", requireRole("jury", "admin"), async (req, res, next) => {
   try {
     const { rows } = await pool.query(
       `SELECT r.id, r.idea_id, r.jury_user_id, r.criteria_scores, r.score, r.created_at, r.updated_at,
