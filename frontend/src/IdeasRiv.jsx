@@ -16,11 +16,11 @@ const SERIF = "'Newsreader',Georgia,serif";
 // elsewhere in this project. Every idea is rated on these 5, each 1-5
 // stars; the overall score is always their plain average.
 const CRITERIA = [
-  { key: "impact", label: "Impact", question: "How much could this move the needle on the opportunity?" },
-  { key: "feasibility", label: "Feasibility", question: "How realistic is this to actually build and roll out?" },
-  { key: "innovation", label: "Innovation", question: "How novel is this compared to what's already out there?" },
-  { key: "cost", label: "Cost-effectiveness", question: "Is the likely payoff worth the likely investment?" },
-  { key: "strategicFit", label: "Strategic fit", question: "How directly does this address the specific gap the audit identified?" },
+  { key: "team", label: "Team", question: "Founder/team strength and relevant experience." },
+  { key: "marketOpportunity", label: "Market Opportunity", question: "Size and timing of the market being addressed." },
+  { key: "product", label: "Product", question: "Maturity, differentiation, and quality of the product." },
+  { key: "traction", label: "Traction", question: "Evidence of validation — users, revenue, pilots, partnerships." },
+  { key: "gtmStrategy", label: "GTM Strategy", question: "Clarity and credibility of the go-to-market plan." },
 ];
 
 function fmtMoney(n) {
@@ -142,7 +142,11 @@ function StarPicker({ value, onChange, size = 22 }) {
 function IdeasNavBar({ view, setView, session, onLogout }) {
   const items = [{ id: "landing", label: "Opportunities" }];
   if (session.role === "junior_employee") items.push({ id: "my-ideas", label: "My submissions" });
-  if (session.role === "jury") items.push({ id: "jury", label: "Rate ideas" }, { id: "leaderboard", label: "Leaderboard" });
+  // Per PRD §8: aggregate scores across jurors are admin-only, not visible
+  // to jury (blind scoring — a juror seeing the aggregate could infer how
+  // far their own score sits from the group's). Jury only gets "Rate
+  // ideas"; the Leaderboard view now lives in the admin panel instead.
+  if (session.role === "jury") items.push({ id: "jury", label: "Rate ideas" });
 
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(251,249,246,0.95)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${BRAND.line}` }}>
@@ -414,6 +418,9 @@ function JuryListView({ opportunities, ideas, myRatings, loading, error, onOpenI
     .map((opp) => ({ opp, ideas: ideas.filter((i) => i.question_id === opp.id) }))
     .filter((g) => g.ideas.length > 0);
 
+  const totalIdeas = ideas.length;
+  const ratedCount = ideas.filter((i) => myRatings[i.id]).length;
+
   if (loading) return <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 24px" }}><Spinner label="Loading ideas…" /></div>;
 
   return (
@@ -422,9 +429,14 @@ function JuryListView({ opportunities, ideas, myRatings, loading, error, onOpenI
         <Gavel size={17} color={BRAND.blue} />
         <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 20, color: BRAND.ink }}>Rate submitted ideas</div>
       </div>
-      <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 26 }}>
-        Rate each idea on 5 criteria, 1-5 stars each. Ratings from all jury members are averaged into the leaderboard.
+      <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 14 }}>
+        Rate each idea on 5 criteria, 1-5 stars each. Your ratings are private — no other jury member can see them.
       </div>
+      {totalIdeas > 0 && (
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 26 }}>
+          <Pill tone={ratedCount === totalIdeas ? "green" : "blue"}>{ratedCount} of {totalIdeas} rated</Pill>
+        </div>
+      )}
 
       <ErrorBanner text={error} />
 
@@ -472,6 +484,7 @@ function CriteriaRatingView({ idea, existingRating, onSaveRating, onBack }) {
     CRITERIA.forEach((c) => { init[c.key] = existingRating?.criteria_scores?.[c.key] || 0; });
     return init;
   });
+  const [comment, setComment] = useState(existingRating?.comment || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -484,7 +497,7 @@ function CriteriaRatingView({ idea, existingRating, onSaveRating, onBack }) {
     setSaving(true);
     setError(null);
     try {
-      const rating = await api.submitRating(idea.id, scores);
+      const rating = await api.submitRating(idea.id, scores, comment.trim());
       onSaveRating(rating.rating);
     } catch (e) {
       setError(e.message || "Couldn't save the rating — please try again.");
@@ -524,6 +537,18 @@ function CriteriaRatingView({ idea, existingRating, onSaveRating, onBack }) {
           </div>
         ))}
 
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13.5, color: BRAND.ink, marginBottom: 8 }}>Comment <span style={{ fontWeight: 400, color: "#9B958F" }}>(optional)</span></div>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Any context for this score — optional."
+            rows={3}
+            maxLength={2000}
+            style={{ width: "100%", fontFamily: FONT, fontSize: 13, padding: "10px 12px", borderRadius: 8, border: `1px solid ${BRAND.line}`, boxSizing: "border-box", resize: "vertical" }}
+          />
+        </div>
+
         <PrimaryButton onClick={confirmSave} disabled={saving || !allRated} icon={saving ? Loader2 : CheckCircle2} style={{ width: "100%" }}>
           {saving ? "Saving…" : existingRating ? "Update rating" : "Save rating"}
         </PrimaryButton>
@@ -535,7 +560,7 @@ function CriteriaRatingView({ idea, existingRating, onSaveRating, onBack }) {
 /* =========================================================================
    LEADER DASHBOARD — top ideas by average jury score
    ========================================================================= */
-function LeaderboardView({ leaderboard, loading, error }) {
+export function LeaderboardView({ leaderboard, loading, error }) {
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 100px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -591,11 +616,9 @@ export default function IdeasRivApp({ session, onLogout }) {
   const [ideas, setIdeas] = useState([]);
   const [myIdeas, setMyIdeas] = useState([]);
   const [myRatings, setMyRatings] = useState({}); // ideaId -> rating
-  const [leaderboard, setLeaderboard] = useState([]);
 
   const [loadingOpps, setLoadingOpps] = useState(false);
   const [loadingIdeas, setLoadingIdeas] = useState(false);
-  const [loadingBoard, setLoadingBoard] = useState(false);
   const [error, setError] = useState(null);
 
   const [activeOppId, setActiveOppId] = useState(null);
@@ -638,16 +661,6 @@ export default function IdeasRivApp({ session, onLogout }) {
   useEffect(() => {
     if (session.role !== "junior_employee" || view !== "my-ideas") return;
     api.getMyIdeas().then((d) => setMyIdeas(d.ideas || [])).catch((e) => setError(e.message));
-  }, [session, view]);
-
-  // Leaderboard (jury)
-  useEffect(() => {
-    if (session.role !== "jury" || view !== "leaderboard") return;
-    setLoadingBoard(true);
-    api.getLeaderboard()
-      .then((d) => setLeaderboard(d.leaderboard || []))
-      .catch((e) => setError(e.message))
-      .finally(() => setLoadingBoard(false));
   }, [session, view]);
 
   function handleSaveRating(rating) {
@@ -698,10 +711,6 @@ export default function IdeasRivApp({ session, onLogout }) {
           />
         )}
 
-        {view === "leaderboard" && session.role === "jury" && (
-          <LeaderboardView leaderboard={leaderboard} loading={loadingBoard} error={error} />
-        )}
-
         {/* Rating overlay */}
         {activeIdeaId && activeIdea && session.role === "jury" && view === "jury" && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(39,37,37,0.5)", zIndex: 60, overflowY: "auto" }}>
@@ -718,7 +727,7 @@ export default function IdeasRivApp({ session, onLogout }) {
       </div>
 
       <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: FONT, fontSize: 12, color: "#B7B2AE" }}>
-        Ideas.RIV — submit and rate innovation ideas from your live Discover Audit. Questions? Write to <a href="mailto:contact@retailinnovation.ventures" style={{ color: BRAND.coralDark }}>contact@retailinnovation.ventures</a>.
+        Questions? Write to <a href="mailto:contact@retailinnovation.ventures" style={{ color: BRAND.coralDark }}>contact@retailinnovation.ventures</a>.
       </div>
     </div>
   );

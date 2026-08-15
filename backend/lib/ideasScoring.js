@@ -1,12 +1,13 @@
-// The 5 criteria a jury member rates every idea on. Each is a plain 1-5
-// star pick — no weighting, no AI interview. Overall score is just the
-// average of these five, always on a 1-5 scale.
+// The 5 criteria a jury member rates every application on, per the PRD
+// (opportunities-platform-prd-v1.md §7). Each is a plain 1-5 star pick —
+// no weighting. Overall score is just the average of these five, always
+// on a 1-5 scale.
 export const CRITERIA = [
-  { key: "impact", label: "Impact", question: "How much could this move the needle on the opportunity?" },
-  { key: "feasibility", label: "Feasibility", question: "How realistic is this to actually build and roll out?" },
-  { key: "innovation", label: "Innovation", question: "How novel is this compared to what's already out there?" },
-  { key: "cost", label: "Cost-effectiveness", question: "Is the likely payoff worth the likely investment?" },
-  { key: "strategicFit", label: "Strategic fit", question: "How directly does this address the specific gap the audit identified?" },
+  { key: "team", label: "Team", question: "Founder/team strength and relevant experience." },
+  { key: "marketOpportunity", label: "Market Opportunity", question: "Size and timing of the market being addressed." },
+  { key: "product", label: "Product", question: "Maturity, differentiation, and quality of the product." },
+  { key: "traction", label: "Traction", question: "Evidence of validation -- users, revenue, pilots, partnerships." },
+  { key: "gtmStrategy", label: "GTM Strategy", question: "Clarity and credibility of the go-to-market plan." },
 ];
 
 // A star rating is always a whole number 1-5.

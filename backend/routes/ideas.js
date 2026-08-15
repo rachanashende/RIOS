@@ -183,14 +183,14 @@ router.post("/", requireRole("junior_employee", "admin"), async (req, res, next)
 
 /**
  * GET /api/ideas/:id/ratings
- * Every individual jury rating for one idea — the 5-criteria breakdown
- * for each. Jury/admin only: junior employees see only what they
- * submitted, not how the jury scored it or why.
+ * Every individual jury rating for one idea — admin only. Per PRD §7/§8,
+ * scoring is blind: a jury member must never see another jury member's
+ * scores. Jury use GET /:id/ratings/mine for their own rating instead.
  */
-router.get("/:id/ratings", requireRole("jury", "admin"), async (req, res, next) => {
+router.get("/:id/ratings", requireRole("admin"), async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT r.id, r.idea_id, r.jury_user_id, r.criteria_scores, r.score, r.created_at, r.updated_at,
+      `SELECT r.id, r.idea_id, r.jury_user_id, r.criteria_scores, r.score, r.rationale AS comment, r.created_at, r.updated_at,
               u.name AS jury_name
        FROM idea_ratings r
        JOIN users u ON u.id = r.jury_user_id
@@ -208,11 +208,13 @@ router.get("/:id/ratings", requireRole("jury", "admin"), async (req, res, next) 
  * GET /api/ideas/:id/ratings/mine
  * Whether (and how) the logged-in jury member already rated this idea —
  * lets the frontend pre-fill the star pickers instead of starting blank.
+ * This is the ONLY ratings-read endpoint a jury member can call — by
+ * design, it only ever returns their own rating (blind scoring, PRD §7).
  */
 router.get("/:id/ratings/mine", requireRole("jury", "admin"), async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, idea_id, jury_user_id, criteria_scores, score, created_at, updated_at FROM idea_ratings WHERE idea_id = $1 AND jury_user_id = $2",
+      "SELECT id, idea_id, jury_user_id, criteria_scores, score, rationale AS comment, created_at, updated_at FROM idea_ratings WHERE idea_id = $1 AND jury_user_id = $2",
       [Number(req.params.id), req.user.id]
     );
     res.json({ rating: rows[0] || null });
@@ -223,15 +225,16 @@ router.get("/:id/ratings/mine", requireRole("jury", "admin"), async (req, res, n
 
 /**
  * POST /api/ideas/:id/ratings
- * Body: { criteria: { impact, feasibility, innovation, cost, strategicFit } }
- * Every value 1-5. The overall score is always the plain average,
- * recomputed here server-side — the client can't submit a fabricated
- * overall score directly.
+ * Body: { criteria: { team, marketOpportunity, product, traction, gtmStrategy }, comment? }
+ * Every criteria value 1-5. comment is optional free text (PRD §7). The
+ * overall score is always the plain average, recomputed here
+ * server-side — the client can't submit a fabricated overall score
+ * directly.
  */
 router.post("/:id/ratings", requireRole("jury", "admin"), async (req, res, next) => {
   try {
     const ideaId = Number(req.params.id);
-    const { criteria } = req.body || {};
+    const { criteria, comment } = req.body || {};
 
     const { rows: ideaRows } = await pool.query("SELECT id FROM ideas WHERE id = $1", [ideaId]);
     if (!ideaRows.length) return res.status(404).json({ error: "Idea not found." });
@@ -248,14 +251,16 @@ router.post("/:id/ratings", requireRole("jury", "admin"), async (req, res, next)
     const clamped = {};
     CRITERIA.forEach((c) => { clamped[c.key] = clamp5(criteria[c.key]); });
     const score = averageScore(clamped);
+    const cleanComment = typeof comment === "string" ? comment.trim().slice(0, 2000) || null : null;
 
     const { rows } = await pool.query(
-      `INSERT INTO idea_ratings (idea_id, jury_user_id, criteria_scores, score, updated_at)
-       VALUES ($1, $2, $3, $4, now())
+      `INSERT INTO idea_ratings (idea_id, jury_user_id, criteria_scores, score, rationale, updated_at)
+       VALUES ($1, $2, $3, $4, $5, now())
        ON CONFLICT (idea_id, jury_user_id) DO UPDATE SET
-         criteria_scores = EXCLUDED.criteria_scores, score = EXCLUDED.score, updated_at = now()
-       RETURNING id, idea_id, jury_user_id, criteria_scores, score, created_at, updated_at`,
-      [ideaId, req.user.id, JSON.stringify(clamped), score]
+         criteria_scores = EXCLUDED.criteria_scores, score = EXCLUDED.score,
+         rationale = EXCLUDED.rationale, updated_at = now()
+       RETURNING id, idea_id, jury_user_id, criteria_scores, score, rationale AS comment, created_at, updated_at`,
+      [ideaId, req.user.id, JSON.stringify(clamped), score, cleanComment]
     );
     res.status(201).json({ rating: rows[0] });
   } catch (err) {
@@ -265,11 +270,13 @@ router.post("/:id/ratings", requireRole("jury", "admin"), async (req, res, next)
 
 /**
  * GET /api/ideas/leaderboard
- * Ideas ranked by average jury score (mean of every jury member's 1-5
- * average for that idea). Top 3 are "published". Ideas with zero ratings
- * are excluded — nothing to rank yet.
+ * Ideas ranked by average jury score. Admin only, per PRD §8 — aggregate
+ * scores across jurors are visible to the program admin exclusively, not
+ * to jury (who'd otherwise be able to infer how far their own score sits
+ * from the group's — the same anchoring risk blind scoring exists to
+ * prevent) and not to junior_employee/applicants.
  */
-router.get("/leaderboard", requireRole("junior_employee", "jury", "admin"), async (req, res, next) => {
+router.get("/leaderboard", requireRole("admin"), async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
       SELECT i.id, i.question_id, i.title, i.description, i.created_at,

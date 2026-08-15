@@ -169,6 +169,34 @@ export async function initSchema() {
   // that rating will need to re-rate under the new criteria system.
   // Idempotent: matches nothing once already cleared.
   await pool.query(`DELETE FROM idea_ratings WHERE impact IS NOT NULL AND criteria_scores IS NULL;`);
+
+  // PRD alignment migration 1: the 5 criteria were renamed to match
+  // opportunities-platform-prd-v1.md §7 (impact/feasibility/innovation/
+  // cost/strategicFit -> team/marketOpportunity/product/traction/
+  // gtmStrategy). Existing rows still have the old keys inside
+  // criteria_scores; remap them in place rather than orphan that data.
+  // Idempotent: the WHERE clause matches nothing once already remapped.
+  await pool.query(`
+    UPDATE idea_ratings
+    SET criteria_scores = jsonb_build_object(
+      'team', criteria_scores->'impact',
+      'marketOpportunity', criteria_scores->'feasibility',
+      'product', criteria_scores->'innovation',
+      'traction', criteria_scores->'cost',
+      'gtmStrategy', criteria_scores->'strategicFit'
+    )
+    WHERE criteria_scores ? 'impact';
+  `);
+
+  // PRD alignment migration 2: §7 allows an optional comment per rating.
+  // Rather than add a new column, this re-purposes the existing
+  // (currently unused, vestigial-from-CRIT) `rationale` text column —
+  // same nullable TEXT shape already fits. No schema change needed here;
+  // this comment documents the repurposing for anyone reading the schema.
+
+  // PRD alignment migration 3: §6 allows an optional "expertise" field at
+  // jury sign-up.
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS expertise TEXT;`);
 }
 
 export default pool;

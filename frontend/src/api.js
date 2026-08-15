@@ -72,7 +72,7 @@ export const api = {
   getMyIdeas: () => request("/ideas/mine"),
   submitIdeas: (ideas) => request("/ideas", { method: "POST", body: { ideas } }),
   getMyRatingForIdea: (ideaId) => request(`/ideas/${ideaId}/ratings/mine`),
-  submitRating: (ideaId, criteria) => request(`/ideas/${ideaId}/ratings`, { method: "POST", body: { criteria } }),
+  submitRating: (ideaId, criteria, comment) => request(`/ideas/${ideaId}/ratings`, { method: "POST", body: { criteria, comment } }),
   getLeaderboard: () => request("/ideas/leaderboard"),
 
   // ---- Ideas.RIV admin (source client + junior employee/jury accounts)

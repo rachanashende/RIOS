@@ -48,7 +48,7 @@ router.get("/users", async (req, res, next) => {
   try {
     const role = req.query.role === "jury" ? "jury" : "junior_employee";
     const { rows } = await pool.query(
-      "SELECT id, email, name, company, created_at FROM users WHERE role = $1 ORDER BY created_at DESC",
+      "SELECT id, email, name, company, expertise, created_at FROM users WHERE role = $1 ORDER BY created_at DESC",
       [role]
     );
     res.json({ users: rows });
@@ -57,10 +57,12 @@ router.get("/users", async (req, res, next) => {
   }
 });
 
-// POST /api/admin/ideas/users — create a junior_employee or jury login
+// POST /api/admin/ideas/users — create a junior_employee or jury login.
+// expertise is optional and only meaningful for role=jury (PRD §6), but
+// accepted either way rather than silently dropped if sent.
 router.post("/users", async (req, res, next) => {
   try {
-    const { email, password, name, role, company } = req.body || {};
+    const { email, password, name, role, company, expertise } = req.body || {};
     if (!email || !password || !name || !["junior_employee", "jury"].includes(role)) {
       return res.status(400).json({ error: "Name, email, temporary password, and role ('junior_employee' or 'jury') are required." });
     }
@@ -71,11 +73,11 @@ router.post("/users", async (req, res, next) => {
 
     const password_hash = bcrypt.hashSync(password, 10);
     const { rows } = await pool.query(
-      "INSERT INTO users (email, password_hash, name, role, company) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-      [normalizedEmail, password_hash, name, role, company || null]
+      "INSERT INTO users (email, password_hash, name, role, company, expertise) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+      [normalizedEmail, password_hash, name, role, company || null, (expertise || "").trim() || null]
     );
 
-    res.status(201).json({ id: rows[0].id, email: normalizedEmail, name, role, company });
+    res.status(201).json({ id: rows[0].id, email: normalizedEmail, name, role, company, expertise: expertise || null });
   } catch (err) {
     next(err);
   }
