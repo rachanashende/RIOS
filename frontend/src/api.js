@@ -1,12 +1,15 @@
-// Single unified login now drives the whole app — one token, one session.
-// (Ideas.RIV used to have its own separate session so an admin testing
-// both areas at once wouldn't collide. That's no longer needed: a login
-// now routes a person into exactly one experience — client/admin get the
-// questionnaire + scores, junior_employee/jury get only Ideas.RIV — so
-// there's never a moment where two roles are active in the same browser
-// tab at once.)
+// Two completely separate login sessions live in this browser: the main
+// site's (client/admin) and Ideas.RIV's (employee/jury). They're stored
+// under different localStorage keys and attached to requests independently,
+// so logging into one can never silently overwrite or break the other —
+// you can be logged in as admin on the main site AND as an employee on
+// Ideas.RIV in the same browser tab at the same time.
 const TOKEN_KEY = "rios-token";
 const USER_KEY = "rios-user";
+const IDEAS_TOKEN_KEY = "rios-ideas-token";
+const IDEAS_USER_KEY = "rios-ideas-user";
+const RISE_TOKEN_KEY = "rios-rise-token";
+const RISE_USER_KEY = "rios-rise-user";
 
 // In local dev, the Vite dev server proxies /api/* to the backend (see
 // vite.config.js) — no env var needed. In a real deployment, frontend and
@@ -14,6 +17,7 @@ const USER_KEY = "rios-user";
 // backend's public URL, e.g. https://rios-backend.onrender.com
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
+// ---- main site session (client/admin) ------------------------------
 export function getToken() { return localStorage.getItem(TOKEN_KEY); }
 export function getStoredUser() {
   try { return JSON.parse(localStorage.getItem(USER_KEY)); } catch { return null; }
@@ -27,9 +31,37 @@ export function clearSession() {
   localStorage.removeItem(USER_KEY);
 }
 
-async function request(path, { method = "GET", body, raw } = {}) {
+// ---- Ideas.RIV session (employee/jury) — fully separate from the above
+export function getIdeasToken() { return localStorage.getItem(IDEAS_TOKEN_KEY); }
+export function getStoredIdeasUser() {
+  try { return JSON.parse(localStorage.getItem(IDEAS_USER_KEY)); } catch { return null; }
+}
+export function setIdeasSession(token, user) {
+  localStorage.setItem(IDEAS_TOKEN_KEY, token);
+  localStorage.setItem(IDEAS_USER_KEY, JSON.stringify(user));
+}
+export function clearIdeasSession() {
+  localStorage.removeItem(IDEAS_TOKEN_KEY);
+  localStorage.removeItem(IDEAS_USER_KEY);
+}
+
+// ---- Rise.RIV session (rise_jury) — fully separate from both of the above.
+// Startup applicants never get a session at all (no login, per spec).
+export function getRiseToken() { return localStorage.getItem(RISE_TOKEN_KEY); }
+export function getStoredRiseUser() {
+  try { return JSON.parse(localStorage.getItem(RISE_USER_KEY)); } catch { return null; }
+}
+export function setRiseSession(token, user) {
+  localStorage.setItem(RISE_TOKEN_KEY, token);
+  localStorage.setItem(RISE_USER_KEY, JSON.stringify(user));
+}
+export function clearRiseSession() {
+  localStorage.removeItem(RISE_TOKEN_KEY);
+  localStorage.removeItem(RISE_USER_KEY);
+}
+
+async function requestWithToken(path, { method = "GET", body, raw } = {}, token) {
   const headers = { "Content-Type": "application/json" };
-  const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(`${API_BASE}/api${path}`, {
@@ -47,9 +79,15 @@ async function request(path, { method = "GET", body, raw } = {}) {
   return res.json();
 }
 
+// Main site calls attach the main site's token.
+function request(path, opts) { return requestWithToken(path, opts, getToken()); }
+// Ideas.RIV calls (employee/jury) attach Ideas.RIV's own token instead.
+function ideasRequest(path, opts) { return requestWithToken(path, opts, getIdeasToken()); }
+// Rise.RIV calls (rise_jury) attach Rise.RIV's own token instead.
+function riseRequest(path, opts) { return requestWithToken(path, opts, getRiseToken()); }
+
 export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
-  signup: (payload) => request("/auth/signup", { method: "POST", body: payload }),
   me: () => request("/auth/me"),
 
   getQuestions: () => request("/questions"),
@@ -64,22 +102,47 @@ export const api = {
 
   exportUrl: (type, userId) => `${API_BASE}/api/export/${type}${userId ? `?userId=${userId}` : ""}`,
 
-  // ---- Ideas.RIV (junior_employee/jury) — same unified token as everything else now
-  getOpportunities: () => request("/ideas/opportunities"),
-  getCriteria: () => request("/ideas/criteria"),
-  getIdeas: (questionId) => request(`/ideas${questionId ? `?questionId=${questionId}` : ""}`),
-  getIdeaRatings: (ideaId) => request(`/ideas/${ideaId}/ratings`),
-  getMyIdeas: () => request("/ideas/mine"),
-  submitIdeas: (ideas) => request("/ideas", { method: "POST", body: { ideas } }),
-  getMyRatingForIdea: (ideaId) => request(`/ideas/${ideaId}/ratings/mine`),
-  submitRating: (ideaId, criteria, comment) => request(`/ideas/${ideaId}/ratings`, { method: "POST", body: { criteria, comment } }),
-  getLeaderboard: () => request("/ideas/leaderboard"),
+  // ---- Ideas.RIV (employee/jury) — uses its own isolated token ------
+  ideasLogin: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }), // same endpoint, token just isn't attached to anything yet here
+  getOpportunities: () => ideasRequest("/ideas/opportunities"),
+  getIdeas: (questionId) => ideasRequest(`/ideas${questionId ? `?questionId=${questionId}` : ""}`),
+  getIdeaRatings: (ideaId) => ideasRequest(`/ideas/${ideaId}/ratings`),
+  getMyIdeas: () => ideasRequest("/ideas/mine"),
+  submitIdeas: (ideas) => ideasRequest("/ideas", { method: "POST", body: { ideas } }),
+  getMyRatingForIdea: (ideaId) => ideasRequest(`/ideas/${ideaId}/ratings/mine`),
+  submitRating: (ideaId, payload) => ideasRequest(`/ideas/${ideaId}/ratings`, { method: "POST", body: payload }),
+  getLeaderboard: () => ideasRequest("/ideas/leaderboard"),
+  critTurn: (ideaId, messages) => ideasRequest("/ideas/crit-turn", { method: "POST", body: { ideaId, messages } }),
 
-  // ---- Ideas.RIV admin (source client + junior employee/jury accounts)
+  // ---- Ideas.RIV admin (source client + employee/jury accounts) -----
+  // Called only from the main site's admin panel, so these correctly use
+  // the main site's (admin) token, not the Ideas.RIV one.
   getIdeasSettings: () => request("/admin/ideas/settings"),
   setIdeasSourceClient: (sourceClientId) => request("/admin/ideas/settings", { method: "PUT", body: { sourceClientId } }),
   listIdeasUsers: (role) => request(`/admin/ideas/users?role=${role}`),
   createIdeasUser: (payload) => request("/admin/ideas/users", { method: "POST", body: payload }),
   deleteIdeasUser: (id) => request(`/admin/ideas/users/${id}`, { method: "DELETE" }),
-  getEmployeeIdeas: (userId) => request(`/admin/ideas/users/${userId}/ideas`),
+
+  // ---- Rise.RIV (public + jury) — uses its own isolated token ------
+  getRiseOpportunity: () => request("/rise/opportunity"), // public, no token needed either way
+  getRiseCriteria: () => request("/rise/criteria"),
+  submitRiseApplication: (payload) => request("/rise/apply", { method: "POST", body: payload }),
+  riseJurySignup: (payload) => request("/rise/jury/signup", { method: "POST", body: payload }),
+  riseJuryLogin: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }), // same endpoint, token just isn't attached to anything yet here
+  getRiseApplications: () => riseRequest("/rise/applications"),
+  getRiseApplication: (id) => riseRequest(`/rise/applications/${id}`),
+  submitRiseScore: (id, payload) => riseRequest(`/rise/applications/${id}/score`, { method: "POST", body: payload }),
+  getRiseDashboard: () => riseRequest("/rise/dashboard"),
+
+  // ---- Rise.RIV admin (opportunities, applications, jury roster) ----
+  // Called only from the main site's admin panel, so these correctly use
+  // the main site's (admin) token, not Rise.RIV's own.
+  listRiseOpportunities: () => request("/admin/rise/opportunities"),
+  createRiseOpportunity: (payload) => request("/admin/rise/opportunities", { method: "POST", body: payload }),
+  openRiseOpportunity: (id) => request(`/admin/rise/opportunities/${id}/open`, { method: "PUT" }),
+  closeRiseOpportunity: (id) => request(`/admin/rise/opportunities/${id}/close`, { method: "PUT" }),
+  listRiseApplicationsAdmin: () => request("/admin/rise/applications"),
+  getRiseApplicationAdmin: (id) => request(`/admin/rise/applications/${id}`),
+  listRiseJury: () => request("/admin/rise/jury"),
+  deleteRiseJury: (id) => request(`/admin/rise/jury/${id}`, { method: "DELETE" }),
 };
