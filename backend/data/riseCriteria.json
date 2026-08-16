@@ -1,0 +1,7 @@
+[
+  { "key": "team", "label": "Team", "description": "Founder-market fit, domain expertise, execution track record." },
+  { "key": "market", "label": "Market Opportunity", "description": "Size, timing, and growth potential of the addressable market." },
+  { "key": "product", "label": "Product & Differentiation", "description": "Strength, defensibility, and originality of the solution." },
+  { "key": "traction", "label": "Traction", "description": "Evidence of customer validation, revenue, or pilot momentum." },
+  { "key": "gtm_fit", "label": "GTM Fit with RIV", "description": "How well the startup fits Retail Innovation Ventures' retail/GTM thesis." }
+]
