@@ -7,29 +7,44 @@
 import pool from "./db.js";
 
 export async function initRiseSchema() {
-  // Widen users.role to add 'rise_jury' without assuming the existing
-  // constraint's name (Postgres autogenerates it, and prior migrations —
-  // see Ideas.RIV's 'employee'/'jury' addition — may have already renamed
-  // it). Look it up, drop it, re-add with the full allowed list. Safe to
-  // run on every boot.
+  // Widen users.role to add 'rise_jury'. Deliberately does NOT hardcode
+  // the other allowed role values — an earlier version of this migration
+  // did (assuming 'employee', copied from what db.js's source looked like
+  // at the time), and it broke production: the constraint actually live
+  // in the database allowed 'junior_employee', not 'employee' — the two
+  // had drifted apart. Hardcoding a role list here means this file goes
+  // stale the moment db.js's own list changes for unrelated reasons.
+  // Instead: find whatever constraint currently governs `role`, read its
+  // *actual* allowed values straight out of its definition, and just add
+  // 'rise_jury' to that list — so this can never fall out of sync with
+  // whatever db.js (or a future migration) has already established.
   await pool.query(`
     DO $$
     DECLARE
       cname text;
+      cdef text;
+      vals text;
     BEGIN
-      SELECT con.conname INTO cname
+      SELECT con.conname, pg_get_constraintdef(con.oid) INTO cname, cdef
       FROM pg_constraint con
       JOIN pg_class rel ON rel.oid = con.conrelid
       WHERE rel.relname = 'users'
         AND con.contype = 'c'
         AND pg_get_constraintdef(con.oid) ILIKE '%role%';
 
-      IF cname IS NOT NULL THEN
+      IF cname IS NOT NULL AND cdef NOT ILIKE '%rise_jury%' THEN
         EXECUTE format('ALTER TABLE users DROP CONSTRAINT %I', cname);
-      END IF;
 
-      ALTER TABLE users ADD CONSTRAINT users_role_check
-        CHECK (role IN ('admin','client','employee','jury','rise_jury'));
+        SELECT string_agg(quote_literal(m[1]), ',') INTO vals
+        FROM regexp_matches(cdef, '''([a-zA-Z_]+)''::text', 'g') AS m;
+
+        EXECUTE format('ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN (%s, ''rise_jury''))', vals);
+      ELSIF cname IS NULL THEN
+        -- No role constraint found at all (shouldn't happen once db.js has
+        -- run first, but fail safe rather than skip silently).
+        ALTER TABLE users ADD CONSTRAINT users_role_check
+          CHECK (role IN ('admin','client','rise_jury'));
+      END IF;
     END $$;
   `);
 
