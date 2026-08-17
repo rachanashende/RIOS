@@ -694,6 +694,10 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
   const qs = useMemo(() => questions.filter((q) => q.module === module), [questions, module]);
   const totalAnswered = Object.values(responses).filter((r) => r && r.maturity != null).length;
 
+  // Land at the top of the new module's questions, whether moduleIdx changed
+  // via Previous/Next or clicking a module directly in the sidebar list.
+  useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [moduleIdx]);
+
   function setMaturity(id, val) { setResponses((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), maturity: val } })); }
   function setEvidence(id, val) { setResponses((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), evidence: val } })); }
   function randomFillModule() {
@@ -1022,7 +1026,7 @@ export default function RiosApp() {
   const stats = [{ value: "165", label: "diagnostic questions" }, { value: "19", label: "operating modules" }, { value: "5", label: "maturity bands" }];
 
   return (
-    <div style={{ fontFamily: "'Poppins',sans-serif", background: BRAND.cream, minHeight: "100%" }}>
+    <div style={{ fontFamily: "'Poppins',sans-serif", background: BRAND.cream, minHeight: "100vh" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Newsreader:ital@1&display=swap');
         * { box-sizing: border-box; }
