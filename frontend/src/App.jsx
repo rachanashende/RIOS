@@ -81,10 +81,16 @@ function NavBar({ view, setView, user, onLogout }) {
               }}><LogOut size={13} /> Log out</button>
             </>
           ) : (
-            <button onClick={() => setView("login")} style={{
-              fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff",
-              border: "none", borderRadius: 9, padding: "9px 16px", cursor: "pointer",
-            }}>Client sign in</button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setView("login")} style={{
+                fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: "#fff", color: BRAND.ink,
+                border: `1px solid ${BRAND.line}`, borderRadius: 9, padding: "9px 16px", cursor: "pointer",
+              }}>Log in</button>
+              <button onClick={() => setView("signup")} style={{
+                fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff",
+                border: "none", borderRadius: 9, padding: "9px 16px", cursor: "pointer",
+              }}>Sign up</button>
+            </div>
           )}
         </div>
         <button className="rios-nav-mobile-btn" onClick={() => setOpen(!open)} style={{ display: "none", background: "none", border: "none", cursor: "pointer", color: BRAND.ink }}>{open ? <X size={22} /> : <Menu size={22} />}</button>
@@ -100,7 +106,10 @@ function NavBar({ view, setView, user, onLogout }) {
           {user ? (
             <button onClick={onLogout} style={{ textAlign: "left", fontFamily: "'Poppins',sans-serif", fontSize: 14.5, fontWeight: 600, padding: "10px 14px", borderRadius: 10, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink }}>Log out ({user.name})</button>
           ) : (
-            <button onClick={() => { setView("login"); setOpen(false); }} style={{ textAlign: "left", fontFamily: "'Poppins',sans-serif", fontSize: 14.5, fontWeight: 600, padding: "10px 14px", borderRadius: 10, border: "none", cursor: "pointer", background: BRAND.coral, color: "#fff" }}>Client sign in</button>
+            <>
+              <button onClick={() => { setView("login"); setOpen(false); }} style={{ textAlign: "left", fontFamily: "'Poppins',sans-serif", fontSize: 14.5, fontWeight: 600, padding: "10px 14px", borderRadius: 10, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink }}>Log in</button>
+              <button onClick={() => { setView("signup"); setOpen(false); }} style={{ textAlign: "left", fontFamily: "'Poppins',sans-serif", fontSize: 14.5, fontWeight: 600, padding: "10px 14px", borderRadius: 10, border: "none", cursor: "pointer", background: BRAND.coral, color: "#fff" }}>Sign up</button>
+            </>
           )}
         </div>
       )}
@@ -220,7 +229,7 @@ function PricingView() {
 }
 
 /* ---------------- Login ---------------- */
-function LoginView({ onLogin }) {
+function LoginView({ onLogin, setView }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -246,7 +255,7 @@ function LoginView({ onLogin }) {
     <div style={{ maxWidth: 420, margin: "70px auto", padding: "0 24px" }}>
       <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 32, background: "#fff" }}>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 22, color: BRAND.ink, marginBottom: 4 }}>Log in</div>
-        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Client accounts are issued by an RIV admin — there's no self-signup.</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>New client? <a onClick={() => setView?.("signup")} style={{ color: BRAND.coral, cursor: "pointer", fontWeight: 600 }}>Sign up</a> instead — employee and jury accounts are issued by an RIV admin.</div>
         <form onSubmit={submit}>
           <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink }}>Email</label>
           <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required autoFocus style={inputStyle} />
@@ -265,6 +274,55 @@ function LoginView({ onLogin }) {
             <button type="button" onClick={() => fillDemo("admin")} style={demoBtnStyle}>Fill admin</button>
             <button type="button" onClick={() => fillDemo("client")} style={demoBtnStyle}>Fill client</button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Sign up (new clients only — employee/jury/admin stay admin-issued) ---------------- */
+function SignupView({ onSignup, setView }) {
+  const [form, setForm] = useState({ name: "", email: "", company: "", password: "" });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  function set(key) { return (e) => setForm((f) => ({ ...f, [key]: e.target.value })); }
+
+  async function submit(e) {
+    e.preventDefault();
+    setError(""); setLoading(true);
+    try {
+      const { token, user } = await api.signup(form);
+      onSignup(token, user);
+    } catch (err) {
+      setError(err.message || "Sign up failed.");
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <div style={{ maxWidth: 420, margin: "70px auto", padding: "0 24px" }}>
+      <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 32, background: "#fff" }}>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 22, color: BRAND.ink, marginBottom: 4 }}>Sign up</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Create your client account to start the Discover assessment.</div>
+        <form onSubmit={submit}>
+          <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink }}>Name</label>
+          <input value={form.name} onChange={set("name")} required autoFocus style={inputStyle} />
+          <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink, marginTop: 14, display: "block" }}>Company</label>
+          <input value={form.company} onChange={set("company")} style={inputStyle} />
+          <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink, marginTop: 14, display: "block" }}>Email</label>
+          <input value={form.email} onChange={set("email")} type="email" required style={inputStyle} />
+          <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink, marginTop: 14, display: "block" }}>Password</label>
+          <input value={form.password} onChange={set("password")} type="password" required minLength={8} style={inputStyle} />
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: "#9B958F", marginTop: 5 }}>At least 8 characters.</div>
+          {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: BRAND.coralDark, marginTop: 12 }}>{error}</div>}
+          <button type="submit" disabled={loading} style={{
+            width: "100%", marginTop: 20, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, background: BRAND.coral, color: "#fff",
+            border: "none", borderRadius: 9, padding: "12px 0", cursor: loading ? "default" : "pointer", opacity: loading ? 0.7 : 1,
+          }}>{loading && <Loader2 size={14} className="rios-spin" />} Sign up</button>
+        </form>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F", marginTop: 18, textAlign: "center" }}>
+          Already have an account? <a onClick={() => setView?.("login")} style={{ color: BRAND.coral, cursor: "pointer", fontWeight: 600 }}>Log in</a>
         </div>
       </div>
     </div>
@@ -344,6 +402,125 @@ function AdminView({ setView, setSelectedClient }) {
       </div>
 
       <IdeasTeamPanel clients={clients} />
+      <RiseTeamPanel />
+    </div>
+  );
+}
+
+/* ---------------- Admin: Rise.RIV jury + opportunity control ---------------- */
+function RiseTeamPanel() {
+  const [opportunities, setOpportunities] = useState(null);
+  const [jury, setJury] = useState(null);
+  const [oppForm, setOppForm] = useState({ title: "", description: "" });
+  const [juryForm, setJuryForm] = useState({ name: "", email: "", password: "", company: "" });
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const refresh = useCallback(() => {
+    api.listRiseOpportunities().then((d) => setOpportunities(d.opportunities)).catch(() => setOpportunities([]));
+    api.listRiseJury().then((d) => setJury(d.jury)).catch(() => setJury([]));
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  async function createOpportunity(e) {
+    e.preventDefault();
+    setError(""); setBusy(true);
+    try {
+      await api.createRiseOpportunity(oppForm);
+      setOppForm({ title: "", description: "" });
+      refresh();
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
+  async function openOpportunity(id) { await api.openRiseOpportunity(id); refresh(); }
+  async function closeOpportunity(id) { await api.closeRiseOpportunity(id); refresh(); }
+
+  async function createJury(e) {
+    e.preventDefault();
+    setError(""); setBusy(true);
+    try {
+      await api.createRiseJury(juryForm);
+      setJuryForm({ name: "", email: "", password: "", company: "" });
+      refresh();
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
+  async function removeJury(id) {
+    if (!confirm("Remove this jury login?")) return;
+    await api.deleteRiseJury(id);
+    refresh();
+  }
+
+  return (
+    <div style={{ marginTop: 44 }}>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>Rise.RIV team</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Control which opportunity is open for startup applications, and create jury logins to review them.</div>
+
+      <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 20, background: "#fff", marginBottom: 24 }}>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}>Opportunities</div>
+        {opportunities === null ? (
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>Loading…</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+            {opportunities.length === 0 && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F" }}>No opportunities yet — create one below.</div>}
+            {opportunities.map((o) => (
+              <div key={o.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                <div>
+                  <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, color: BRAND.ink }}>{o.title}</div>
+                  <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{o.application_count} application{o.application_count !== 1 ? "s" : ""}</div>
+                </div>
+                {o.is_open ? (
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 700, color: "#1B7A5A", background: "#E7F5EF", padding: "4px 10px", borderRadius: 999 }}>Open</span>
+                    <button onClick={() => closeOpportunity(o.id)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "6px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff" }}>Close</button>
+                  </span>
+                ) : (
+                  <button onClick={() => openOpportunity(o.id)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "6px 10px", borderRadius: 8, border: "none", cursor: "pointer", background: BRAND.ink, color: "#fff" }}>Open</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <form onSubmit={createOpportunity} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <input placeholder="Opportunity title" value={oppForm.title} onChange={(e) => setOppForm({ ...oppForm, title: e.target.value })} required style={{ ...inputStyle, marginTop: 0, flex: "1 1 200px" }} />
+          <input placeholder="Description (optional)" value={oppForm.description} onChange={(e) => setOppForm({ ...oppForm, description: e.target.value })} style={{ ...inputStyle, marginTop: 0, flex: "2 1 260px" }} />
+          <button type="submit" disabled={busy} style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "0 16px", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>Add</button>
+        </form>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24 }} className="rios-admin-grid">
+        <div>
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink, marginBottom: 10 }}>Jury</div>
+          {jury === null ? (
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>Loading…</div>
+          ) : jury.length === 0 ? (
+            <div style={{ border: `1px dashed ${BRAND.line}`, borderRadius: 12, padding: 20, fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>No jury logins yet — create one on the right.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {jury.map((u) => (
+                <div key={u.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: 12, background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                  <div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, color: BRAND.ink }}>{u.name}</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email}{u.company ? ` · ${u.company}` : ""}</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: BRAND.coralDark, marginTop: 2, fontWeight: 600 }}>{u.scored_count} scored</div>
+                  </div>
+                  <button onClick={() => removeJury(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "8px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={14} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 20, background: "#fff", height: "fit-content" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 14 }}><UserPlus size={15} /> New jury login</div>
+          <form onSubmit={createJury}>
+            <input placeholder="Name" value={juryForm.name} onChange={(e) => setJuryForm({ ...juryForm, name: e.target.value })} required style={{ ...inputStyle, marginTop: 0 }} />
+            <input placeholder="Company / affiliation (optional)" value={juryForm.company} onChange={(e) => setJuryForm({ ...juryForm, company: e.target.value })} style={{ ...inputStyle, marginTop: 10 }} />
+            <input placeholder="Email" type="email" value={juryForm.email} onChange={(e) => setJuryForm({ ...juryForm, email: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
+            <input placeholder="Temporary password" value={juryForm.password} onChange={(e) => setJuryForm({ ...juryForm, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
+            {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: BRAND.coralDark, marginTop: 10 }}>{error}</div>}
+            <button type="submit" disabled={busy} style={{ width: "100%", marginTop: 14, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>Create login</button>
+          </form>
+        </div>
+      </div>
     </div>
   );
 }
@@ -786,6 +963,11 @@ export default function RiosApp() {
     setUser(loggedInUser);
     setView(loggedInUser.role === "admin" ? "admin" : "assess");
   }
+  function handleSignup(token, loggedInUser) {
+    // Signup always returns a 'client' account (see auth.js), so this can
+    // reuse the same session + redirect logic as a normal login.
+    handleLogin(token, loggedInUser);
+  }
   function handleLogout() {
     clearSession(); setUser(null); setViewingClient(null); setResponses({}); setView("home");
   }
@@ -818,7 +1000,8 @@ export default function RiosApp() {
       `}</style>
       <NavBar view={view} setView={goToView} user={user} onLogout={handleLogout} />
       {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip /><ModuleGrid modules={modules} questions={questions} setView={goToView} /></>)}
-      {view === "login" && <LoginView onLogin={handleLogin} />}
+      {view === "login" && <LoginView onLogin={handleLogin} setView={goToView} />}
+      {view === "signup" && <SignupView onSignup={handleSignup} setView={goToView} />}
       {view === "pricing" && <PricingView />}
       {view === "ideas-riv" && <IdeasRivApp />}
       {view === "rise-riv" && <RiseRivApp />}
