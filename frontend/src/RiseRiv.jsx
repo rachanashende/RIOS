@@ -124,7 +124,7 @@ function RiseNavBar({ view, setView, session, onLogout }) {
       <div style={{ maxWidth: 1000, margin: "0 auto", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink }}>
-            <Rocket size={18} color={BRAND.coral} /> Rise.RIV
+            <Rocket size={18} color={BRAND.coral} /> Startup
           </div>
           <div style={{ display: "flex", gap: 4 }}>
             {/* Real link (full navigation) back to the main site's Overview
@@ -225,7 +225,7 @@ function ApplyView({ onDone }) {
         <div style={{ fontFamily: FONT, fontSize: 14, color: "#7A746F", marginTop: 8 }}>
           We will get back to you.
         </div>
-        <GhostButton onClick={onDone} style={{ margin: "26px auto 0" }}>Back to Rise.RIV</GhostButton>
+        <GhostButton onClick={onDone} style={{ margin: "26px auto 0" }}>Back to Startup</GhostButton>
       </div>
     );
   }
@@ -274,7 +274,7 @@ function ApplyView({ onDone }) {
 }
 
 /* =========================================================================
-   JURY AUTH — login only. Rise.RIV jury accounts are created by an admin
+   JURY AUTH — login only. Startup jury accounts are created by an admin
    (App.jsx's RiseTeamPanel → POST /api/admin/rise/jury), matching RIOS's
    app-wide rule that no role self-registers — a juror logs in with the
    email + temporary password an admin gave them.
@@ -292,7 +292,7 @@ function JuryLoginView({ onAuthed }) {
     try {
       const { token, user } = await api.riseJuryLogin(email, password);
       if (user.role !== "rise_jury" && user.role !== "admin") {
-        throw new Error("This login isn't set up for the Rise.RIV jury.");
+        throw new Error("This login isn't set up for the Startup jury.");
       }
       onAuthed(token, user);
     } catch (e) {
@@ -315,7 +315,7 @@ function JuryLoginView({ onAuthed }) {
           </PrimaryButton>
         </form>
         <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginTop: 16, textAlign: "center" }}>
-          Don't have a login yet? Ask your Rise.RIV admin to create one for you.
+          Don't have a login yet? Ask your Startup admin to create one for you.
         </div>
       </Card>
     </div>

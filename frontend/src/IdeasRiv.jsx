@@ -142,11 +142,10 @@ function StarPicker({ value, onChange, size = 22 }) {
 function IdeasNavBar({ view, setView, session, onLogout }) {
   const items = [{ id: "landing", label: "Opportunities" }];
   if (session.role === "junior_employee") items.push({ id: "my-ideas", label: "My submissions" });
-  // Per PRD §8: aggregate scores across jurors are admin-only, not visible
-  // to jury (blind scoring — a juror seeing the aggregate could infer how
-  // far their own score sits from the group's). Jury only gets "Rate
-  // ideas"; the Leaderboard view now lives in the admin panel instead.
-  if (session.role === "jury") items.push({ id: "jury", label: "Rate ideas" });
+  // Blind-scoring restriction (jury couldn't see the leaderboard, to avoid
+  // anchoring on the group's average) has been explicitly reversed: jury
+  // now gets both Rate ideas and Leaderboard.
+  if (session.role === "jury") items.push({ id: "jury", label: "Rate ideas" }, { id: "leaderboard", label: "Leaderboard" });
   if (session.role === "admin") items.push({ id: "leaderboard", label: "Leaderboard" });
 
   const navBtnStyle = (active) => ({
@@ -160,6 +159,9 @@ function IdeasNavBar({ view, setView, session, onLogout }) {
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 30, flexWrap: "wrap" }}>
           <img src="/riv-logo-full.png" alt="Retail Innovation Ventures" style={{ height: 36, width: "auto", objectFit: "contain" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink }}>
+            <Lightbulb size={18} color={BRAND.coral} /> Ideathon
+          </div>
           <div style={{ display: "flex", gap: 4 }}>
             {/* Real link (full navigation) back to the main site's Overview
                 page — this module no longer renders inside the main site's
@@ -244,7 +246,7 @@ function LandingView({ session, setView, opportunities, ideas, loading, error, s
         {loading && <Spinner label="Loading opportunities…" />}
         {!loading && error && <ErrorBanner text={error} />}
         {!loading && !error && opportunities.length === 0 && (
-          <EmptyState icon={Compass} title="No source audit configured yet" text="An admin needs to pick which client's scored audit feeds Ideas.RIV before opportunities show up here." />
+          <EmptyState icon={Compass} title="No source audit configured yet" text="An admin needs to pick which client's scored audit feeds Ideathon before opportunities show up here." />
         )}
 
         {!loading && !error && opportunities.length > 0 && (
@@ -664,7 +666,7 @@ function IdeaRatingsDetailView({ idea, ratings, loading, error, onBack }) {
 
 
 /* =========================================================================
-   MAIN — the actual Ideas.RIV app, once a session exists.
+   MAIN — the actual Ideathon app, once a session exists.
    ========================================================================= */
 function IdeasRivMain({ session, onLogout }) {
   const [view, setView] = useState(session.role === "jury" ? "jury" : "landing");
@@ -727,10 +729,10 @@ function IdeasRivMain({ session, onLogout }) {
     api.getMyIdeas().then((d) => setMyIdeas(d.ideas || [])).catch((e) => setError(e.message));
   }, [session, view]);
 
-  // Leaderboard (admin only — aggregate scores are never shown to jury,
-  // see the blind-scoring note on the backend route)
+  // Leaderboard — now shown to both admin and jury (blind-scoring
+  // restriction explicitly reversed; see IdeasNavBar and the backend route).
   useEffect(() => {
-    if (session.role !== "admin" || view !== "leaderboard") return;
+    if ((session.role !== "admin" && session.role !== "jury") || view !== "leaderboard") return;
     setLoadingLeaderboard(true);
     api.getLeaderboard()
       .then((d) => setLeaderboard(d.leaderboard || []))
@@ -796,8 +798,11 @@ function IdeasRivMain({ session, onLogout }) {
           />
         )}
 
-        {view === "leaderboard" && session.role === "admin" && !activeLeaderboardIdea && (
-          <LeaderboardView leaderboard={leaderboard} loading={loadingLeaderboard} error={error} onOpenIdea={openLeaderboardIdea} />
+        {view === "leaderboard" && (session.role === "admin" || session.role === "jury") && !activeLeaderboardIdea && (
+          <LeaderboardView
+            leaderboard={leaderboard} loading={loadingLeaderboard} error={error}
+            onOpenIdea={session.role === "admin" ? openLeaderboardIdea : undefined}
+          />
         )}
 
         {view === "leaderboard" && session.role === "admin" && activeLeaderboardIdea && (
@@ -826,7 +831,7 @@ function IdeasRivMain({ session, onLogout }) {
 }
 
 /* =========================================================================
-   LOGIN — Ideas.RIV accounts (junior_employee / jury) are admin-created
+   LOGIN — Ideathon accounts (junior_employee / jury) are admin-created
    only, same rule as everywhere else in RIOS: no self-signup. A user logs
    in with credentials an admin already gave them.
    ========================================================================= */
@@ -843,7 +848,7 @@ function IdeasLoginView({ onAuthed }) {
     try {
       const { token, user } = await api.ideasLogin(email, password);
       if (!["junior_employee", "jury", "admin"].includes(user.role)) {
-        throw new Error("This login isn't set up for Ideas.RIV.");
+        throw new Error("This login isn't set up for Ideathon.");
       }
       onAuthed(token, user);
     } catch (e) {
@@ -857,7 +862,7 @@ function IdeasLoginView({ onAuthed }) {
     <div style={{ fontFamily: FONT, background: BRAND.cream, minHeight: "100vh" }}>
       <div style={{ maxWidth: 400, margin: "0 auto", padding: "80px 24px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontWeight: 700, fontSize: 16, color: BRAND.ink, marginBottom: 24 }}>
-          <Lightbulb size={19} color={BRAND.coral} /> Ideas.RIV
+          <Lightbulb size={19} color={BRAND.coral} /> Ideathon
         </div>
         <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 28, background: "#fff" }}>
           <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: BRAND.ink, marginBottom: 4 }}>Log in</div>
@@ -881,8 +886,8 @@ function IdeasLoginView({ onAuthed }) {
 }
 
 /* =========================================================================
-   ROOT — owns the Ideas.RIV session (separate from the main site's and
-   from Rise.RIV's), same isolated-token pattern as RiseRivApp. This is
+   ROOT — owns the Ideathon session (separate from the main site's and
+   from the Startup module's), same isolated-token pattern as RiseRivApp. This is
    what App.jsx actually mounts with no props (<IdeasRivApp />), so all
    login/logout state has to live in here, not be passed in from outside.
    ========================================================================= */
