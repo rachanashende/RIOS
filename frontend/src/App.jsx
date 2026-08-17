@@ -536,6 +536,14 @@ function IdeasTeamPanel({ clients }) {
   const [busy, setBusy] = useState(false);
   const [savingSource, setSavingSource] = useState(false);
 
+  // Which employee's submissions panel is expanded, and what's in it —
+  // admin drill-down per the spec ("admin should be able to see my idea
+  // submitted"). Fetched from the existing GET /admin/ideas/users/:id/ideas
+  // route on first expand, then cached so re-toggling doesn't re-fetch.
+  const [expandedEmployeeId, setExpandedEmployeeId] = useState(null);
+  const [employeeIdeasCache, setEmployeeIdeasCache] = useState({});
+  const [loadingEmployeeIdeas, setLoadingEmployeeIdeas] = useState(false);
+
   const refresh = useCallback(() => {
     api.getIdeasSettings().then((d) => { setSourceClient(d.sourceClient); setSelectedClientId(d.sourceClient?.id ? String(d.sourceClient.id) : ""); }).catch(() => {});
     api.listIdeasUsers("employee").then((d) => setEmployees(d.users)).catch(() => setEmployees([]));
@@ -564,6 +572,21 @@ function IdeasTeamPanel({ clients }) {
     if (!confirm("Remove this login?")) return;
     await api.deleteIdeasUser(id);
     refresh();
+  }
+
+  async function toggleEmployeeIdeas(id) {
+    if (expandedEmployeeId === id) { setExpandedEmployeeId(null); return; }
+    setExpandedEmployeeId(id);
+    if (employeeIdeasCache[id]) return;
+    setLoadingEmployeeIdeas(true);
+    try {
+      const d = await api.getEmployeeIdeas(id);
+      setEmployeeIdeasCache((c) => ({ ...c, [id]: d.ideas || [] }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoadingEmployeeIdeas(false);
+    }
   }
 
   return (
@@ -595,12 +618,40 @@ function IdeasTeamPanel({ clients }) {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 22 }}>
               {employees.map((u) => (
-                <div key={u.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: 12, background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                  <div>
-                    <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink }}>{u.name}</div>
-                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email} {u.company ? `· ${u.company}` : ""}</div>
+                <div key={u.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, background: "#fff" }}>
+                  <div style={{ padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <div>
+                      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink }}>{u.name}</div>
+                      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email} {u.company ? `· ${u.company}` : ""}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => toggleEmployeeIdeas(u.id)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "7px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: expandedEmployeeId === u.id ? BRAND.ink : "#fff", color: expandedEmployeeId === u.id ? "#fff" : BRAND.ink }}>
+                        {expandedEmployeeId === u.id ? "Hide" : "View submissions"}
+                      </button>
+                      <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
+                    </div>
                   </div>
-                  <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
+                  {expandedEmployeeId === u.id && (
+                    <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: 12, background: BRAND.cream }}>
+                      {loadingEmployeeIdeas && !employeeIdeasCache[u.id] ? (
+                        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F" }}>Loading…</div>
+                      ) : (employeeIdeasCache[u.id] || []).length === 0 ? (
+                        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F" }}>No ideas submitted yet.</div>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {employeeIdeasCache[u.id].map((idea) => (
+                            <div key={idea.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: 10, background: "#fff" }}>
+                              <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 12.5, color: BRAND.ink }}>{idea.title}</div>
+                              <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: "#9B958F", marginTop: 3 }}>
+                                {idea.question?.module} · {idea.question?.submodule}
+                                {idea.avg_score != null ? ` — avg ${Number(idea.avg_score).toFixed(1)}/5 (${idea.rating_count} rating${idea.rating_count !== 1 ? "s" : ""})` : " — not yet rated"}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
