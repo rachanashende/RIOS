@@ -176,7 +176,7 @@ function LandingView({ opportunity, loading, setView }) {
 
       <div style={{ marginTop: 56, paddingTop: 28, borderTop: `1px solid ${BRAND.line}` }}>
         <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginBottom: 10 }}>Reviewing applications as a jury member?</div>
-        <GhostButton onClick={() => setView("jury-signup")} icon={Gavel}>Sign up to join the jury</GhostButton>
+        <GhostButton onClick={() => setView("jury-login")} icon={Gavel}>Jury login</GhostButton>
       </div>
     </div>
   );
@@ -272,53 +272,12 @@ function ApplyView({ onDone }) {
 }
 
 /* =========================================================================
-   JURY AUTH — signup / login (isolated Rise.RIV session)
+   JURY AUTH — login only. Rise.RIV jury accounts are created by an admin
+   (App.jsx's RiseTeamPanel → POST /api/admin/rise/jury), matching RIOS's
+   app-wide rule that no role self-registers — a juror logs in with the
+   email + temporary password an admin gave them.
    ========================================================================= */
-function JurySignupView({ onAuthed, goToLogin }) {
-  const [form, setForm] = useState({ name: "", email: "", password: "", company: "" });
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
-
-  function set(key) { return (e) => setForm((f) => ({ ...f, [key]: e.target.value })); }
-
-  async function submit(e) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    try {
-      const { token, user } = await api.riseJurySignup(form);
-      onAuthed(token, user);
-    } catch (e) {
-      setError(e.message || "Couldn't create your account.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <div style={{ maxWidth: 440, margin: "0 auto", padding: "56px 24px 100px" }}>
-      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink, marginBottom: 4 }}>Join the jury</div>
-      <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 26 }}>Create a login to review and score applications.</div>
-      <Card style={{ padding: 26 }}>
-        <form onSubmit={submit}>
-          <Field label="Name" required><input style={inputStyle} value={form.name} onChange={set("name")} /></Field>
-          <Field label="Email" required><input type="email" style={inputStyle} value={form.email} onChange={set("email")} /></Field>
-          <Field label="Company / affiliation"><input style={inputStyle} value={form.company} onChange={set("company")} /></Field>
-          <Field label="Password" required><input type="password" style={inputStyle} value={form.password} onChange={set("password")} /></Field>
-          <ErrorBanner text={error} />
-          <PrimaryButton type="submit" disabled={submitting} icon={submitting ? Loader2 : ArrowRight} style={{ width: "100%" }}>
-            {submitting ? "Creating account…" : "Sign up"}
-          </PrimaryButton>
-        </form>
-        <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginTop: 16, textAlign: "center" }}>
-          Already have a jury account? <a onClick={goToLogin} style={{ color: BRAND.coral, cursor: "pointer", fontWeight: 600 }}>Log in</a>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function JuryLoginView({ onAuthed, goToSignup }) {
+function JuryLoginView({ onAuthed }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -354,7 +313,7 @@ function JuryLoginView({ onAuthed, goToSignup }) {
           </PrimaryButton>
         </form>
         <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginTop: 16, textAlign: "center" }}>
-          New juror? <a onClick={goToSignup} style={{ color: BRAND.coral, cursor: "pointer", fontWeight: 600 }}>Sign up</a>
+          Don't have a login yet? Ask your Rise.RIV admin to create one for you.
         </div>
       </Card>
     </div>
@@ -561,8 +520,7 @@ export default function RiseRivApp() {
 
       {view === "landing" && <LandingView opportunity={opportunity} loading={oppLoading} setView={goToView} />}
       {view === "apply" && <ApplyView onDone={() => goToView("landing")} />}
-      {view === "jury-signup" && <JurySignupView onAuthed={handleAuthed} goToLogin={() => setView("jury-login")} />}
-      {view === "jury-login" && <JuryLoginView onAuthed={handleAuthed} goToSignup={() => setView("jury-signup")} />}
+      {view === "jury-login" && <JuryLoginView onAuthed={handleAuthed} />}
       {view === "jury-dashboard" && session && (
         <JuryDashboardView setView={goToView} setActiveApplicationId={setActiveApplicationId} />
       )}

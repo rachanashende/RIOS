@@ -1,4 +1,5 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
 import pool from "../db.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { CRITERIA } from "../lib/riseScoring.js";
@@ -120,6 +121,32 @@ router.get("/jury", async (req, res, next) => {
       ORDER BY u.created_at DESC
     `);
     res.json({ jury: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/admin/rise/jury — create a jury login. Mirrors Ideas.RIV's
+// admin-only POST /api/admin/ideas/users: every account in RIOS is issued
+// top-down, no role self-registers. The admin hands the juror their email
+// + temporary password out of band (Slack, email, etc.).
+router.post("/jury", async (req, res, next) => {
+  try {
+    const { email, password, name, company } = req.body || {};
+    if (!email || !password || !name) {
+      return res.status(400).json({ error: "Name, email, and a temporary password are required." });
+    }
+    const normalizedEmail = String(email).toLowerCase().trim();
+
+    const { rows: existing } = await pool.query("SELECT id FROM users WHERE email = $1", [normalizedEmail]);
+    if (existing.length) return res.status(409).json({ error: "A user with that email already exists." });
+
+    const password_hash = bcrypt.hashSync(password, 10);
+    const { rows } = await pool.query(
+      "INSERT INTO users (email, password_hash, name, role, company) VALUES ($1,$2,$3,'rise_jury',$4) RETURNING id",
+      [normalizedEmail, password_hash, String(name).trim(), company || null]
+    );
+    res.status(201).json({ id: rows[0].id, email: normalizedEmail, name, role: "rise_jury", company: company || null });
   } catch (err) {
     next(err);
   }

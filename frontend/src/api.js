@@ -88,6 +88,7 @@ function riseRequest(path, opts) { return requestWithToken(path, opts, getRiseTo
 
 export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
+  signup: (payload) => request("/auth/signup", { method: "POST", body: payload }),
   me: () => request("/auth/me"),
 
   getQuestions: () => request("/questions"),
@@ -127,7 +128,6 @@ export const api = {
   getRiseOpportunity: () => request("/rise/opportunity"), // public, no token needed either way
   getRiseCriteria: () => request("/rise/criteria"),
   submitRiseApplication: (payload) => request("/rise/apply", { method: "POST", body: payload }),
-  riseJurySignup: (payload) => request("/rise/jury/signup", { method: "POST", body: payload }),
   riseJuryLogin: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }), // same endpoint, token just isn't attached to anything yet here
   getRiseApplications: () => riseRequest("/rise/applications"),
   getRiseApplication: (id) => riseRequest(`/rise/applications/${id}`),
@@ -144,5 +144,6 @@ export const api = {
   listRiseApplicationsAdmin: () => request("/admin/rise/applications"),
   getRiseApplicationAdmin: (id) => request(`/admin/rise/applications/${id}`),
   listRiseJury: () => request("/admin/rise/jury"),
+  createRiseJury: (payload) => request("/admin/rise/jury", { method: "POST", body: payload }),
   deleteRiseJury: (id) => request(`/admin/rise/jury/${id}`, { method: "DELETE" }),
 };
