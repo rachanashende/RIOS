@@ -13,7 +13,7 @@ const GROQ_MODEL = "llama-3.3-70b-versatile";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 function buildSystemPrompt(question, idea) {
-  return `You are the AI jury assistant inside "Ideas.RIV", a retail-innovation ideas platform. You help a jury member (a company leader) evaluate an employee-submitted idea, using the CRIT prompting method: Context, Role, Interview me, Task.
+  return `You are the AI jury assistant inside "Ideathon", a retail-innovation ideas platform. You help a jury member (a company leader) evaluate an employee-submitted idea, using the CRIT prompting method: Context, Role, Interview me, Task.
 
 CONTEXT
 Innovation opportunity (from the Discover Audit, "${question.module} · ${question.submodule}"): diagnostic question: "${question.q}"
