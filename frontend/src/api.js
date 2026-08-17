@@ -123,6 +123,7 @@ export const api = {
   listIdeasUsers: (role) => request(`/admin/ideas/users?role=${role}`),
   createIdeasUser: (payload) => request("/admin/ideas/users", { method: "POST", body: payload }),
   deleteIdeasUser: (id) => request(`/admin/ideas/users/${id}`, { method: "DELETE" }),
+  getEmployeeIdeas: (id) => request(`/admin/ideas/users/${id}/ideas`),
 
   // ---- Rise.RIV (public + jury) — uses its own isolated token ------
   getRiseOpportunity: () => request("/rise/opportunity"), // public, no token needed either way

@@ -78,8 +78,8 @@ function GhostButton({ children, onClick, style, icon: Icon }) {
   );
 }
 
-function Card({ children, style }) {
-  return <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 14, background: "#fff", ...style }}>{children}</div>;
+function Card({ children, style, onClick }) {
+  return <div onClick={onClick} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 14, background: "#fff", ...style }}>{children}</div>;
 }
 
 function EmptyState({ icon: Icon, title, text }) {
@@ -147,6 +147,7 @@ function IdeasNavBar({ view, setView, session, onLogout }) {
   // far their own score sits from the group's). Jury only gets "Rate
   // ideas"; the Leaderboard view now lives in the admin panel instead.
   if (session.role === "jury") items.push({ id: "jury", label: "Rate ideas" });
+  if (session.role === "admin") items.push({ id: "leaderboard", label: "Leaderboard" });
 
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(251,249,246,0.95)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${BRAND.line}` }}>
@@ -560,7 +561,7 @@ function CriteriaRatingView({ idea, existingRating, onSaveRating, onBack }) {
 /* =========================================================================
    LEADER DASHBOARD — top ideas by average jury score
    ========================================================================= */
-export function LeaderboardView({ leaderboard, loading, error }) {
+export function LeaderboardView({ leaderboard, loading, error, onOpenIdea }) {
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 100px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -579,7 +580,7 @@ export function LeaderboardView({ leaderboard, loading, error }) {
       )}
 
       {leaderboard.map((r, i) => (
-        <Card key={r.id} style={{ padding: 18, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+        <Card key={r.id} onClick={() => onOpenIdea?.(r)} style={{ padding: 18, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap", cursor: onOpenIdea ? "pointer" : "default" }}>
           <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
             <div style={{
               width: 30, height: 30, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
@@ -606,6 +607,55 @@ export function LeaderboardView({ leaderboard, loading, error }) {
 }
 
 /* =========================================================================
+   IDEA RATINGS DETAIL — admin drill-down from the leaderboard: every
+   individual jury member's score + comment for one idea. This is how an
+   admin answers "what did this specific juror rate this idea" — the
+   backend enforces blind scoring everywhere else (a juror never sees
+   this), but the admin view is explicitly allowed to see every rating.
+   ========================================================================= */
+function IdeaRatingsDetailView({ idea, ratings, loading, error, onBack }) {
+  return (
+    <div style={{ maxWidth: 720, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: FONT, fontSize: 12.5, color: "#9B958F", background: "none", border: "none", cursor: "pointer", marginBottom: 18 }}>
+        <ChevronLeft size={14} /> Leaderboard
+      </button>
+
+      <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{idea.question?.module} · {idea.question?.submodule}</div>
+      <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 21, color: BRAND.ink, marginTop: 4 }}>{idea.title}</div>
+      <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 6 }}>Submitted by {idea.submitted_by_name}</div>
+
+      {loading && <Spinner label="Loading ratings…" />}
+      <ErrorBanner text={error} />
+
+      {!loading && !error && ratings.length === 0 && (
+        <EmptyState icon={Star} title="No ratings yet" text="No jury member has rated this idea yet." />
+      )}
+
+      <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+        {ratings.map((r) => (
+          <Card key={r.id} style={{ padding: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+              <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: BRAND.ink }}>{r.jury_name}</div>
+              <Pill tone="coral">{Number(r.score).toFixed(1)}/5</Pill>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 8, marginTop: 12 }}>
+              {CRITERIA.map((c) => (
+                <div key={c.key} style={{ textAlign: "center" }}>
+                  <div style={{ fontFamily: FONT, fontSize: 10, color: "#9B958F" }}>{c.label}</div>
+                  <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink, marginTop: 2 }}>{r.criteria_scores?.[c.key] ?? "—"}</div>
+                </div>
+              ))}
+            </div>
+            {r.comment && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A746F", marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BRAND.line}`, lineHeight: 1.5 }}>{r.comment}</div>}
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+/* =========================================================================
    MAIN — the actual Ideas.RIV app, once a session exists.
    ========================================================================= */
 function IdeasRivMain({ session, onLogout }) {
@@ -623,6 +673,12 @@ function IdeasRivMain({ session, onLogout }) {
 
   const [activeOppId, setActiveOppId] = useState(null);
   const [activeIdeaId, setActiveIdeaId] = useState(null);
+
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
+  const [activeLeaderboardIdea, setActiveLeaderboardIdea] = useState(null);
+  const [ideaRatings, setIdeaRatings] = useState([]);
+  const [loadingIdeaRatings, setLoadingIdeaRatings] = useState(false);
 
   const activeOpp = opportunities.find((o) => o.id === activeOppId) || null;
   const activeIdea = ideas.find((i) => i.id === activeIdeaId) || null;
@@ -663,10 +719,31 @@ function IdeasRivMain({ session, onLogout }) {
     api.getMyIdeas().then((d) => setMyIdeas(d.ideas || [])).catch((e) => setError(e.message));
   }, [session, view]);
 
+  // Leaderboard (admin only — aggregate scores are never shown to jury,
+  // see the blind-scoring note on the backend route)
+  useEffect(() => {
+    if (session.role !== "admin" || view !== "leaderboard") return;
+    setLoadingLeaderboard(true);
+    api.getLeaderboard()
+      .then((d) => setLeaderboard(d.leaderboard || []))
+      .catch((e) => setError(e.message))
+      .finally(() => setLoadingLeaderboard(false));
+  }, [session, view]);
+
   function handleSaveRating(rating) {
     setMyRatings((m) => ({ ...m, [rating.idea_id]: rating }));
     setActiveIdeaId(null);
     refreshIdeas();
+  }
+
+  function openLeaderboardIdea(idea) {
+    setActiveLeaderboardIdea(idea);
+    setLoadingIdeaRatings(true);
+    setIdeaRatings([]);
+    api.getIdeaRatings(idea.id)
+      .then((d) => setIdeaRatings(d.ratings || []))
+      .catch((e) => setError(e.message))
+      .finally(() => setLoadingIdeaRatings(false));
   }
 
   return (
@@ -708,6 +785,17 @@ function IdeasRivMain({ session, onLogout }) {
           <JuryListView
             opportunities={opportunities} ideas={ideas} myRatings={myRatings}
             loading={loadingIdeas} error={error} onOpenIdea={(idea) => setActiveIdeaId(idea.id)}
+          />
+        )}
+
+        {view === "leaderboard" && session.role === "admin" && !activeLeaderboardIdea && (
+          <LeaderboardView leaderboard={leaderboard} loading={loadingLeaderboard} error={error} onOpenIdea={openLeaderboardIdea} />
+        )}
+
+        {view === "leaderboard" && session.role === "admin" && activeLeaderboardIdea && (
+          <IdeaRatingsDetailView
+            idea={activeLeaderboardIdea} ratings={ideaRatings} loading={loadingIdeaRatings} error={error}
+            onBack={() => setActiveLeaderboardIdea(null)}
           />
         )}
 
