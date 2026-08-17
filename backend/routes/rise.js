@@ -1,7 +1,6 @@
 import { Router } from "express";
-import bcrypt from "bcryptjs";
 import pool from "../db.js";
-import { requireAuth, requireRole, signToken } from "../middleware/auth.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
 import { CRITERIA, clamp1to5, averageScore } from "../lib/riseScoring.js";
 
 const router = Router();
@@ -79,37 +78,10 @@ router.post("/apply", async (req, res, next) => {
   }
 });
 
-// POST /api/rise/jury/signup — self-serve jury sign-up (per the original
-// spec: "Jury signs up", unlike the main site's admin-issued client
-// accounts). Creates a 'rise_jury' user and logs them straight in.
-router.post("/jury/signup", async (req, res, next) => {
-  try {
-    const { name, email, password, company } = req.body || {};
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: "Name, email, and password are required." });
-    }
-    if (String(password).length < 8) {
-      return res.status(400).json({ error: "Password must be at least 8 characters." });
-    }
-    const normalizedEmail = String(email).toLowerCase().trim();
-
-    const { rows: existing } = await pool.query("SELECT id FROM users WHERE email = $1", [normalizedEmail]);
-    if (existing.length) return res.status(409).json({ error: "An account with that email already exists — try logging in instead." });
-
-    const password_hash = bcrypt.hashSync(password, 10);
-    const { rows } = await pool.query(
-      `INSERT INTO users (email, password_hash, name, role, company)
-       VALUES ($1,$2,$3,'rise_jury',$4)
-       RETURNING id, email, name, role, company`,
-      [normalizedEmail, password_hash, String(name).trim(), company || null]
-    );
-    const user = rows[0];
-    const token = signToken(user);
-    res.status(201).json({ token, user });
-  } catch (err) {
-    next(err);
-  }
-});
+// POST /api/rise/jury/signup — REMOVED. RIOS's rule is that every account
+// is issued top-down (admin issues client; admin issues Rise.RIV jury via
+// POST /api/admin/rise/jury below) — no role self-registers. A juror logs
+// in with admin-issued credentials at the existing /api/auth/login below.
 
 /* =========================================================================
    JURY — authenticated as 'rise_jury' (admins can also access, to spot-
