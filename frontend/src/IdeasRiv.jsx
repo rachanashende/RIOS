@@ -167,7 +167,9 @@ function IdeasNavBar({ view, setView, session, onLogout }) {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: BRAND.ink }}>{session.name}</div>
-            <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#9B958F" }}>{session.role === "jury" ? "Leader · Jury member" : "Junior Employee"}</div>
+            <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#9B958F" }}>
+              {session.role === "jury" ? "Leader · Jury member" : session.role === "admin" ? "Admin" : "Junior Employee"}
+            </div>
           </div>
           <button onClick={onLogout} title="Log out" style={{
             display: "flex", alignItems: "center", gap: 6, fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
