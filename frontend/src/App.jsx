@@ -48,10 +48,11 @@ function Logo() {
 
 function NavBar({ view, setView, user, onLogout }) {
   const [open, setOpen] = useState(false);
-  const publicItems = [{ id: "home", label: "Overview" }, { id: "ideas-riv", label: "Ideas.RIV" }, { id: "rise-riv", label: "Rise.RIV" }];
+  const publicItems = [{ id: "home", label: "Overview" }];
+  const loggedInItems = [{ id: "ideas-riv", label: "Ideas.RIV" }, { id: "rise-riv", label: "Rise.RIV" }];
   const clientItems = [{ id: "assess", label: "Discover Assessment" }, { id: "dashboard", label: "My Scorecard" }];
   const adminItems = [{ id: "admin", label: "Manage Clients" }];
-  const items = [...publicItems, ...(user?.role === "client" ? clientItems : []), ...(user?.role === "admin" ? adminItems : [])];
+  const items = [...publicItems, ...(user ? loggedInItems : []), ...(user?.role === "client" ? clientItems : []), ...(user?.role === "admin" ? adminItems : [])];
 
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(251,249,246,0.92)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${BRAND.line}` }}>
@@ -127,7 +128,6 @@ function Hero({ setView, stats }) {
         <p style={{ fontFamily: "'Newsreader',Georgia,serif", fontStyle: "italic", fontSize: "clamp(17px,1.9vw,21px)", color: "#D8D3CF", maxWidth: 620, marginTop: 22, lineHeight: 1.55 }}>An evidence-based diagnostic across 19 operating modules and 165 questions — scored, ranked, and turned into the five opportunities worth acting on first.</p>
         <div style={{ display: "flex", gap: 14, marginTop: 38, flexWrap: "wrap" }}>
           <button onClick={() => setView("login")} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14.5, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 10, padding: "14px 22px", cursor: "pointer" }}>Log in to your scorecard <ArrowRight size={16} /></button>
-          <button onClick={() => document.getElementById("pricing-section")?.scrollIntoView({ behavior: "smooth" })} style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14.5, background: "transparent", color: "#fff", border: "1px solid #4a4442", borderRadius: 10, padding: "14px 22px", cursor: "pointer" }}>See Discover / Accelerate / Transform</button>
         </div>
         <div style={{ display: "flex", gap: 40, marginTop: 64, flexWrap: "wrap" }}>
           {stats.map((s) => (
@@ -1050,7 +1050,7 @@ export default function RiosApp() {
         }
       `}</style>
       <NavBar view={view} setView={goToView} user={user} onLogout={handleLogout} />
-      {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip /><ModuleGrid modules={modules} questions={questions} setView={goToView} /><div id="pricing-section"><PricingView /></div></>)}
+      {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip /></>)}
       {view === "login" && <LoginView onLogin={handleLogin} setView={goToView} />}
       {view === "signup" && <SignupView onSignup={handleSignup} setView={goToView} />}
       {view === "ideas-riv" && <IdeasRivApp />}
@@ -1063,8 +1063,7 @@ export default function RiosApp() {
         <DashboardView questions={questions} modules={modules} responses={responses} setView={goToView} user={user} viewingClient={viewingClient} />
       )}
       <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#B7B2AE", display: (view === "ideas-riv" || view === "rise-riv") ? "none" : "block" }}>
-        <div>RIoS Discover — prototype build. Retail Innovation Ventures, Dubai · full-stack demo, not production-hardened.</div>
-        <div style={{ marginTop: 6 }}>Questions? Write to us at contact@retailinnovation</div>
+        <div>Questions? Write to us at <a href="mailto:contact@retailinnovation" style={{ color: BRAND.coralDark }}>contact@retailinnovation</a></div>
       </div>
     </div>
   );
