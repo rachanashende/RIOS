@@ -513,7 +513,7 @@ export default function RiseRivApp() {
   }
 
   return (
-    <div style={{ fontFamily: FONT, background: BRAND.cream, minHeight: "100%" }}>
+    <div style={{ fontFamily: FONT, background: BRAND.cream, minHeight: "100vh" }}>
       <style>{`
         .rise-spin { animation: rise-spin 0.8s linear infinite; }
         @keyframes rise-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
