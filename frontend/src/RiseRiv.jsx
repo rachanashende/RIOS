@@ -127,6 +127,13 @@ function RiseNavBar({ view, setView, session, onLogout }) {
             <Rocket size={18} color={BRAND.coral} /> Rise.RIV
           </div>
           <div style={{ display: "flex", gap: 4 }}>
+            {/* Real link (full navigation) back to the main site's Overview
+                page — this module no longer renders inside the main site's
+                own header, so this is the only way back to it. */}
+            <a href="/" style={{
+              fontFamily: FONT, fontSize: 13.5, fontWeight: 500, padding: "8px 14px", borderRadius: 999,
+              textDecoration: "none", color: BRAND.ink, display: "inline-block",
+            }}>Overview</a>
             {items.map((it) => (
               <button key={it.id} onClick={() => setView(it.id)} style={{
                 fontFamily: FONT, fontSize: 13.5, fontWeight: 500, padding: "8px 14px", borderRadius: 999,
@@ -173,11 +180,6 @@ function LandingView({ opportunity, loading, setView }) {
       ) : (
         <EmptyState icon={ClipboardList} title="Applications aren't open right now" text="Check back soon, or contact the Rise team directly." />
       )}
-
-      <div style={{ marginTop: 56, paddingTop: 28, borderTop: `1px solid ${BRAND.line}` }}>
-        <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginBottom: 10 }}>Reviewing applications as a jury member?</div>
-        <GhostButton onClick={() => setView("jury-login")} icon={Gavel}>Jury login</GhostButton>
-      </div>
     </div>
   );
 }

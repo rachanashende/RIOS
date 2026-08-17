@@ -1039,7 +1039,9 @@ export default function RiosApp() {
           .rios-glance-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
-      <NavBar view={view} setView={goToView} user={user} onLogout={handleLogout} />
+      {view !== "ideas-riv" && view !== "rise-riv" && (
+        <NavBar view={view} setView={goToView} user={user} onLogout={handleLogout} />
+      )}
       {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip /></>)}
       {view === "login" && <LoginView onLogin={handleLogin} setView={goToView} />}
       {view === "signup" && <SignupView onSignup={handleSignup} setView={goToView} />}
