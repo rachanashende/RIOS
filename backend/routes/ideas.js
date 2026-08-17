@@ -270,13 +270,13 @@ router.post("/:id/ratings", requireRole("jury", "admin"), async (req, res, next)
 
 /**
  * GET /api/ideas/leaderboard
- * Ideas ranked by average jury score. Admin only, per PRD §8 — aggregate
- * scores across jurors are visible to the program admin exclusively, not
- * to jury (who'd otherwise be able to infer how far their own score sits
- * from the group's — the same anchoring risk blind scoring exists to
- * prevent) and not to junior_employee/applicants.
+ * Ideas ranked by average jury score. Originally admin-only (see git log)
+ * to protect blind scoring -- a juror seeing the aggregate could infer how
+ * far their own score sits from the group's. That restriction has since
+ * been explicitly reversed: jury now gets a Leaderboard tab too. Still
+ * closed to junior_employee/applicants.
  */
-router.get("/leaderboard", requireRole("admin"), async (req, res, next) => {
+router.get("/leaderboard", requireRole("admin", "jury"), async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
       SELECT i.id, i.question_id, i.title, i.description, i.created_at,

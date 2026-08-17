@@ -49,11 +49,11 @@ function Logo() {
 function NavBar({ view, setView, user, onLogout }) {
   const [open, setOpen] = useState(false);
   const publicItems = [{ id: "home", label: "Overview" }];
-  const loggedInItems = [{ id: "ideas-riv", label: "Ideas.RIV" }, { id: "rise-riv", label: "Rise.RIV" }];
+  const loggedInItems = [{ id: "ideas-riv", label: "Ideathon" }, { id: "rise-riv", label: "Startup" }];
   const clientItems = [{ id: "assess", label: "Audit" }, { id: "dashboard", label: "My Scorecard" }];
   const adminItems = [{ id: "admin", label: "Manage Clients" }];
   // Client's nav is deliberately just Overview + Audit + My Scorecard —
-  // Ideas.RIV and Rise.RIV are separate portals a client doesn't need here,
+  // Ideathon and Startup are separate portals a client doesn't need here,
   // same reasoning as admin's nav a few commits back.
   const items = [...publicItems, ...(user && user.role !== "admin" && user.role !== "client" ? loggedInItems : []), ...(user?.role === "client" ? clientItems : []), ...(user?.role === "admin" ? adminItems : [])];
 
@@ -398,7 +398,7 @@ function AdminView({ setView, setSelectedClient }) {
   );
 }
 
-/* ---------------- Admin: Rise.RIV jury + opportunity control ---------------- */
+/* ---------------- Admin: Startup team + opportunity control ---------------- */
 function RiseTeamPanel() {
   const [opportunities, setOpportunities] = useState(null);
   const [jury, setJury] = useState(null);
@@ -442,7 +442,7 @@ function RiseTeamPanel() {
 
   return (
     <div style={{ marginTop: 44 }}>
-      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>Rise.RIV team</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>Startup team</div>
       <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Control which opportunity is open for startup applications, and create jury logins to review them.</div>
 
       <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 20, background: "#fff", marginBottom: 24 }}>
@@ -516,7 +516,7 @@ function RiseTeamPanel() {
   );
 }
 
-/* ---------------- Admin: Ideas.RIV team + source-client control ---------------- */
+/* ---------------- Admin: Ideathon team + source-client control ---------------- */
 function IdeasTeamPanel({ clients }) {
   const [sourceClient, setSourceClient] = useState(null);
   const [selectedClientId, setSelectedClientId] = useState("");
@@ -582,13 +582,13 @@ function IdeasTeamPanel({ clients }) {
 
   return (
     <div style={{ marginTop: 44 }}>
-      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>Ideas.RIV team</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>Ideathon team</div>
       <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Choose which client's scored audit feeds the 5 opportunities, then create employee and jury logins.</div>
 
       <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 20, background: "#fff", marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}><Compass size={15} /> Opportunity source</div>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F", marginBottom: 12 }}>
-          {sourceClient ? <>Currently sourcing from <strong style={{ color: BRAND.ink }}>{sourceClient.company || sourceClient.name}</strong>.</> : "No source client set yet — Ideas.RIV will show no opportunities until you pick one."}
+          {sourceClient ? <>Currently sourcing from <strong style={{ color: BRAND.ink }}>{sourceClient.company || sourceClient.name}</strong>.</> : "No source client set yet — Ideathon will show no opportunities until you pick one."}
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <select value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} style={{ ...inputStyle, marginTop: 0, flex: 1, minWidth: 200 }}>
