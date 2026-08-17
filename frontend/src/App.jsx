@@ -248,11 +248,6 @@ function LoginView({ onLogin, setView }) {
     } finally { setLoading(false); }
   }
 
-  function fillDemo(role) {
-    if (role === "admin") { setEmail("admin@rios.demo"); setPassword("admin123"); }
-    else { setEmail("client@demo.retailer"); setPassword("client123"); }
-  }
-
   return (
     <div style={{ maxWidth: 420, margin: "70px auto", padding: "0 24px" }}>
       <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 32, background: "#fff" }}>
@@ -270,13 +265,6 @@ function LoginView({ onLogin, setView }) {
             border: "none", borderRadius: 9, padding: "12px 0", cursor: loading ? "default" : "pointer", opacity: loading ? 0.7 : 1,
           }}>{loading && <Loader2 size={14} className="rios-spin" />} Log in</button>
         </form>
-        <div style={{ marginTop: 22, borderTop: `1px solid ${BRAND.line}`, paddingTop: 18 }}>
-          <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F", marginBottom: 8 }}>Seeded demo accounts:</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" onClick={() => fillDemo("admin")} style={demoBtnStyle}>Fill admin</button>
-            <button type="button" onClick={() => fillDemo("client")} style={demoBtnStyle}>Fill client</button>
-          </div>
-        </div>
       </div>
     </div>
   );
