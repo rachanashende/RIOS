@@ -5,7 +5,7 @@ import {
   ChevronLeft, Loader2, Compass, Trophy,
   ClipboardList, Star, AlertCircle,
 } from "lucide-react";
-import { api } from "./api.js";
+import { api, getStoredIdeasUser, setIdeasSession, clearIdeasSession } from "./api.js";
 import { BRAND } from "./brand.js";
 
 const FONT = "'Poppins',sans-serif";
@@ -606,9 +606,9 @@ export function LeaderboardView({ leaderboard, loading, error }) {
 }
 
 /* =========================================================================
-   ROOT
+   MAIN — the actual Ideas.RIV app, once a session exists.
    ========================================================================= */
-export default function IdeasRivApp({ session, onLogout }) {
+function IdeasRivMain({ session, onLogout }) {
   const [view, setView] = useState(session.role === "jury" ? "jury" : "landing");
 
   const [opportunities, setOpportunities] = useState([]);
@@ -731,4 +731,81 @@ export default function IdeasRivApp({ session, onLogout }) {
       </div>
     </div>
   );
+}
+
+/* =========================================================================
+   LOGIN — Ideas.RIV accounts (junior_employee / jury) are admin-created
+   only, same rule as everywhere else in RIOS: no self-signup. A user logs
+   in with credentials an admin already gave them.
+   ========================================================================= */
+function IdeasLoginView({ onAuthed }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function submit(e) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const { token, user } = await api.ideasLogin(email, password);
+      if (!["junior_employee", "jury", "admin"].includes(user.role)) {
+        throw new Error("This login isn't set up for Ideas.RIV.");
+      }
+      onAuthed(token, user);
+    } catch (e) {
+      setError(e.message || "Couldn't log in.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div style={{ fontFamily: FONT, background: BRAND.cream, minHeight: "100vh" }}>
+      <div style={{ maxWidth: 400, margin: "0 auto", padding: "80px 24px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontWeight: 700, fontSize: 16, color: BRAND.ink, marginBottom: 24 }}>
+          <Lightbulb size={19} color={BRAND.coral} /> Ideas.RIV
+        </div>
+        <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 28, background: "#fff" }}>
+          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: BRAND.ink, marginBottom: 4 }}>Log in</div>
+          <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginBottom: 22 }}>Employee and jury logins are issued by an RIV admin.</div>
+          <form onSubmit={submit}>
+            <label style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: BRAND.ink }}>Email</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required autoFocus style={{ width: "100%", marginTop: 6, fontFamily: FONT, fontSize: 13.5, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: "10px 12px", boxSizing: "border-box", background: BRAND.cream, color: BRAND.ink }} />
+            <label style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: BRAND.ink, marginTop: 14, display: "block" }}>Password</label>
+            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required style={{ width: "100%", marginTop: 6, fontFamily: FONT, fontSize: 13.5, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: "10px 12px", boxSizing: "border-box", background: BRAND.cream, color: BRAND.ink }} />
+            {error && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#D33639", marginTop: 12 }}>{error}</div>}
+            <button type="submit" disabled={submitting} style={{
+              width: "100%", marginTop: 20, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              fontFamily: FONT, fontWeight: 600, fontSize: 14, background: BRAND.coral, color: "#fff",
+              border: "none", borderRadius: 9, padding: "12px 0", cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.7 : 1,
+            }}>{submitting && <Loader2 size={14} className="spin" />} Log in</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   ROOT — owns the Ideas.RIV session (separate from the main site's and
+   from Rise.RIV's), same isolated-token pattern as RiseRivApp. This is
+   what App.jsx actually mounts with no props (<IdeasRivApp />), so all
+   login/logout state has to live in here, not be passed in from outside.
+   ========================================================================= */
+export default function IdeasRivApp() {
+  const [session, setSession] = useState(getStoredIdeasUser());
+
+  function handleAuthed(token, user) {
+    setIdeasSession(token, user);
+    setSession(user);
+  }
+  function handleLogout() {
+    clearIdeasSession();
+    setSession(null);
+  }
+
+  if (!session) return <IdeasLoginView onAuthed={handleAuthed} />;
+  return <IdeasRivMain session={session} onLogout={handleLogout} />;
 }
