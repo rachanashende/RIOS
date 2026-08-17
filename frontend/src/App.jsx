@@ -52,7 +52,9 @@ function NavBar({ view, setView, user, onLogout }) {
   const loggedInItems = [{ id: "ideas-riv", label: "Ideas.RIV" }, { id: "rise-riv", label: "Rise.RIV" }];
   const clientItems = [{ id: "assess", label: "Discover Assessment" }, { id: "dashboard", label: "My Scorecard" }];
   const adminItems = [{ id: "admin", label: "Manage Clients" }];
-  const items = [...publicItems, ...(user ? loggedInItems : []), ...(user?.role === "client" ? clientItems : []), ...(user?.role === "admin" ? adminItems : [])];
+  // Admin's nav is deliberately just Overview + Manage Clients — Ideas.RIV
+  // and Rise.RIV are separate modules admin doesn't need in the main nav.
+  const items = [...publicItems, ...(user && user.role !== "admin" ? loggedInItems : []), ...(user?.role === "client" ? clientItems : []), ...(user?.role === "admin" ? adminItems : [])];
 
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(251,249,246,0.92)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${BRAND.line}` }}>
