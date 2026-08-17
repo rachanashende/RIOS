@@ -149,18 +149,24 @@ function IdeasNavBar({ view, setView, session, onLogout }) {
   if (session.role === "jury") items.push({ id: "jury", label: "Rate ideas" });
   if (session.role === "admin") items.push({ id: "leaderboard", label: "Leaderboard" });
 
+  const navBtnStyle = (active) => ({
+    fontFamily: FONT, fontSize: 13.5, fontWeight: 500, padding: "8px 14px", borderRadius: 999,
+    border: "none", cursor: "pointer", background: active ? BRAND.ink : "transparent",
+    color: active ? "#fff" : BRAND.ink, transition: "all .15s", textDecoration: "none", display: "inline-block",
+  });
+
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(251,249,246,0.95)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${BRAND.line}` }}>
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 30, flexWrap: "wrap" }}>
           <img src="/riv-logo-full.png" alt="Retail Innovation Ventures" style={{ height: 36, width: "auto", objectFit: "contain" }} />
           <div style={{ display: "flex", gap: 4 }}>
+            {/* Real link (full navigation) back to the main site's Overview
+                page — this module no longer renders inside the main site's
+                own header, so this is the only way back to it. */}
+            <a href="/" style={navBtnStyle(false)}>Overview</a>
             {items.map((it) => (
-              <button key={it.id} onClick={() => setView(it.id)} style={{
-                fontFamily: FONT, fontSize: 13.5, fontWeight: 500, padding: "8px 14px", borderRadius: 999,
-                border: "none", cursor: "pointer", background: view === it.id ? BRAND.ink : "transparent",
-                color: view === it.id ? "#fff" : BRAND.ink, transition: "all .15s",
-              }}>{it.label}</button>
+              <button key={it.id} onClick={() => setView(it.id)} style={navBtnStyle(view === it.id)}>{it.label}</button>
             ))}
           </div>
         </div>
@@ -814,10 +820,6 @@ function IdeasRivMain({ session, onLogout }) {
             </div>
           </div>
         )}
-      </div>
-
-      <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: FONT, fontSize: 12, color: "#B7B2AE" }}>
-        Questions? Write to <a href="mailto:contact@retailinnovation.ventures" style={{ color: BRAND.coralDark }}>contact@retailinnovation.ventures</a>.
       </div>
     </div>
   );
