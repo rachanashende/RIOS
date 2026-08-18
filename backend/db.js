@@ -62,12 +62,57 @@ export async function initSchema() {
   // that UPDATE can the constraint be tightened to drop "employee" for
   // good (tightening first would fail validation against rows that still
   // say "employee"). All three steps are safe to repeat every boot.
+  //
+  // Both ALTERs read the *current* constraint's actual allowed values
+  // dynamically (same technique as db.rise.js) rather than hardcoding a
+  // role list. This file previously hardcoded
+  // ('admin','client','employee','junior_employee','jury') here, which
+  // silently dropped 'rise_jury' the moment that role started existing --
+  // every boot re-ran this migration, so it crashed every deploy from
+  // then on with "check constraint users_role_check ... is violated by
+  // some row". Never hardcode this list; always read it from whatever's
+  // actually live.
   await pool.query(`
     DO $$
     DECLARE
       cname text;
+      cdef text;
+      vals text;
     BEGIN
-      SELECT con.conname INTO cname
+      SELECT con.conname, pg_get_constraintdef(con.oid) INTO cname, cdef
+      FROM pg_constraint con
+      JOIN pg_class rel ON rel.oid = con.conrelid
+      WHERE rel.relname = 'users'
+        AND con.contype = 'c'
+        AND pg_get_constraintdef(con.oid) ILIKE '%role%';
+
+      IF cname IS NOT NULL THEN
+        SELECT string_agg(DISTINCT quote_literal(m[1]), ',') INTO vals
+        FROM regexp_matches(cdef, '''([a-zA-Z_]+)''::text', 'g') AS m;
+        EXECUTE format('ALTER TABLE users DROP CONSTRAINT %I', cname);
+      END IF;
+
+      -- Union in 'employee', 'junior_employee', and 'jury' explicitly (the
+      -- initial CREATE TABLE above only allows 'admin'/'client', so a
+      -- brand-new database needs these added), on top of whatever other
+      -- roles (rise_jury, ...) a previous migration may have already added.
+      vals := coalesce(vals, quote_literal('admin') || ',' || quote_literal('client'));
+      IF vals NOT ILIKE '%''employee''%' THEN vals := vals || ',' || quote_literal('employee'); END IF;
+      IF vals NOT ILIKE '%''junior_employee''%' THEN vals := vals || ',' || quote_literal('junior_employee'); END IF;
+      IF vals NOT ILIKE '%''jury''%' THEN vals := vals || ',' || quote_literal('jury'); END IF;
+
+      EXECUTE format('ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN (%s))', vals);
+    END $$;
+  `);
+  await pool.query(`UPDATE users SET role = 'junior_employee' WHERE role = 'employee';`);
+  await pool.query(`
+    DO $$
+    DECLARE
+      cname text;
+      cdef text;
+      vals text;
+    BEGIN
+      SELECT con.conname, pg_get_constraintdef(con.oid) INTO cname, cdef
       FROM pg_constraint con
       JOIN pg_class rel ON rel.oid = con.conrelid
       WHERE rel.relname = 'users'
@@ -78,17 +123,14 @@ export async function initSchema() {
         EXECUTE format('ALTER TABLE users DROP CONSTRAINT %I', cname);
       END IF;
 
-      ALTER TABLE users ADD CONSTRAINT users_role_check
-        CHECK (role IN ('admin','client','employee','junior_employee','jury'));
-    END $$;
-  `);
-  await pool.query(`UPDATE users SET role = 'junior_employee' WHERE role = 'employee';`);
-  await pool.query(`
-    DO $$
-    BEGIN
-      ALTER TABLE users DROP CONSTRAINT users_role_check;
-      ALTER TABLE users ADD CONSTRAINT users_role_check
-        CHECK (role IN ('admin','client','junior_employee','jury'));
+      -- Drop 'employee' from the allowed list now that no row uses it
+      -- (the UPDATE above just moved them all to 'junior_employee'), but
+      -- keep every other role that's currently allowed, whatever it is.
+      SELECT string_agg(DISTINCT quote_literal(m[1]), ',') INTO vals
+      FROM regexp_matches(cdef, '''([a-zA-Z_]+)''::text', 'g') AS m
+      WHERE m[1] <> 'employee';
+
+      EXECUTE format('ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN (%s))', vals);
     END $$;
   `);
 
