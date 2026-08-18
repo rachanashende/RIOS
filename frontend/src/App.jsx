@@ -968,7 +968,20 @@ const exportBtnStyle = { display: "flex", alignItems: "center", gap: 6, fontFami
 
 /* =========================== ROOT =========================== */
 export default function RiosApp() {
-  const [view, setView] = useState("home");
+  const [view, setView] = useState(() => {
+    // #ideathon and #startup are real, bookmarkable URLs into those
+    // modules -- hash-based so they never depend on the static host
+    // rewriting arbitrary paths to index.html (a plain path like
+    // /ideathon would 404 on most static hosts without that config).
+    // Each module manages its own persisted login (localStorage), so
+    // landing here directly skips both the main site's home page and a
+    // repeat login screen for anyone already signed into that module.
+    if (typeof window !== "undefined") {
+      if (window.location.hash === "#ideathon") return "ideas-riv";
+      if (window.location.hash === "#startup") return "rise-riv";
+    }
+    return "home";
+  });
   const [user, setUser] = useState(getStoredUser());
   const [questions, setQuestions] = useState([]);
   const [modules, setModules] = useState([]);
