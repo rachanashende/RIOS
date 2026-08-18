@@ -49,13 +49,17 @@ function Logo() {
 function NavBar({ view, setView, user, onLogout }) {
   const [open, setOpen] = useState(false);
   const publicItems = [{ id: "home", label: "Overview" }];
-  const loggedInItems = [{ id: "ideas-riv", label: "Ideathon" }, { id: "rise-riv", label: "Startup" }];
   const clientItems = [{ id: "assess", label: "Audit" }, { id: "dashboard", label: "My Scorecard" }];
   const adminItems = [{ id: "admin", label: "Manage Clients" }];
-  // Client's nav is deliberately just Overview + Audit + My Scorecard —
-  // Ideathon and Startup are separate portals a client doesn't need here,
-  // same reasoning as admin's nav a few commits back.
-  const items = [...publicItems, ...(user && user.role !== "admin" && user.role !== "client" ? loggedInItems : []), ...(user?.role === "client" ? clientItems : []), ...(user?.role === "admin" ? adminItems : [])];
+  // Ideathon and Startup are never shown in this shared nav, for any
+  // role. They're separate, self-contained modules reached only via
+  // their own #ideathon / #startup bookmark links, which land straight
+  // in that module's own login (or straight past it, if already signed
+  // in there). Excluding only admin/client here used to still leak both
+  // tabs to jury/employee/rise_jury if they logged in through this
+  // shared form instead of a module's own -- the login endpoint doesn't
+  // restrict by role, so that was always possible by accident.
+  const items = [...publicItems, ...(user?.role === "client" ? clientItems : []), ...(user?.role === "admin" ? adminItems : [])];
 
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(251,249,246,0.92)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${BRAND.line}` }}>
