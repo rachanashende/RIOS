@@ -159,9 +159,6 @@ function IdeasNavBar({ view, setView, session, onLogout }) {
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 30, flexWrap: "wrap" }}>
           <img src="/riv-logo-full.png" alt="Retail Innovation Ventures" style={{ height: 36, width: "auto", objectFit: "contain" }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink }}>
-            <Lightbulb size={18} color={BRAND.coral} /> Ideathon
-          </div>
           <div style={{ display: "flex", gap: 4 }}>
             {/* Real link (full navigation) back to the main site's Overview
                 page — this module no longer renders inside the main site's
@@ -648,7 +645,7 @@ function IdeaRatingsDetailView({ idea, ratings, loading, error, onBack }) {
               <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: BRAND.ink }}>{r.jury_name}</div>
               <Pill tone="coral">{Number(r.score).toFixed(1)}/5</Pill>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 8, marginTop: 12 }}>
+            <div className="rios-criteria-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 8, marginTop: 12 }}>
               {CRITERIA.map((c) => (
                 <div key={c.key} style={{ textAlign: "center" }}>
                   <div style={{ fontFamily: FONT, fontSize: 10, color: "#9B958F" }}>{c.label}</div>
@@ -766,6 +763,9 @@ function IdeasRivMain({ session, onLogout }) {
         .spin { animation: spin 0.8s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+        @media (max-width: 640px) {
+          .rios-criteria-grid { grid-template-columns: repeat(2,1fr) !important; }
+        }
       `}</style>
 
       <IdeasNavBar view={view} setView={setView} session={session} onLogout={onLogout} />
