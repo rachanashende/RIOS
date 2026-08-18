@@ -973,16 +973,24 @@ const exportBtnStyle = { display: "flex", alignItems: "center", gap: 6, fontFami
 /* =========================== ROOT =========================== */
 export default function RiosApp() {
   const [view, setView] = useState(() => {
-    // #ideathon and #startup are real, bookmarkable URLs into those
-    // modules -- hash-based so they never depend on the static host
-    // rewriting arbitrary paths to index.html (a plain path like
-    // /ideathon would 404 on most static hosts without that config).
+    // Clean, bookmarkable paths into each module -- e.g.
+    // rios.retailinnovation.ai/employee or /jury both land on Ideathon's
+    // own login (role is decided by which account logs in, not by which
+    // of these two paths was used to get there; both are just friendly
+    // aliases for the same entry point). /startup is reserved for the
+    // Startup module once it gets its own separate login.
+    //
+    // This only works because frontend/public/_redirects tells the static
+    // host to serve index.html for every path instead of 404ing -- without
+    // that file, any path other than "/" 404s before this code ever runs.
+    //
     // Each module manages its own persisted login (localStorage), so
     // landing here directly skips both the main site's home page and a
     // repeat login screen for anyone already signed into that module.
     if (typeof window !== "undefined") {
-      if (window.location.hash === "#ideathon") return "ideas-riv";
-      if (window.location.hash === "#startup") return "rise-riv";
+      const path = window.location.pathname.replace(/\/+$/, ""); // strip trailing slash
+      if (["/employee", "/jury", "/ideathon"].includes(path)) return "ideas-riv";
+      if (["/startup"].includes(path)) return "rise-riv";
     }
     return "home";
   });
