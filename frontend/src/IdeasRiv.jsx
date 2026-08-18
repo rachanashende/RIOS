@@ -5,7 +5,7 @@ import {
   ChevronLeft, Loader2, Compass, Trophy,
   ClipboardList, Star, AlertCircle,
 } from "lucide-react";
-import { api } from "./api.js";
+import { api, getStoredIdeasUser, setIdeasSession, clearIdeasSession } from "./api.js";
 import { BRAND } from "./brand.js";
 
 const FONT = "'Poppins',sans-serif";
@@ -78,8 +78,8 @@ function GhostButton({ children, onClick, style, icon: Icon }) {
   );
 }
 
-function Card({ children, style }) {
-  return <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 14, background: "#fff", ...style }}>{children}</div>;
+function Card({ children, style, onClick }) {
+  return <div onClick={onClick} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 14, background: "#fff", ...style }}>{children}</div>;
 }
 
 function EmptyState({ icon: Icon, title, text }) {
@@ -142,11 +142,17 @@ function StarPicker({ value, onChange, size = 22 }) {
 function IdeasNavBar({ view, setView, session, onLogout }) {
   const items = [{ id: "landing", label: "Opportunities" }];
   if (session.role === "junior_employee") items.push({ id: "my-ideas", label: "My submissions" });
-  // Per PRD §8: aggregate scores across jurors are admin-only, not visible
-  // to jury (blind scoring — a juror seeing the aggregate could infer how
-  // far their own score sits from the group's). Jury only gets "Rate
-  // ideas"; the Leaderboard view now lives in the admin panel instead.
-  if (session.role === "jury") items.push({ id: "jury", label: "Rate ideas" });
+  // Blind-scoring restriction (jury couldn't see the leaderboard, to avoid
+  // anchoring on the group's average) has been explicitly reversed: jury
+  // now gets both Rate ideas and Leaderboard.
+  if (session.role === "jury") items.push({ id: "jury", label: "Rate ideas" }, { id: "leaderboard", label: "Leaderboard" });
+  if (session.role === "admin") items.push({ id: "leaderboard", label: "Leaderboard" });
+
+  const navBtnStyle = (active) => ({
+    fontFamily: FONT, fontSize: 13.5, fontWeight: 500, padding: "8px 14px", borderRadius: 999,
+    border: "none", cursor: "pointer", background: active ? BRAND.ink : "transparent",
+    color: active ? "#fff" : BRAND.ink, transition: "all .15s", textDecoration: "none", display: "inline-block",
+  });
 
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(251,249,246,0.95)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${BRAND.line}` }}>
@@ -154,19 +160,21 @@ function IdeasNavBar({ view, setView, session, onLogout }) {
         <div style={{ display: "flex", alignItems: "center", gap: 30, flexWrap: "wrap" }}>
           <img src="/riv-logo-full.png" alt="Retail Innovation Ventures" style={{ height: 36, width: "auto", objectFit: "contain" }} />
           <div style={{ display: "flex", gap: 4 }}>
+            {/* Real link (full navigation) back to the main site's Overview
+                page — this module no longer renders inside the main site's
+                own header, so this is the only way back to it. */}
+            <a href="/" style={navBtnStyle(false)}>Overview</a>
             {items.map((it) => (
-              <button key={it.id} onClick={() => setView(it.id)} style={{
-                fontFamily: FONT, fontSize: 13.5, fontWeight: 500, padding: "8px 14px", borderRadius: 999,
-                border: "none", cursor: "pointer", background: view === it.id ? BRAND.ink : "transparent",
-                color: view === it.id ? "#fff" : BRAND.ink, transition: "all .15s",
-              }}>{it.label}</button>
+              <button key={it.id} onClick={() => setView(it.id)} style={navBtnStyle(view === it.id)}>{it.label}</button>
             ))}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: BRAND.ink }}>{session.name}</div>
-            <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#9B958F" }}>{session.role === "jury" ? "Leader · Jury member" : "Junior Employee"}</div>
+            <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#9B958F" }}>
+              {session.role === "jury" ? "Leader · Jury member" : session.role === "admin" ? "Admin" : "Junior Employee"}
+            </div>
           </div>
           <button onClick={onLogout} title="Log out" style={{
             display: "flex", alignItems: "center", gap: 6, fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
@@ -235,7 +243,7 @@ function LandingView({ session, setView, opportunities, ideas, loading, error, s
         {loading && <Spinner label="Loading opportunities…" />}
         {!loading && error && <ErrorBanner text={error} />}
         {!loading && !error && opportunities.length === 0 && (
-          <EmptyState icon={Compass} title="No source audit configured yet" text="An admin needs to pick which client's scored audit feeds Ideas.RIV before opportunities show up here." />
+          <EmptyState icon={Compass} title="No source audit configured yet" text="An admin needs to pick which client's scored audit feeds Ideathon before opportunities show up here." />
         )}
 
         {!loading && !error && opportunities.length > 0 && (
@@ -560,7 +568,7 @@ function CriteriaRatingView({ idea, existingRating, onSaveRating, onBack }) {
 /* =========================================================================
    LEADER DASHBOARD — top ideas by average jury score
    ========================================================================= */
-export function LeaderboardView({ leaderboard, loading, error }) {
+export function LeaderboardView({ leaderboard, loading, error, onOpenIdea }) {
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 100px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -579,7 +587,7 @@ export function LeaderboardView({ leaderboard, loading, error }) {
       )}
 
       {leaderboard.map((r, i) => (
-        <Card key={r.id} style={{ padding: 18, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+        <Card key={r.id} onClick={() => onOpenIdea?.(r)} style={{ padding: 18, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap", cursor: onOpenIdea ? "pointer" : "default" }}>
           <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
             <div style={{
               width: 30, height: 30, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
@@ -606,9 +614,58 @@ export function LeaderboardView({ leaderboard, loading, error }) {
 }
 
 /* =========================================================================
-   ROOT
+   IDEA RATINGS DETAIL — admin drill-down from the leaderboard: every
+   individual jury member's score + comment for one idea. This is how an
+   admin answers "what did this specific juror rate this idea" — the
+   backend enforces blind scoring everywhere else (a juror never sees
+   this), but the admin view is explicitly allowed to see every rating.
    ========================================================================= */
-export default function IdeasRivApp({ session, onLogout }) {
+function IdeaRatingsDetailView({ idea, ratings, loading, error, onBack }) {
+  return (
+    <div style={{ maxWidth: 720, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: FONT, fontSize: 12.5, color: "#9B958F", background: "none", border: "none", cursor: "pointer", marginBottom: 18 }}>
+        <ChevronLeft size={14} /> Leaderboard
+      </button>
+
+      <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{idea.question?.module} · {idea.question?.submodule}</div>
+      <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 21, color: BRAND.ink, marginTop: 4 }}>{idea.title}</div>
+      <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 6 }}>Submitted by {idea.submitted_by_name}</div>
+
+      {loading && <Spinner label="Loading ratings…" />}
+      <ErrorBanner text={error} />
+
+      {!loading && !error && ratings.length === 0 && (
+        <EmptyState icon={Star} title="No ratings yet" text="No jury member has rated this idea yet." />
+      )}
+
+      <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+        {ratings.map((r) => (
+          <Card key={r.id} style={{ padding: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+              <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: BRAND.ink }}>{r.jury_name}</div>
+              <Pill tone="coral">{Number(r.score).toFixed(1)}/5</Pill>
+            </div>
+            <div className="rios-criteria-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 8, marginTop: 12 }}>
+              {CRITERIA.map((c) => (
+                <div key={c.key} style={{ textAlign: "center" }}>
+                  <div style={{ fontFamily: FONT, fontSize: 10, color: "#9B958F" }}>{c.label}</div>
+                  <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink, marginTop: 2 }}>{r.criteria_scores?.[c.key] ?? "—"}</div>
+                </div>
+              ))}
+            </div>
+            {r.comment && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A746F", marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BRAND.line}`, lineHeight: 1.5 }}>{r.comment}</div>}
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+/* =========================================================================
+   MAIN — the actual Ideathon app, once a session exists.
+   ========================================================================= */
+function IdeasRivMain({ session, onLogout }) {
   const [view, setView] = useState(session.role === "jury" ? "jury" : "landing");
 
   const [opportunities, setOpportunities] = useState([]);
@@ -623,6 +680,12 @@ export default function IdeasRivApp({ session, onLogout }) {
 
   const [activeOppId, setActiveOppId] = useState(null);
   const [activeIdeaId, setActiveIdeaId] = useState(null);
+
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
+  const [activeLeaderboardIdea, setActiveLeaderboardIdea] = useState(null);
+  const [ideaRatings, setIdeaRatings] = useState([]);
+  const [loadingIdeaRatings, setLoadingIdeaRatings] = useState(false);
 
   const activeOpp = opportunities.find((o) => o.id === activeOppId) || null;
   const activeIdea = ideas.find((i) => i.id === activeIdeaId) || null;
@@ -663,10 +726,31 @@ export default function IdeasRivApp({ session, onLogout }) {
     api.getMyIdeas().then((d) => setMyIdeas(d.ideas || [])).catch((e) => setError(e.message));
   }, [session, view]);
 
+  // Leaderboard — now shown to both admin and jury (blind-scoring
+  // restriction explicitly reversed; see IdeasNavBar and the backend route).
+  useEffect(() => {
+    if ((session.role !== "admin" && session.role !== "jury") || view !== "leaderboard") return;
+    setLoadingLeaderboard(true);
+    api.getLeaderboard()
+      .then((d) => setLeaderboard(d.leaderboard || []))
+      .catch((e) => setError(e.message))
+      .finally(() => setLoadingLeaderboard(false));
+  }, [session, view]);
+
   function handleSaveRating(rating) {
     setMyRatings((m) => ({ ...m, [rating.idea_id]: rating }));
     setActiveIdeaId(null);
     refreshIdeas();
+  }
+
+  function openLeaderboardIdea(idea) {
+    setActiveLeaderboardIdea(idea);
+    setLoadingIdeaRatings(true);
+    setIdeaRatings([]);
+    api.getIdeaRatings(idea.id)
+      .then((d) => setIdeaRatings(d.ratings || []))
+      .catch((e) => setError(e.message))
+      .finally(() => setLoadingIdeaRatings(false));
   }
 
   return (
@@ -679,6 +763,9 @@ export default function IdeasRivApp({ session, onLogout }) {
         .spin { animation: spin 0.8s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+        @media (max-width: 640px) {
+          .rios-criteria-grid { grid-template-columns: repeat(2,1fr) !important; }
+        }
       `}</style>
 
       <IdeasNavBar view={view} setView={setView} session={session} onLogout={onLogout} />
@@ -711,6 +798,20 @@ export default function IdeasRivApp({ session, onLogout }) {
           />
         )}
 
+        {view === "leaderboard" && (session.role === "admin" || session.role === "jury") && !activeLeaderboardIdea && (
+          <LeaderboardView
+            leaderboard={leaderboard} loading={loadingLeaderboard} error={error}
+            onOpenIdea={session.role === "admin" ? openLeaderboardIdea : undefined}
+          />
+        )}
+
+        {view === "leaderboard" && session.role === "admin" && activeLeaderboardIdea && (
+          <IdeaRatingsDetailView
+            idea={activeLeaderboardIdea} ratings={ideaRatings} loading={loadingIdeaRatings} error={error}
+            onBack={() => setActiveLeaderboardIdea(null)}
+          />
+        )}
+
         {/* Rating overlay */}
         {activeIdeaId && activeIdea && session.role === "jury" && view === "jury" && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(39,37,37,0.5)", zIndex: 60, overflowY: "auto" }}>
@@ -725,10 +826,83 @@ export default function IdeasRivApp({ session, onLogout }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
 
-      <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: FONT, fontSize: 12, color: "#B7B2AE" }}>
-        Questions? Write to <a href="mailto:contact@retailinnovation.ventures" style={{ color: BRAND.coralDark }}>contact@retailinnovation.ventures</a>.
+/* =========================================================================
+   LOGIN — Ideathon accounts (junior_employee / jury) are admin-created
+   only, same rule as everywhere else in RIOS: no self-signup. A user logs
+   in with credentials an admin already gave them.
+   ========================================================================= */
+function IdeasLoginView({ onAuthed }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function submit(e) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const { token, user } = await api.ideasLogin(email, password);
+      if (!["junior_employee", "jury", "admin"].includes(user.role)) {
+        throw new Error("This login isn't set up for Ideathon.");
+      }
+      onAuthed(token, user);
+    } catch (e) {
+      setError(e.message || "Couldn't log in.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div style={{ fontFamily: FONT, background: BRAND.cream, minHeight: "100vh" }}>
+      <div style={{ maxWidth: 400, margin: "0 auto", padding: "80px 24px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontWeight: 700, fontSize: 16, color: BRAND.ink, marginBottom: 24 }}>
+          <Lightbulb size={19} color={BRAND.coral} /> Ideathon
+        </div>
+        <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 28, background: "#fff" }}>
+          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: BRAND.ink, marginBottom: 4 }}>Log in</div>
+          <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginBottom: 22 }}>Employee and jury logins are issued by an RIV admin.</div>
+          <form onSubmit={submit}>
+            <label style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: BRAND.ink }}>Email</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required autoFocus style={{ width: "100%", marginTop: 6, fontFamily: FONT, fontSize: 13.5, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: "10px 12px", boxSizing: "border-box", background: BRAND.cream, color: BRAND.ink }} />
+            <label style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: BRAND.ink, marginTop: 14, display: "block" }}>Password</label>
+            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required style={{ width: "100%", marginTop: 6, fontFamily: FONT, fontSize: 13.5, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: "10px 12px", boxSizing: "border-box", background: BRAND.cream, color: BRAND.ink }} />
+            {error && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#D33639", marginTop: 12 }}>{error}</div>}
+            <button type="submit" disabled={submitting} style={{
+              width: "100%", marginTop: 20, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              fontFamily: FONT, fontWeight: 600, fontSize: 14, background: BRAND.coral, color: "#fff",
+              border: "none", borderRadius: 9, padding: "12px 0", cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.7 : 1,
+            }}>{submitting && <Loader2 size={14} className="spin" />} Log in</button>
+          </form>
+        </div>
       </div>
     </div>
   );
+}
+
+/* =========================================================================
+   ROOT — owns the Ideathon session (separate from the main site's and
+   from the Startup module's), same isolated-token pattern as RiseRivApp. This is
+   what App.jsx actually mounts with no props (<IdeasRivApp />), so all
+   login/logout state has to live in here, not be passed in from outside.
+   ========================================================================= */
+export default function IdeasRivApp() {
+  const [session, setSession] = useState(getStoredIdeasUser());
+
+  function handleAuthed(token, user) {
+    setIdeasSession(token, user);
+    setSession(user);
+  }
+  function handleLogout() {
+    clearIdeasSession();
+    setSession(null);
+  }
+
+  if (!session) return <IdeasLoginView onAuthed={handleAuthed} />;
+  return <IdeasRivMain session={session} onLogout={handleLogout} />;
 }

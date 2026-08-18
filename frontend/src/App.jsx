@@ -12,7 +12,8 @@ import {
 import { api, getToken, getStoredUser, setSession, clearSession } from "./api.js";
 import { computeScores, tierFor, fmtMoney, computeCategoryScores } from "./scoring.js";
 import { BRAND } from "./brand.js";
-import IdeasRivApp, { LeaderboardView, CRITERIA } from "./IdeasRiv.jsx";
+import IdeasRivApp from "./IdeasRiv.jsx";
+import RiseRivApp from "./RiseRiv.jsx";
 
 const MATURITY_LABELS = [
   { v: 0, label: "No capability", desc: "Not in place, not planned" },
@@ -47,10 +48,14 @@ function Logo() {
 
 function NavBar({ view, setView, user, onLogout }) {
   const [open, setOpen] = useState(false);
-  const publicItems = [{ id: "home", label: "Home" }];
+  const publicItems = [{ id: "home", label: "Overview" }];
+  const loggedInItems = [{ id: "ideas-riv", label: "Ideathon" }, { id: "rise-riv", label: "Startup" }];
   const clientItems = [{ id: "assess", label: "Audit" }, { id: "dashboard", label: "My Scorecard" }];
   const adminItems = [{ id: "admin", label: "Manage Clients" }];
-  const items = [...publicItems, ...(user?.role === "client" ? clientItems : []), ...(user?.role === "admin" ? adminItems : [])];
+  // Client's nav is deliberately just Overview + Audit + My Scorecard —
+  // Ideathon and Startup are separate portals a client doesn't need here,
+  // same reasoning as admin's nav a few commits back.
+  const items = [...publicItems, ...(user && user.role !== "admin" && user.role !== "client" ? loggedInItems : []), ...(user?.role === "client" ? clientItems : []), ...(user?.role === "admin" ? adminItems : [])];
 
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(251,249,246,0.92)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${BRAND.line}` }}>
@@ -80,7 +85,7 @@ function NavBar({ view, setView, user, onLogout }) {
               }}><LogOut size={13} /> Log out</button>
             </>
           ) : (
-            <>
+            <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => setView("login")} style={{
                 fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: "#fff", color: BRAND.ink,
                 border: `1px solid ${BRAND.line}`, borderRadius: 9, padding: "9px 16px", cursor: "pointer",
@@ -89,7 +94,7 @@ function NavBar({ view, setView, user, onLogout }) {
                 fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff",
                 border: "none", borderRadius: 9, padding: "9px 16px", cursor: "pointer",
               }}>Sign up</button>
-            </>
+            </div>
           )}
         </div>
         <button className="rios-nav-mobile-btn" onClick={() => setOpen(!open)} style={{ display: "none", background: "none", border: "none", cursor: "pointer", color: BRAND.ink }}>{open ? <X size={22} /> : <Menu size={22} />}</button>
@@ -189,8 +194,45 @@ function ModuleGrid({ modules, questions, setView }) {
   );
 }
 
+function PricingView() {
+  const tiers = [
+    { name: "Discover", price: "$20,000", cadence: "one-time", desc: "First-time buyer, wants proof before committing.", items: ["AI & Innovation Assessment", "Top 5 Innovation Opportunities", "Curated Startup Sourcing feed", "Live readout with the founder"] },
+    { name: "Accelerate", price: "$80,000", cadence: "/ year", featured: true, desc: "Retailer ready to build an active innovation pipeline.", items: ["Everything in Discover", "Quarterly re-assessment + trend tracking", "Ideathon & Innovation Challenges", "Experiment & Business Case Validation", "Demo Day + fundraise pitch-day access"] },
+    { name: "Transform", price: "$200,000", cadence: "/ year", desc: "Retailer treating innovation as an embedded capability.", items: ["Everything in Accelerate", "Enterprise Innovation Management (Kanban)", "Open Innovation & Startup Pilots", "Hackathons & Talent Acquisition", "Innovation Portfolio & ROI rollup", "Exclusive Demo Day + Global Startup Access"] },
+  ];
+  return (
+    <div style={{ maxWidth: 1180, margin: "0 auto", padding: "64px 24px 90px" }}>
+      <div style={{ textAlign: "center", marginBottom: 44 }}>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 28, color: BRAND.ink }}>Discover what matters. Accelerate what works. Transform how you innovate.</div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 20 }}>
+        {tiers.map((t) => (
+          <div key={t.name} style={{ border: `1px solid ${t.featured ? BRAND.coral : BRAND.line}`, borderRadius: 16, padding: 28, background: t.featured ? BRAND.ink : "#fff", color: t.featured ? "#fff" : BRAND.ink, position: "relative", boxShadow: t.featured ? "0 20px 40px -20px rgba(0,0,0,0.35)" : "none" }}>
+            {t.featured && <div style={{ position: "absolute", top: -12, left: 28, background: BRAND.coral, color: "#fff", fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 999 }}>MOST COMMON PATH</div>}
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 19 }}>{t.name}</div>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: t.featured ? "#C8C3BF" : "#8a8480", marginTop: 6, minHeight: 32 }}>{t.desc}</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 18 }}>
+              <span style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 30 }}>{t.price}</span>
+              <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: t.featured ? "#C8C3BF" : "#8a8480" }}>{t.cadence}</span>
+            </div>
+            <div style={{ height: 1, background: t.featured ? "#4a4442" : BRAND.line, margin: "20px 0" }} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+              {t.items.map((it) => (
+                <div key={it} style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
+                  <CheckCircle2 size={15} color={BRAND.coral} style={{ marginTop: 2, flexShrink: 0 }} />
+                  <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, lineHeight: 1.5 }}>{it}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Login ---------------- */
-function LoginView({ onLogin }) {
+function LoginView({ onLogin, setView }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -207,16 +249,11 @@ function LoginView({ onLogin }) {
     } finally { setLoading(false); }
   }
 
-  function fillDemo(role) {
-    if (role === "admin") { setEmail("admin@rios.demo"); setPassword("admin123"); }
-    else { setEmail("client@demo.retailer"); setPassword("client123"); }
-  }
-
   return (
     <div style={{ maxWidth: 420, margin: "70px auto", padding: "0 24px" }}>
       <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 32, background: "#fff" }}>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 22, color: BRAND.ink, marginBottom: 4 }}>Log in</div>
-        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Client accounts are issued by an RIV admin — there's no self-signup.</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>New client? <a onClick={() => setView?.("signup")} style={{ color: BRAND.coral, cursor: "pointer", fontWeight: 600 }}>Sign up</a> instead — employee and jury accounts are issued by an RIV admin.</div>
         <form onSubmit={submit}>
           <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink }}>Email</label>
           <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required autoFocus style={inputStyle} />
@@ -229,37 +266,24 @@ function LoginView({ onLogin }) {
             border: "none", borderRadius: 9, padding: "12px 0", cursor: loading ? "default" : "pointer", opacity: loading ? 0.7 : 1,
           }}>{loading && <Loader2 size={14} className="rios-spin" />} Log in</button>
         </form>
-        {import.meta.env.DEV && (
-          <div style={{ marginTop: 22, borderTop: `1px solid ${BRAND.line}`, paddingTop: 18 }}>
-            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F", marginBottom: 8 }}>Seeded demo accounts (dev only — never shown in production):</div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button type="button" onClick={() => fillDemo("admin")} style={demoBtnStyle}>Fill admin</button>
-              <button type="button" onClick={() => fillDemo("client")} style={demoBtnStyle}>Fill client</button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
 }
 
-const inputStyle = { width: "100%", marginTop: 6, fontFamily: "'Poppins',sans-serif", fontSize: 13.5, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: "10px 12px", boxSizing: "border-box", background: BRAND.cream, color: BRAND.ink };
-const demoBtnStyle = { flex: 1, fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "7px 0", borderRadius: 7, cursor: "pointer", background: "#fff", color: BRAND.ink, border: `1px solid ${BRAND.line}` };
-
-/* ---------------- Sign up (self-service, always creates a client account) ---------------- */
+/* ---------------- Sign up (new clients only — employee/jury/admin stay admin-issued) ---------------- */
 function SignupView({ onSignup, setView }) {
-  const [name, setName] = useState("");
-  const [company, setCompany] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [form, setForm] = useState({ name: "", email: "", company: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  function set(key) { return (e) => setForm((f) => ({ ...f, [key]: e.target.value })); }
 
   async function submit(e) {
     e.preventDefault();
     setError(""); setLoading(true);
     try {
-      const { token, user } = await api.signup({ name, company, email, password });
+      const { token, user } = await api.signup(form);
       onSignup(token, user);
     } catch (err) {
       setError(err.message || "Sign up failed.");
@@ -269,35 +293,38 @@ function SignupView({ onSignup, setView }) {
   return (
     <div style={{ maxWidth: 420, margin: "70px auto", padding: "0 24px" }}>
       <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 32, background: "#fff" }}>
-        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 22, color: BRAND.ink, marginBottom: 4 }}>Create your account</div>
-        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Sign up to start your Audit. (Junior employee and jury accounts for Ideas.RIV are set up by your RIV admin, not here.)</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 22, color: BRAND.ink, marginBottom: 4 }}>Sign up</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Create your client account to start the Discover assessment.</div>
         <form onSubmit={submit}>
-          <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink }}>Your name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} type="text" required autoFocus style={inputStyle} />
+          <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink }}>Name</label>
+          <input value={form.name} onChange={set("name")} required autoFocus style={inputStyle} />
           <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink, marginTop: 14, display: "block" }}>Company</label>
-          <input value={company} onChange={(e) => setCompany(e.target.value)} type="text" style={inputStyle} />
+          <input value={form.company} onChange={set("company")} style={inputStyle} />
           <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink, marginTop: 14, display: "block" }}>Email</label>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required style={inputStyle} />
+          <input value={form.email} onChange={set("email")} type="email" required style={inputStyle} />
           <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink, marginTop: 14, display: "block" }}>Password</label>
-          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required minLength={8} style={inputStyle} />
-          <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: "#9B958F", marginTop: 6 }}>At least 8 characters.</div>
+          <input value={form.password} onChange={set("password")} type="password" required minLength={8} style={inputStyle} />
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: "#9B958F", marginTop: 5 }}>At least 8 characters.</div>
           {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: BRAND.coralDark, marginTop: 12 }}>{error}</div>}
           <button type="submit" disabled={loading} style={{
             width: "100%", marginTop: 20, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
             fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, background: BRAND.coral, color: "#fff",
             border: "none", borderRadius: 9, padding: "12px 0", cursor: loading ? "default" : "pointer", opacity: loading ? 0.7 : 1,
-          }}>{loading && <Loader2 size={14} className="rios-spin" />} Create account</button>
+          }}>{loading && <Loader2 size={14} className="rios-spin" />} Sign up</button>
         </form>
-        <button onClick={() => setView("login")} style={{ display: "block", margin: "18px auto 0", fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F", background: "none", border: "none", cursor: "pointer" }}>
-          Already have an account? Log in
-        </button>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F", marginTop: 18, textAlign: "center" }}>
+          Already have an account? <a onClick={() => setView?.("login")} style={{ color: BRAND.coral, cursor: "pointer", fontWeight: 600 }}>Log in</a>
+        </div>
       </div>
     </div>
   );
 }
 
+const inputStyle = { width: "100%", marginTop: 6, fontFamily: "'Poppins',sans-serif", fontSize: 13.5, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: "10px 12px", boxSizing: "border-box", background: BRAND.cream, color: BRAND.ink };
+const demoBtnStyle = { flex: 1, fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "7px 0", borderRadius: 7, cursor: "pointer", background: "#fff", color: BRAND.ink, border: `1px solid ${BRAND.line}` };
+
 /* ---------------- Admin: Manage Clients ---------------- */
-function AdminView({ setView, setSelectedClient, setSelectedEmployee }) {
+function AdminView({ setView, setSelectedClient }) {
   const [clients, setClients] = useState(null);
   const [form, setForm] = useState({ name: "", email: "", company: "", password: "" });
   const [error, setError] = useState("");
@@ -365,25 +392,152 @@ function AdminView({ setView, setSelectedClient, setSelectedEmployee }) {
         </div>
       </div>
 
-      <IdeasTeamPanel clients={clients} setView={setView} setSelectedEmployee={setSelectedEmployee} />
+      <IdeasTeamPanel clients={clients} />
+      <RiseTeamPanel />
     </div>
   );
 }
 
-/* ---------------- Admin: Ideas.RIV team + source-client control ---------------- */
-function IdeasTeamPanel({ clients, setView, setSelectedEmployee }) {
+/* ---------------- Admin: Startup team + opportunity control ---------------- */
+function RiseTeamPanel() {
+  const [opportunities, setOpportunities] = useState(null);
+  const [jury, setJury] = useState(null);
+  const [oppForm, setOppForm] = useState({ title: "", description: "" });
+  const [juryForm, setJuryForm] = useState({ name: "", email: "", password: "", company: "" });
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const refresh = useCallback(() => {
+    api.listRiseOpportunities().then((d) => setOpportunities(d.opportunities)).catch(() => setOpportunities([]));
+    api.listRiseJury().then((d) => setJury(d.jury)).catch(() => setJury([]));
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  async function createOpportunity(e) {
+    e.preventDefault();
+    setError(""); setBusy(true);
+    try {
+      await api.createRiseOpportunity(oppForm);
+      setOppForm({ title: "", description: "" });
+      refresh();
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
+  async function openOpportunity(id) { await api.openRiseOpportunity(id); refresh(); }
+  async function closeOpportunity(id) { await api.closeRiseOpportunity(id); refresh(); }
+
+  async function createJury(e) {
+    e.preventDefault();
+    setError(""); setBusy(true);
+    try {
+      await api.createRiseJury(juryForm);
+      setJuryForm({ name: "", email: "", password: "", company: "" });
+      refresh();
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
+  async function removeJury(id) {
+    if (!confirm("Remove this jury login?")) return;
+    await api.deleteRiseJury(id);
+    refresh();
+  }
+
+  return (
+    <div style={{ marginTop: 44 }}>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>Startup team</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Control which opportunity is open for startup applications, and create jury logins to review them.</div>
+
+      <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 20, background: "#fff", marginBottom: 24 }}>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}>Opportunities</div>
+        {opportunities === null ? (
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>Loading…</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+            {opportunities.length === 0 && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F" }}>No opportunities yet — create one below.</div>}
+            {opportunities.map((o) => (
+              <div key={o.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                <div>
+                  <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, color: BRAND.ink }}>{o.title}</div>
+                  <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{o.application_count} application{o.application_count !== 1 ? "s" : ""}</div>
+                </div>
+                {o.is_open ? (
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 700, color: "#1B7A5A", background: "#E7F5EF", padding: "4px 10px", borderRadius: 999 }}>Open</span>
+                    <button onClick={() => closeOpportunity(o.id)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "6px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff" }}>Close</button>
+                  </span>
+                ) : (
+                  <button onClick={() => openOpportunity(o.id)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "6px 10px", borderRadius: 8, border: "none", cursor: "pointer", background: BRAND.ink, color: "#fff" }}>Open</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <form onSubmit={createOpportunity} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <input placeholder="Opportunity title" value={oppForm.title} onChange={(e) => setOppForm({ ...oppForm, title: e.target.value })} required style={{ ...inputStyle, marginTop: 0, flex: "1 1 200px" }} />
+          <input placeholder="Description (optional)" value={oppForm.description} onChange={(e) => setOppForm({ ...oppForm, description: e.target.value })} style={{ ...inputStyle, marginTop: 0, flex: "2 1 260px" }} />
+          <button type="submit" disabled={busy} style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "0 16px", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>Add</button>
+        </form>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24 }} className="rios-admin-grid">
+        <div>
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink, marginBottom: 10 }}>Jury</div>
+          {jury === null ? (
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>Loading…</div>
+          ) : jury.length === 0 ? (
+            <div style={{ border: `1px dashed ${BRAND.line}`, borderRadius: 12, padding: 20, fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>No jury logins yet — create one on the right.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {jury.map((u) => (
+                <div key={u.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: 12, background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                  <div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, color: BRAND.ink }}>{u.name}</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email}{u.company ? ` · ${u.company}` : ""}</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: BRAND.coralDark, marginTop: 2, fontWeight: 600 }}>{u.scored_count} scored</div>
+                  </div>
+                  <button onClick={() => removeJury(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "8px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={14} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 20, background: "#fff", height: "fit-content" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 14 }}><UserPlus size={15} /> New jury login</div>
+          <form onSubmit={createJury}>
+            <input placeholder="Name" value={juryForm.name} onChange={(e) => setJuryForm({ ...juryForm, name: e.target.value })} required style={{ ...inputStyle, marginTop: 0 }} />
+            <input placeholder="Company / affiliation (optional)" value={juryForm.company} onChange={(e) => setJuryForm({ ...juryForm, company: e.target.value })} style={{ ...inputStyle, marginTop: 10 }} />
+            <input placeholder="Email" type="email" value={juryForm.email} onChange={(e) => setJuryForm({ ...juryForm, email: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
+            <input placeholder="Temporary password" value={juryForm.password} onChange={(e) => setJuryForm({ ...juryForm, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
+            {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: BRAND.coralDark, marginTop: 10 }}>{error}</div>}
+            <button type="submit" disabled={busy} style={{ width: "100%", marginTop: 14, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>Create login</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Admin: Ideathon team + source-client control ---------------- */
+function IdeasTeamPanel({ clients }) {
   const [sourceClient, setSourceClient] = useState(null);
   const [selectedClientId, setSelectedClientId] = useState("");
-  const [juniorEmployees, setJuniorEmployees] = useState(null);
+  const [employees, setEmployees] = useState(null);
   const [jury, setJury] = useState(null);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "junior_employee", company: "", expertise: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "employee", company: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [savingSource, setSavingSource] = useState(false);
 
+  // Which employee's submissions panel is expanded, and what's in it —
+  // admin drill-down per the spec ("admin should be able to see my idea
+  // submitted"). Fetched from the existing GET /admin/ideas/users/:id/ideas
+  // route on first expand, then cached so re-toggling doesn't re-fetch.
+  const [expandedEmployeeId, setExpandedEmployeeId] = useState(null);
+  const [employeeIdeasCache, setEmployeeIdeasCache] = useState({});
+  const [loadingEmployeeIdeas, setLoadingEmployeeIdeas] = useState(false);
+
   const refresh = useCallback(() => {
     api.getIdeasSettings().then((d) => { setSourceClient(d.sourceClient); setSelectedClientId(d.sourceClient?.id ? String(d.sourceClient.id) : ""); }).catch(() => {});
-    api.listIdeasUsers("junior_employee").then((d) => setJuniorEmployees(d.users)).catch(() => setJuniorEmployees([]));
+    api.listIdeasUsers("employee").then((d) => setEmployees(d.users)).catch(() => setEmployees([]));
     api.listIdeasUsers("jury").then((d) => setJury(d.users)).catch(() => setJury([]));
   }, []);
   useEffect(() => { refresh(); }, [refresh]);
@@ -401,7 +555,7 @@ function IdeasTeamPanel({ clients, setView, setSelectedEmployee }) {
     setError(""); setBusy(true);
     try {
       await api.createIdeasUser(form);
-      setForm({ name: "", email: "", password: "", role: form.role, company: form.company, expertise: "" });
+      setForm({ name: "", email: "", password: "", role: form.role, company: form.company });
       refresh();
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   }
@@ -410,17 +564,31 @@ function IdeasTeamPanel({ clients, setView, setSelectedEmployee }) {
     await api.deleteIdeasUser(id);
     refresh();
   }
-  function viewEmployeeIdeas(u) { setSelectedEmployee(u); setView("employee-ideas"); }
+
+  async function toggleEmployeeIdeas(id) {
+    if (expandedEmployeeId === id) { setExpandedEmployeeId(null); return; }
+    setExpandedEmployeeId(id);
+    if (employeeIdeasCache[id]) return;
+    setLoadingEmployeeIdeas(true);
+    try {
+      const d = await api.getEmployeeIdeas(id);
+      setEmployeeIdeasCache((c) => ({ ...c, [id]: d.ideas || [] }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoadingEmployeeIdeas(false);
+    }
+  }
 
   return (
     <div style={{ marginTop: 44 }}>
-      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>Ideas.RIV team</div>
-      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Choose which client's scored audit feeds the 5 opportunities, then create junior employee and jury logins.</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>Ideathon team</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Choose which client's scored audit feeds the 5 opportunities, then create employee and jury logins.</div>
 
       <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 20, background: "#fff", marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}><Compass size={15} /> Opportunity source</div>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F", marginBottom: 12 }}>
-          {sourceClient ? <>Currently sourcing from <strong style={{ color: BRAND.ink }}>{sourceClient.company || sourceClient.name}</strong>.</> : "No source client set yet — Ideas.RIV will show no opportunities until you pick one."}
+          {sourceClient ? <>Currently sourcing from <strong style={{ color: BRAND.ink }}>{sourceClient.company || sourceClient.name}</strong>.</> : "No source client set yet — Ideathon will show no opportunities until you pick one."}
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <select value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} style={{ ...inputStyle, marginTop: 0, flex: 1, minWidth: 200 }}>
@@ -433,23 +601,48 @@ function IdeasTeamPanel({ clients, setView, setSelectedEmployee }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24 }} className="rios-admin-grid">
         <div>
-          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink, marginBottom: 10 }}>Junior Employees</div>
-          {juniorEmployees === null ? (
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink, marginBottom: 10 }}>Employees</div>
+          {employees === null ? (
             <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>Loading…</div>
-          ) : juniorEmployees.length === 0 ? (
-            <div style={{ border: `1px dashed ${BRAND.line}`, borderRadius: 12, padding: 20, fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 20 }}>No junior employee logins yet.</div>
+          ) : employees.length === 0 ? (
+            <div style={{ border: `1px dashed ${BRAND.line}`, borderRadius: 12, padding: 20, fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 20 }}>No employee logins yet.</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 22 }}>
-              {juniorEmployees.map((u) => (
-                <div key={u.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: 12, background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                  <div>
-                    <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink }}>{u.name}</div>
-                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email} {u.company ? `· ${u.company}` : ""}</div>
+              {employees.map((u) => (
+                <div key={u.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, background: "#fff" }}>
+                  <div style={{ padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <div>
+                      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink }}>{u.name}</div>
+                      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email} {u.company ? `· ${u.company}` : ""}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => toggleEmployeeIdeas(u.id)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "7px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: expandedEmployeeId === u.id ? BRAND.ink : "#fff", color: expandedEmployeeId === u.id ? "#fff" : BRAND.ink }}>
+                        {expandedEmployeeId === u.id ? "Hide" : "View submissions"}
+                      </button>
+                      <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
+                    </div>
                   </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => viewEmployeeIdeas(u)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "7px 12px", borderRadius: 8, border: "none", cursor: "pointer", background: BRAND.ink, color: "#fff" }}>View ideas</button>
-                    <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
-                  </div>
+                  {expandedEmployeeId === u.id && (
+                    <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: 12, background: BRAND.cream }}>
+                      {loadingEmployeeIdeas && !employeeIdeasCache[u.id] ? (
+                        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F" }}>Loading…</div>
+                      ) : (employeeIdeasCache[u.id] || []).length === 0 ? (
+                        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F" }}>No ideas submitted yet.</div>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {employeeIdeasCache[u.id].map((idea) => (
+                            <div key={idea.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: 10, background: "#fff" }}>
+                              <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 12.5, color: BRAND.ink }}>{idea.title}</div>
+                              <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: "#9B958F", marginTop: 3 }}>
+                                {idea.question?.module} · {idea.question?.submodule}
+                                {idea.avg_score != null ? ` — avg ${Number(idea.avg_score).toFixed(1)}/5 (${idea.rating_count} rating${idea.rating_count !== 1 ? "s" : ""})` : " — not yet rated"}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -466,7 +659,7 @@ function IdeasTeamPanel({ clients, setView, setSelectedEmployee }) {
                 <div key={u.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: 12, background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                   <div>
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink }}>{u.name}</div>
-                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email} {u.company ? `· ${u.company}` : ""}{u.expertise ? ` · ${u.expertise}` : ""}</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email} {u.company ? `· ${u.company}` : ""}</div>
                   </div>
                   <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
                 </div>
@@ -476,17 +669,14 @@ function IdeasTeamPanel({ clients, setView, setSelectedEmployee }) {
         </div>
 
         <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 20, background: "#fff", height: "fit-content" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 14 }}><Gavel size={15} /> New junior employee / jury login</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 14 }}><Gavel size={15} /> New employee / jury login</div>
           <form onSubmit={createUser}>
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-              <button type="button" onClick={() => setForm({ ...form, role: "junior_employee" })} style={{ flex: 1, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 12.5, padding: "9px 0", borderRadius: 8, cursor: "pointer", border: `1px solid ${BRAND.line}`, background: form.role === "junior_employee" ? BRAND.ink : "#fff", color: form.role === "junior_employee" ? "#fff" : BRAND.ink }}>Junior Employee</button>
+              <button type="button" onClick={() => setForm({ ...form, role: "employee" })} style={{ flex: 1, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 12.5, padding: "9px 0", borderRadius: 8, cursor: "pointer", border: `1px solid ${BRAND.line}`, background: form.role === "employee" ? BRAND.ink : "#fff", color: form.role === "employee" ? "#fff" : BRAND.ink }}>Employee</button>
               <button type="button" onClick={() => setForm({ ...form, role: "jury" })} style={{ flex: 1, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 12.5, padding: "9px 0", borderRadius: 8, cursor: "pointer", border: `1px solid ${BRAND.line}`, background: form.role === "jury" ? BRAND.ink : "#fff", color: form.role === "jury" ? "#fff" : BRAND.ink }}>Jury</button>
             </div>
             <input placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required style={{ ...inputStyle, marginTop: 0 }} />
             <input placeholder="Company (optional)" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} style={{ ...inputStyle, marginTop: 10 }} />
-            {form.role === "jury" && (
-              <input placeholder="Area of expertise (optional)" value={form.expertise} onChange={(e) => setForm({ ...form, expertise: e.target.value })} style={{ ...inputStyle, marginTop: 10 }} />
-            )}
             <input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             <input placeholder="Temporary password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: BRAND.coralDark, marginTop: 10 }}>{error}</div>}
@@ -494,133 +684,6 @@ function IdeasTeamPanel({ clients, setView, setSelectedEmployee }) {
           </form>
         </div>
       </div>
-
-      <AdminLeaderboardPanel />
-    </div>
-  );
-}
-
-/* ---------------- Admin: all submitted ideas + per-idea jury score breakdown ---------------- */
-function AdminEmployeeIdeasView({ employee, setView }) {
-  const [ideas, setIdeas] = useState(null);
-  const [error, setError] = useState(null);
-  const [expanded, setExpanded] = useState({}); // ideaId -> bool
-  const [ratingsByIdea, setRatingsByIdea] = useState({}); // ideaId -> ratings[] | "loading"
-
-  useEffect(() => {
-    api.getEmployeeIdeas(employee.id)
-      .then((d) => setIdeas(d.ideas || []))
-      .catch((e) => setError(e.message));
-  }, [employee.id]);
-
-  function toggle(idea) {
-    const nowOpen = !expanded[idea.id];
-    setExpanded((e) => ({ ...e, [idea.id]: nowOpen }));
-    if (nowOpen && !ratingsByIdea[idea.id]) {
-      setRatingsByIdea((m) => ({ ...m, [idea.id]: "loading" }));
-      api.getIdeaRatings(idea.id)
-        .then((d) => setRatingsByIdea((m) => ({ ...m, [idea.id]: d.ratings })))
-        .catch(() => setRatingsByIdea((m) => ({ ...m, [idea.id]: [] })));
-    }
-  }
-
-  return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 90px" }}>
-      <button onClick={() => setView("admin")} style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F", background: "none", border: "none", cursor: "pointer", marginBottom: 18 }}>
-        ← Back to Manage Clients
-      </button>
-      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>{employee.name} — Ideas</div>
-      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 30 }}>
-        {employee.email} {employee.company ? `· ${employee.company}` : ""} — every idea they've submitted, with the individual jury scores behind each one.
-      </div>
-
-      {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: BRAND.coralDark, marginBottom: 16 }}>{error}</div>}
-      {ideas === null && !error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>Loading…</div>}
-      {ideas && ideas.length === 0 && (
-        <div style={{ border: `1px dashed ${BRAND.line}`, borderRadius: 12, padding: 24, fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F" }}>{employee.name} hasn't submitted any ideas yet.</div>
-      )}
-
-      {ideas && ideas.map((idea) => {
-        const isOpen = !!expanded[idea.id];
-        const ratings = ratingsByIdea[idea.id];
-        return (
-          <div key={idea.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 16, marginBottom: 10, background: "#fff" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-              <div style={{ minWidth: 240 }}>
-                <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{idea.question?.module} · {idea.question?.submodule}</div>
-                <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14.5, color: BRAND.ink, marginTop: 2 }}>{idea.title}</div>
-                {idea.description && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#7A746F", marginTop: 4, lineHeight: 1.5 }}>{idea.description}</div>}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                {idea.avg_score != null ? (
-                  <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 700, color: "#1B7A5A", background: "#E7F5EF", padding: "4px 10px", borderRadius: 999 }}>
-                    {Number(idea.avg_score).toFixed(1)}/5 · {idea.rating_count} rating{idea.rating_count !== 1 ? "s" : ""}
-                  </span>
-                ) : (
-                  <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 700, color: BRAND.ink, background: "#EFEAE4", padding: "4px 10px", borderRadius: 999 }}>Not yet rated</span>
-                )}
-                {idea.rating_count > 0 && (
-                  <button onClick={() => toggle(idea)} style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 12, color: BRAND.coralDark, background: "none", border: "none", cursor: "pointer" }}>
-                    {isOpen ? "Hide jury scores" : "View jury scores"}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {isOpen && (
-              ratings === "loading" || ratings === undefined ? (
-                <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F", marginTop: 14 }}>Loading…</div>
-              ) : (
-                <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${BRAND.line}`, display: "flex", flexDirection: "column", gap: 14 }}>
-                  {ratings.map((r) => {
-                    const cs = r.criteria_scores || {};
-                    return (
-                      <div key={r.id}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 12.5, color: BRAND.ink }}>{r.jury_name}</div>
-                          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 13, color: BRAND.ink }}>{Number(r.score).toFixed(1)}/5</div>
-                        </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8 }}>
-                          {CRITERIA.map((c) => (
-                            <div key={c.key} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: "#9B958F" }}>
-                              {c.label}: <span style={{ color: BRAND.ink, fontWeight: 600 }}>{cs[c.key] ?? "–"}/5</span>
-                            </div>
-                          ))}
-                        </div>
-                        {r.comment && (
-                          <div style={{ fontFamily: "'Newsreader',Georgia,serif", fontStyle: "italic", fontSize: 12, color: "#7A746F", marginTop: 8, lineHeight: 1.5 }}>&ldquo;{r.comment}&rdquo;</div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ---------------- Admin: Ideas.RIV leaderboard (aggregate scores, admin-only per PRD §8) ---------------- */
-function AdminLeaderboardPanel() {
-  const [leaderboard, setLeaderboard] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    api.getLeaderboard()
-      .then((d) => setLeaderboard(d.leaderboard || []))
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  return (
-    <div style={{ marginTop: 44 }}>
-      <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>Ideas.RIV leaderboard</div>
-      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Aggregate scores across all jurors. Visible to admin only — individual jury members never see this, so their scoring stays independent (PRD §8).</div>
-      <LeaderboardView leaderboard={leaderboard} loading={loading} error={error} />
     </div>
   );
 }
@@ -630,6 +693,10 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
   const module = modules[moduleIdx];
   const qs = useMemo(() => questions.filter((q) => q.module === module), [questions, module]);
   const totalAnswered = Object.values(responses).filter((r) => r && r.maturity != null).length;
+
+  // Land at the top of the new module's questions, whether moduleIdx changed
+  // via Previous/Next or clicking a module directly in the sidebar list.
+  useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [moduleIdx]);
 
   function setMaturity(id, val) { setResponses((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), maturity: val } })); }
   function setEvidence(id, val) { setResponses((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), evidence: val } })); }
@@ -667,9 +734,7 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
             })}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 20 }}>
-            {import.meta.env.DEV && (
-              <button onClick={randomFillAll} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, padding: "9px 0", borderRadius: 9, cursor: "pointer", background: BRAND.ink, color: "#fff", border: "none" }}><Shuffle size={13} /> Quick-fill all 165 (dev only)</button>
-            )}
+            <button onClick={randomFillAll} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, padding: "9px 0", borderRadius: 9, cursor: "pointer", background: BRAND.ink, color: "#fff", border: "none" }}><Shuffle size={13} /> Quick-fill all 165 (demo)</button>
             <button onClick={resetAll} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, padding: "9px 0", borderRadius: 9, cursor: "pointer", background: "#fff", color: "#8a8480", border: `1px solid ${BRAND.line}` }}><RotateCcw size={13} /> Reset scorecard</button>
           </div>
         </div>
@@ -789,7 +854,7 @@ function DashboardView({ questions, modules, responses, setView, user, viewingCl
         <div style={{ width: 56, height: 56, borderRadius: 16, background: BRAND.cream, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", border: `1px solid ${BRAND.line}` }}><LayoutDashboard size={24} color={BRAND.coral} /></div>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 22, color: BRAND.ink }}>No scorecard yet</div>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14, color: "#9B958F", marginTop: 8, lineHeight: 1.6 }}>
-          {isAdminViewing ? `${viewingClient.name} hasn't scored any questions yet.` : `Score at least one question in the Audit to see this populate.`}
+          {isAdminViewing ? `${viewingClient.name} hasn't scored any questions yet.` : `Score at least one question in the Audit to see this populate — or use "Quick-fill" for a full demo run.`}
         </div>
         {!isAdminViewing && <button onClick={() => setView("assess")} style={{ marginTop: 24, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 9, padding: "12px 20px", cursor: "pointer" }}>Go to Audit</button>}
       </div>
@@ -903,14 +968,26 @@ const exportBtnStyle = { display: "flex", alignItems: "center", gap: 6, fontFami
 
 /* =========================== ROOT =========================== */
 export default function RiosApp() {
-  const [view, setView] = useState("home");
+  const [view, setView] = useState(() => {
+    // #ideathon and #startup are real, bookmarkable URLs into those
+    // modules -- hash-based so they never depend on the static host
+    // rewriting arbitrary paths to index.html (a plain path like
+    // /ideathon would 404 on most static hosts without that config).
+    // Each module manages its own persisted login (localStorage), so
+    // landing here directly skips both the main site's home page and a
+    // repeat login screen for anyone already signed into that module.
+    if (typeof window !== "undefined") {
+      if (window.location.hash === "#ideathon") return "ideas-riv";
+      if (window.location.hash === "#startup") return "rise-riv";
+    }
+    return "home";
+  });
   const [user, setUser] = useState(getStoredUser());
   const [questions, setQuestions] = useState([]);
   const [modules, setModules] = useState([]);
   const [responses, setResponses] = useState({});
   const [moduleIdx, setModuleIdx] = useState(0);
   const [viewingClient, setViewingClient] = useState(null); // admin viewing a specific client
-  const [viewingEmployee, setViewingEmployee] = useState(null); // admin viewing a specific junior employee's ideas
   const [ready, setReady] = useState(false);
   const saveTimer = useRef(null);
   const skipNextSave = useRef(true);
@@ -943,16 +1020,12 @@ export default function RiosApp() {
   function handleLogin(token, loggedInUser) {
     setSession(token, loggedInUser);
     setUser(loggedInUser);
-    // Client/admin land on Home first, then click through to their
-    // assessment/dashboard or admin panel. Junior employee/jury don't use
-    // this branch of the app at all — see the early return below, which
-    // renders Ideas.RIV exclusively for those two roles.
-    setView("home");
+    setView(loggedInUser.role === "admin" ? "admin" : "assess");
   }
-  function handleSignup(token, newUser) {
-    setSession(token, newUser);
-    setUser(newUser);
-    setView("home");
+  function handleSignup(token, loggedInUser) {
+    // Signup always returns a 'client' account (see auth.js), so this can
+    // reuse the same session + redirect logic as a normal login.
+    handleLogin(token, loggedInUser);
   }
   function handleLogout() {
     clearSession(); setUser(null); setViewingClient(null); setResponses({}); setView("home");
@@ -965,17 +1038,8 @@ export default function RiosApp() {
 
   const stats = [{ value: "165", label: "diagnostic questions" }, { value: "19", label: "operating modules" }, { value: "5", label: "maturity bands" }];
 
-  // Junior employee / jury logins never see the questionnaire or scores —
-  // per the founder's call, they get Ideas.RIV exclusively, nothing else
-  // in this app. This is a full early return, not a nav item: there's no
-  // path back to the assessment/dashboard/admin areas from here except
-  // logging out and logging back in as a different role.
-  if (user && (user.role === "junior_employee" || user.role === "jury")) {
-    return <IdeasRivApp session={user} onLogout={handleLogout} />;
-  }
-
   return (
-    <div style={{ fontFamily: "'Poppins',sans-serif", background: BRAND.cream, minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <div style={{ fontFamily: "'Poppins',sans-serif", background: BRAND.cream, minHeight: "100vh" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Newsreader:ital@1&display=swap');
         * { box-sizing: border-box; }
@@ -993,24 +1057,23 @@ export default function RiosApp() {
           .rios-glance-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
-      <NavBar view={view} setView={goToView} user={user} onLogout={handleLogout} />
-      <div style={{ flex: 1 }}>
-        {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip />{user?.role === "client" && <ModuleGrid modules={modules} questions={questions} setView={goToView} />}</>)}
-        {view === "login" && <LoginView onLogin={handleLogin} />}
-        {view === "signup" && <SignupView onSignup={handleSignup} setView={goToView} />}
-        {view === "assess" && user?.role === "client" && ready && (
-          <AssessmentView questions={questions} modules={modules} responses={responses} setResponses={setResponses} moduleIdx={moduleIdx} setModuleIdx={setModuleIdx} />
-        )}
-        {view === "admin" && user?.role === "admin" && <AdminView setView={goToView} setSelectedClient={setViewingClient} setSelectedEmployee={setViewingEmployee} />}
-        {view === "employee-ideas" && user?.role === "admin" && viewingEmployee && (
-          <AdminEmployeeIdeasView employee={viewingEmployee} setView={goToView} />
-        )}
-        {view === "dashboard" && user && ready && (
-          <DashboardView questions={questions} modules={modules} responses={responses} setView={goToView} user={user} viewingClient={viewingClient} />
-        )}
-      </div>
-      <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#B7B2AE" }}>
-        Questions? Write to <a href="mailto:contact@retailinnovation.ventures" style={{ color: BRAND.coralDark }}>contact@retailinnovation.ventures</a>.
+      {view !== "ideas-riv" && view !== "rise-riv" && (
+        <NavBar view={view} setView={goToView} user={user} onLogout={handleLogout} />
+      )}
+      {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip /></>)}
+      {view === "login" && <LoginView onLogin={handleLogin} setView={goToView} />}
+      {view === "signup" && <SignupView onSignup={handleSignup} setView={goToView} />}
+      {view === "ideas-riv" && <IdeasRivApp />}
+      {view === "rise-riv" && <RiseRivApp />}
+      {view === "assess" && user?.role === "client" && ready && (
+        <AssessmentView questions={questions} modules={modules} responses={responses} setResponses={setResponses} moduleIdx={moduleIdx} setModuleIdx={setModuleIdx} />
+      )}
+      {view === "admin" && user?.role === "admin" && <AdminView setView={goToView} setSelectedClient={setViewingClient} />}
+      {view === "dashboard" && user && ready && (
+        <DashboardView questions={questions} modules={modules} responses={responses} setView={goToView} user={user} viewingClient={viewingClient} />
+      )}
+      <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#B7B2AE", display: (view === "ideas-riv" || view === "rise-riv") ? "none" : "block" }}>
+        <div>Questions? Write to us at <a href="mailto:contact@retailinnovation" style={{ color: BRAND.coralDark }}>contact@retailinnovation</a></div>
       </div>
     </div>
   );
