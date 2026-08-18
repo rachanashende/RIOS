@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Menu, X, Award, Eye, EyeOff, FileSpreadsheet, FileText, Loader2,
   Compass, AlertTriangle, Gavel,
 } from "lucide-react";
-import { api, getToken, getStoredUser, setSession, clearSession } from "./api.js";
+import { api, getToken, getStoredUser, setSession, clearSession, setIdeasSession, setRiseSession } from "./api.js";
 import { computeScores, tierFor, fmtMoney, computeCategoryScores } from "./scoring.js";
 import { BRAND } from "./brand.js";
 import IdeasRivApp from "./IdeasRiv.jsx";
@@ -1032,7 +1032,17 @@ export default function RiosApp() {
   function handleLogin(token, loggedInUser) {
     setSession(token, loggedInUser);
     setUser(loggedInUser);
-    setView(loggedInUser.role === "admin" ? "admin" : "assess");
+    if (loggedInUser.role === "admin") {
+      setView("admin");
+    } else if (loggedInUser.role === "junior_employee" || loggedInUser.role === "jury") {
+      setIdeasSession(token, loggedInUser);
+      setView("ideas-riv");
+    } else if (loggedInUser.role === "rise_jury") {
+      setRiseSession(token, loggedInUser);
+      setView("rise-riv");
+    } else {
+      setView("assess");
+    }
   }
   function handleSignup(token, loggedInUser) {
     // Signup always returns a 'client' account (see auth.js), so this can
