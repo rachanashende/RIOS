@@ -8,6 +8,19 @@ import {
 } from "./api.js";
 import { BRAND } from "./brand.js";
 
+// Startup's own tabs, each with a real URL. RiseRivApp owns this entirely
+// once mounted -- the outer App.jsx only knows both map to its single
+// "rise-riv" container view (see OUTER_PATH_TO_VIEW in App.jsx). "apply"
+// (the actual form, one click past "landing") and "jury-login"/"jury-score"
+// are internal sub-views with no URL of their own, same treatment as
+// Ideathon's equivalent sub-views.
+const RISE_VIEW_TO_PATH = { landing: "/startup", "jury-dashboard": "/rate-startup" };
+const RISE_PATH_TO_VIEW = { "/startup": "landing", "/rate-startup": "jury-dashboard" };
+function pathToRiseView(pathname) {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  return RISE_PATH_TO_VIEW[path] || "landing";
+}
+
 const FONT = "'Poppins',sans-serif";
 
 /* =========================================================================
@@ -527,7 +540,14 @@ function JuryScoreView({ applicationId, onBack }) {
 
 /* =========================== ROOT =========================== */
 export default function RiseRivApp() {
-  const [view, setView] = useState("landing");
+  const [view, setView] = useState(() => {
+    const v = pathToRiseView(window.location.pathname);
+    // Loading /rate-startup directly without a session shows the jury
+    // login screen instead of a blank page (the jury-dashboard render
+    // below is guarded on `session` regardless, but this avoids that
+    // blank-page moment on first paint).
+    return v === "jury-dashboard" && !getStoredRiseUser() ? "jury-login" : v;
+  });
   const [session, setSession] = useState(getStoredRiseUser());
   const [opportunity, setOpportunity] = useState(null);
   const [oppLoading, setOppLoading] = useState(true);
@@ -539,18 +559,37 @@ export default function RiseRivApp() {
       .finally(() => setOppLoading(false));
   }, []);
 
+  // Keep the URL in sync on browser back/forward.
+  useEffect(() => {
+    function onPopState() {
+      const v = pathToRiseView(window.location.pathname);
+      setView(v === "jury-dashboard" && !session ? "jury-login" : v);
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [session]);
+
   function handleAuthed(token, user) {
     setRiseSession(token, user);
     setSession(user);
+    // Deliberately not routed through goToView: its jury-dashboard guard
+    // reads `session` from this closure, which is still the pre-login
+    // value (null) at this exact point since setSession above hasn't
+    // re-rendered yet -- routing through it here would incorrectly bounce
+    // a fresh login back to the login screen.
+    window.history.pushState(null, "", "/rate-startup");
     setView("jury-dashboard");
   }
   function handleLogout() {
     clearRiseSession();
     setSession(null);
+    window.history.pushState(null, "", "/startup");
     setView("landing");
   }
   function goToView(v) {
     if (v === "jury-dashboard" && !session) { setView("jury-login"); return; }
+    const path = RISE_VIEW_TO_PATH[v];
+    if (path) window.history.pushState(null, "", path);
     setView(v);
   }
 
