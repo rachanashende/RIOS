@@ -1108,7 +1108,7 @@ export default function RiosApp() {
         <DashboardView questions={questions} modules={modules} responses={responses} setView={goToView} user={user} viewingClient={viewingClient} />
       )}
       <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#B7B2AE", display: (view === "ideas-riv" || view === "rise-riv") ? "none" : "block" }}>
-        <div>Questions? Write to us at <a href="mailto:contact@retailinnovation" style={{ color: BRAND.coralDark }}>contact@retailinnovation</a></div>
+        <div>Questions? Write to us at <a href="mailto:contact@retailinnovation.ventures" style={{ color: BRAND.coralDark }}>contact@retailinnovation.ventures</a></div>
       </div>
     </div>
   );
