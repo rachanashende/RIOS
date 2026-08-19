@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Menu, X, Award, Eye, EyeOff, FileSpreadsheet, FileText, Loader2,
   Compass, AlertTriangle, Gavel,
 } from "lucide-react";
-import { api, getToken, getStoredUser, setSession, clearSession, setIdeasSession, setRiseSession, getStoredIdeasUser, getStoredRiseUser } from "./api.js";
+import { api, getToken, getStoredUser, setSession, clearSession, setIdeasSession, setRiseSession } from "./api.js";
 import { computeScores, tierFor, fmtMoney, computeCategoryScores } from "./scoring.js";
 import { BRAND } from "./brand.js";
 import IdeasRivApp from "./IdeasRiv.jsx";
@@ -51,24 +51,28 @@ function NavBar({ view, setView, user, onLogout }) {
   const publicItems = [{ id: "home", label: "Overview" }];
   const clientItems = [{ id: "assess", label: "Audit" }, { id: "dashboard", label: "My Scorecard" }];
   const adminItems = [{ id: "admin", label: "Manage Clients" }];
-  // Ideathon/Startup tabs are shown here based on whether an isolated
-  // session actually exists for that module (localStorage), not on the
-  // main site's user.role. That's a deliberately different, safer check
-  // than what used to live here: role-based inclusion leaked both tabs to
-  // anyone logging in as jury/employee/rise_jury through this shared form,
-  // because the login endpoint doesn't restrict by role. Session presence
-  // doesn't have that problem -- it's only ever set by an actual login
-  // into that specific module, and since handleLogin now seeds both
-  // sessions together on any login, this still means "Overview" (a real
-  // page navigation, not a client-side view swap) no longer strands
-  // employee/jury/rise_jury without a way back to their tabs.
-  // Admin/client are excluded outright regardless of any stray session.
-  const canSeeModuleTabs = user?.role !== "admin" && user?.role !== "client";
-  const moduleItems = [
-    ...(canSeeModuleTabs && getStoredIdeasUser() ? [{ id: "ideas-riv", label: "Ideathon" }] : []),
-    ...(canSeeModuleTabs && getStoredRiseUser() ? [{ id: "rise-riv", label: "Startup" }] : []),
+  // Ideathon/Startup tabs are each gated to the exact role that belongs
+  // to that module -- junior_employee/jury for Ideathon, rise_jury for
+  // Startup -- using the main site's own logged-in user.role, which
+  // persists correctly across the hard page reload that "Overview" does.
+  //
+  // This isn't the same check that caused the original leak. That bug
+  // was one shared block shown to *any* non-admin/non-client role,
+  // which meant an employee or jury login saw both Ideathon and Startup
+  // together. It also isn't "does a session exist in localStorage for
+  // this module" -- that check seemed safer but actually broke the same
+  // way from a different angle: this browser has logged into multiple
+  // modules over the course of testing, so *both* leftover sessions were
+  // always present and both tabs always showed, regardless of who's
+  // actually logged in right now. Checking the current user's exact role
+  // avoids both failure modes.
+  const items = [
+    ...publicItems,
+    ...(user?.role === "junior_employee" || user?.role === "jury" ? [{ id: "ideas-riv", label: "Ideathon" }] : []),
+    ...(user?.role === "rise_jury" ? [{ id: "rise-riv", label: "Startup" }] : []),
+    ...(user?.role === "client" ? clientItems : []),
+    ...(user?.role === "admin" ? adminItems : []),
   ];
-  const items = [...publicItems, ...moduleItems, ...(user?.role === "client" ? clientItems : []), ...(user?.role === "admin" ? adminItems : [])];
 
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(251,249,246,0.92)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${BRAND.line}` }}>
