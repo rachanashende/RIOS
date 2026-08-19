@@ -51,15 +51,24 @@ function NavBar({ view, setView, user, onLogout }) {
   const publicItems = [{ id: "home", label: "Overview" }];
   const clientItems = [{ id: "assess", label: "Audit" }, { id: "dashboard", label: "My Scorecard" }];
   const adminItems = [{ id: "admin", label: "Manage Clients" }];
-  // Ideathon and Startup are never shown in this shared nav, for any
-  // role. They're separate, self-contained modules reached only via
-  // their own #ideathon / #startup bookmark links, which land straight
-  // in that module's own login (or straight past it, if already signed
-  // in there). Excluding only admin/client here used to still leak both
-  // tabs to jury/employee/rise_jury if they logged in through this
-  // shared form instead of a module's own -- the login endpoint doesn't
-  // restrict by role, so that was always possible by accident.
-  const items = [...publicItems, ...(user?.role === "client" ? clientItems : []), ...(user?.role === "admin" ? adminItems : [])];
+  // Ideathon/Startup tabs are shown here based on whether an isolated
+  // session actually exists for that module (localStorage), not on the
+  // main site's user.role. That's a deliberately different, safer check
+  // than what used to live here: role-based inclusion leaked both tabs to
+  // anyone logging in as jury/employee/rise_jury through this shared form,
+  // because the login endpoint doesn't restrict by role. Session presence
+  // doesn't have that problem -- it's only ever set by an actual login
+  // into that specific module, and since handleLogin now seeds both
+  // sessions together on any login, this still means "Overview" (a real
+  // page navigation, not a client-side view swap) no longer strands
+  // employee/jury/rise_jury without a way back to their tabs.
+  // Admin/client are excluded outright regardless of any stray session.
+  const canSeeModuleTabs = user?.role !== "admin" && user?.role !== "client";
+  const moduleItems = [
+    ...(canSeeModuleTabs && getStoredIdeasUser() ? [{ id: "ideas-riv", label: "Ideathon" }] : []),
+    ...(canSeeModuleTabs && getStoredRiseUser() ? [{ id: "rise-riv", label: "Startup" }] : []),
+  ];
+  const items = [...publicItems, ...moduleItems, ...(user?.role === "client" ? clientItems : []), ...(user?.role === "admin" ? adminItems : [])];
 
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(251,249,246,0.92)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${BRAND.line}` }}>
