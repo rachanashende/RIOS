@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Menu, X, Award, Eye, EyeOff, FileSpreadsheet, FileText, Loader2,
   Compass, AlertTriangle, Gavel,
 } from "lucide-react";
-import { api, getToken, getStoredUser, setSession, clearSession, setIdeasSession, setRiseSession } from "./api.js";
+import { api, getToken, getStoredUser, setSession, clearSession, setIdeasSession, setRiseSession, getStoredIdeasUser, getStoredRiseUser } from "./api.js";
 import { computeScores, tierFor, fmtMoney, computeCategoryScores } from "./scoring.js";
 import { BRAND } from "./brand.js";
 import IdeasRivApp from "./IdeasRiv.jsx";
