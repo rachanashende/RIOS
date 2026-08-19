@@ -98,10 +98,12 @@ router.get("/applications", async (req, res, next) => {
   try {
     const { rows } = await pool.query(
       `SELECT a.id, a.startup_name, a.founder_name, a.sector, a.stage, a.created_at,
+              a.opportunity_id, o.title AS opportunity_title, o.is_open AS opportunity_is_open,
               s.total AS my_total, (s.id IS NOT NULL) AS scored_by_me
        FROM rise_applications a
+       LEFT JOIN rise_opportunities o ON o.id = a.opportunity_id
        LEFT JOIN rise_scores s ON s.application_id = a.id AND s.jury_user_id = $1
-       ORDER BY a.created_at DESC`,
+       ORDER BY o.created_at DESC NULLS LAST, a.created_at DESC`,
       [req.user.id]
     );
     res.json({
