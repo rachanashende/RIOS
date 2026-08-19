@@ -13,6 +13,39 @@ import { api, getToken, getStoredUser, setSession, clearSession, setIdeasSession
 import { computeScores, tierFor, fmtMoney, computeCategoryScores } from "./scoring.js";
 import { BRAND } from "./brand.js";
 import IdeasRivApp from "./IdeasRiv.jsx";
+
+// Every URL the app recognizes, mapped to the outer view it mounts.
+// Ideathon and Startup are each a single "container" view here (ideas-riv /
+// rise-riv) -- once mounted, IdeasRivMain and RiseRivApp own their own
+// internal routing for their own tabs (opportunities, rate-ideas, etc.),
+// reading this same window.location.pathname independently of this table.
+const OUTER_PATH_TO_VIEW = {
+  "/": "home",
+  "/admin": "admin",
+  "/audit": "assess",
+  "/scorecard": "dashboard",
+  "/employee": "ideas-riv",
+  "/jury": "ideas-riv",
+  "/ideathon": "ideas-riv",
+  "/opportunities": "ideas-riv",
+  "/submitted-ideas": "ideas-riv",
+  "/rate-ideas": "ideas-riv",
+  "/leaderboard": "ideas-riv",
+  "/startup": "rise-riv",
+  "/rate-startup": "rise-riv",
+};
+// The canonical URL for each view this component navigates to directly
+// (via goToView or a login redirect). Ideathon/Startup each get one
+// default entry path here -- the specific tab within them is decided by
+// IdeasRivMain/RiseRivApp reading the pathname themselves, independently.
+const OUTER_VIEW_TO_PATH = {
+  home: "/", admin: "/admin", assess: "/audit", dashboard: "/scorecard",
+  "ideas-riv": "/opportunities", "rise-riv": "/rate-startup",
+};
+function pathToOuterView(pathname) {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  return OUTER_PATH_TO_VIEW[path] || "home";
+}
 import RiseRivApp from "./RiseRiv.jsx";
 
 const MATURITY_LABELS = [
@@ -985,28 +1018,9 @@ const exportBtnStyle = { display: "flex", alignItems: "center", gap: 6, fontFami
 
 /* =========================== ROOT =========================== */
 export default function RiosApp() {
-  const [view, setView] = useState(() => {
-    // Clean, bookmarkable paths into each module -- e.g.
-    // rios.retailinnovation.ai/employee or /jury both land on Ideathon's
-    // own login (role is decided by which account logs in, not by which
-    // of these two paths was used to get there; both are just friendly
-    // aliases for the same entry point). /startup is reserved for the
-    // Startup module once it gets its own separate login.
-    //
-    // This only works because frontend/public/_redirects tells the static
-    // host to serve index.html for every path instead of 404ing -- without
-    // that file, any path other than "/" 404s before this code ever runs.
-    //
-    // Each module manages its own persisted login (localStorage), so
-    // landing here directly skips both the main site's home page and a
-    // repeat login screen for anyone already signed into that module.
-    if (typeof window !== "undefined") {
-      const path = window.location.pathname.replace(/\/+$/, ""); // strip trailing slash
-      if (["/employee", "/jury", "/ideathon"].includes(path)) return "ideas-riv";
-      if (["/startup"].includes(path)) return "rise-riv";
-    }
-    return "home";
-  });
+  const [view, setView] = useState(() => (
+    typeof window !== "undefined" ? pathToOuterView(window.location.pathname) : "home"
+  ));
   const [user, setUser] = useState(getStoredUser());
   const [questions, setQuestions] = useState([]);
   const [modules, setModules] = useState([]);
@@ -1042,20 +1056,34 @@ export default function RiosApp() {
     return () => clearTimeout(saveTimer.current);
   }, [responses, user]);
 
+  // Keep the URL in sync with the outer view on browser back/forward.
+  // Ideathon/Startup handle their own back/forward internally once
+  // mounted (this only fires a real change here if you navigate *out* of
+  // either module, since every one of their own tab paths maps to the
+  // same "ideas-riv"/"rise-riv" outer view and so doesn't re-render this).
+  useEffect(() => {
+    function onPopState() { setView(pathToOuterView(window.location.pathname)); }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
   function handleLogin(token, loggedInUser) {
     setSession(token, loggedInUser);
     setUser(loggedInUser);
+    let path, v;
     if (loggedInUser.role === "admin") {
-      setView("admin");
+      path = "/admin"; v = "admin";
     } else if (loggedInUser.role === "junior_employee" || loggedInUser.role === "jury") {
       setIdeasSession(token, loggedInUser);
-      setView("ideas-riv");
+      path = "/opportunities"; v = "ideas-riv";
     } else if (loggedInUser.role === "rise_jury") {
       setRiseSession(token, loggedInUser);
-      setView("rise-riv");
+      path = "/rate-startup"; v = "rise-riv";
     } else {
-      setView("assess");
+      path = "/audit"; v = "assess";
     }
+    window.history.pushState(null, "", path);
+    setView(v);
   }
   function handleSignup(token, loggedInUser) {
     // Signup always returns a 'client' account (see auth.js), so this can
@@ -1063,11 +1091,17 @@ export default function RiosApp() {
     handleLogin(token, loggedInUser);
   }
   function handleLogout() {
-    clearSession(); setUser(null); setViewingClient(null); setResponses({}); setView("home");
+    clearSession(); setUser(null); setViewingClient(null); setResponses({});
+    window.history.pushState(null, "", "/");
+    setView("home");
   }
   function goToView(v) {
     if ((v === "assess" || v === "dashboard") && !user) { setView("login"); return; }
     if (v !== "dashboard") setViewingClient(null);
+    const path = OUTER_VIEW_TO_PATH[v];
+    if (path && window.location.pathname.replace(/\/+$/, "") !== path) {
+      window.history.pushState(null, "", path);
+    }
     setView(v);
   }
 
