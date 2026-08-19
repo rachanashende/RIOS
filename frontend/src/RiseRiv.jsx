@@ -353,39 +353,81 @@ function JuryDashboardView({ setView, setActiveApplicationId }) {
       {applications.length === 0 ? (
         <EmptyState icon={Building2} title="No applications yet" text="Check back once startups start applying." />
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 20 }}>
-          {applications.map((a) => (
-            <Card key={a.id} style={{ padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <div>
-                <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14.5, color: BRAND.ink }}>{a.startup_name}</div>
-                <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginTop: 2 }}>
-                  {[a.sector, a.stage].filter(Boolean).join(" · ") || "—"}
+        <div style={{ display: "flex", flexDirection: "column", gap: 28, marginTop: 20 }}>
+          {groupByOpportunity(applications).map((group) => (
+            <div key={group.opportunityId ?? "none"}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13.5, color: BRAND.ink }}>
+                  {group.opportunityTitle || "Unassigned"}
+                </div>
+                {group.opportunityId != null && (
+                  <span style={{
+                    fontFamily: FONT, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999,
+                    color: group.isOpen ? "#1B7A5A" : "#7A746F", background: group.isOpen ? "#E7F5EF" : "#EFEBE7",
+                  }}>{group.isOpen ? "Open" : "Closed"}</span>
+                )}
+                <div style={{ fontFamily: FONT, fontSize: 12, color: "#B7B2AE" }}>
+                  {group.apps.length} application{group.apps.length !== 1 ? "s" : ""}
                 </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                {a.scored_by_me ? (
-                  <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1B7A5A", background: "#E7F5EF", padding: "4px 10px", borderRadius: 999 }}>
-                    Scored · {Number(a.my_total).toFixed(1)}/5
-                  </span>
-                ) : (
-                  <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: BRAND.coralDark, background: "#FCEEE1", padding: "4px 10px", borderRadius: 999 }}>
-                    Not scored
-                  </span>
-                )}
-                <button
-                  onClick={() => { setActiveApplicationId(a.id); setView("jury-score"); }}
-                  style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}
-                  aria-label={`Review ${a.startup_name}`}
-                >
-                  <ChevronRight size={18} color="#B7B2AE" />
-                </button>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {group.apps.map((a) => (
+                  <Card key={a.id} style={{ padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                    <div>
+                      <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14.5, color: BRAND.ink }}>{a.startup_name}</div>
+                      <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginTop: 2 }}>
+                        {[a.sector, a.stage].filter(Boolean).join(" · ") || "—"}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      {a.scored_by_me ? (
+                        <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1B7A5A", background: "#E7F5EF", padding: "4px 10px", borderRadius: 999 }}>
+                          Scored · {Number(a.my_total).toFixed(1)}/5
+                        </span>
+                      ) : (
+                        <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: BRAND.coralDark, background: "#FCEEE1", padding: "4px 10px", borderRadius: 999 }}>
+                          Not scored
+                        </span>
+                      )}
+                      <button
+                        onClick={() => { setActiveApplicationId(a.id); setView("jury-score"); }}
+                        style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}
+                        aria-label={`Review ${a.startup_name}`}
+                      >
+                        <ChevronRight size={18} color="#B7B2AE" />
+                      </button>
+                    </div>
+                  </Card>
+                ))}
               </div>
-            </Card>
+            </div>
           ))}
         </div>
       )}
     </div>
   );
+}
+
+// Groups a flat, already-ordered applications list into per-opportunity
+// sections without re-sorting -- the backend already orders by opportunity
+// (newest first) then by application within it, so this just walks the
+// list once and breaks on opportunity_id changes.
+function groupByOpportunity(applications) {
+  const groups = [];
+  for (const a of applications) {
+    const last = groups[groups.length - 1];
+    if (last && last.opportunityId === a.opportunity_id) {
+      last.apps.push(a);
+    } else {
+      groups.push({
+        opportunityId: a.opportunity_id,
+        opportunityTitle: a.opportunity_title,
+        isOpen: a.opportunity_is_open,
+        apps: [a],
+      });
+    }
+  }
+  return groups;
 }
 
 /* =========================================================================
