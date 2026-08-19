@@ -8,6 +8,21 @@ import {
 import { api, getStoredIdeasUser, setIdeasSession, clearIdeasSession } from "./api.js";
 import { BRAND } from "./brand.js";
 
+// Ideathon's own tabs, each with a real URL. IdeasRivMain owns this
+// entirely once mounted -- the outer App.jsx only knows these all map to
+// its single "ideas-riv" container view (see OUTER_PATH_TO_VIEW there).
+const IDEAS_VIEW_TO_PATH = { landing: "/opportunities", "my-ideas": "/submitted-ideas", jury: "/rate-ideas", leaderboard: "/leaderboard" };
+const IDEAS_PATH_TO_VIEW = {
+  "/opportunities": "landing", "/employee": "landing", "/jury": "landing", "/ideathon": "landing",
+  "/submitted-ideas": "my-ideas",
+  "/rate-ideas": "jury",
+  "/leaderboard": "leaderboard",
+};
+function pathToIdeasView(pathname, role) {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  return IDEAS_PATH_TO_VIEW[path] || (role === "jury" ? "jury" : "landing");
+}
+
 const FONT = "'Poppins',sans-serif";
 const SERIF = "'Newsreader',Georgia,serif";
 
@@ -666,7 +681,23 @@ function IdeaRatingsDetailView({ idea, ratings, loading, error, onBack }) {
    MAIN — the actual Ideathon app, once a session exists.
    ========================================================================= */
 function IdeasRivMain({ session, onLogout }) {
-  const [view, setView] = useState(session.role === "jury" ? "jury" : "landing");
+  const [view, setView] = useState(() => pathToIdeasView(window.location.pathname, session.role));
+
+  // Keeps the URL in sync with every internal tab change (Opportunities,
+  // My submissions, Rate ideas, Leaderboard). Sub-views without a URL of
+  // their own (e.g. the idea-submission form) just fall through the `if
+  // (path)` check below and update view state without touching the URL.
+  function goToView(v) {
+    const path = IDEAS_VIEW_TO_PATH[v];
+    if (path) window.history.pushState(null, "", path);
+    setView(v);
+  }
+
+  useEffect(() => {
+    function onPopState() { setView(pathToIdeasView(window.location.pathname, session.role)); }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [session.role]);
 
   const [opportunities, setOpportunities] = useState([]);
   const [sourceClient, setSourceClient] = useState(null);
@@ -768,7 +799,7 @@ function IdeasRivMain({ session, onLogout }) {
         }
       `}</style>
 
-      <IdeasNavBar view={view} setView={setView} session={session} onLogout={onLogout} />
+      <IdeasNavBar view={view} setView={goToView} session={session} onLogout={onLogout} />
 
       {/* flex: 1 makes this fill all leftover space, pushing the footer below
           to the bottom of the viewport on short pages (e.g. an empty
@@ -776,7 +807,7 @@ function IdeasRivMain({ session, onLogout }) {
       <div style={{ flex: 1 }}>
         {view === "landing" && (
           <LandingView
-            session={session} setView={setView}
+            session={session} setView={goToView}
             opportunities={opportunities} ideas={ideas}
             loading={loadingOpps} error={error} sourceClient={sourceClient}
             setActiveOpp={setActiveOppId}
@@ -784,7 +815,7 @@ function IdeasRivMain({ session, onLogout }) {
         )}
 
         {view === "submit" && session.role === "junior_employee" && (
-          <SubmitIdeasView opp={activeOpp} ideas={ideas} onIdeasChanged={refreshIdeas} setView={setView} />
+          <SubmitIdeasView opp={activeOpp} ideas={ideas} onIdeasChanged={refreshIdeas} setView={goToView} />
         )}
 
         {view === "my-ideas" && session.role === "junior_employee" && (
