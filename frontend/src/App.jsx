@@ -50,7 +50,7 @@ function pathToOuterView(pathname) {
   return OUTER_PATH_TO_VIEW[path] || "home";
 }
 import RiseRivApp from "./RiseRiv.jsx";
-import IndexRivApp from "./IndexRiv.jsx";
+import IndexRivApp, { isIndexSubdomain } from "./IndexRiv.jsx";
 
 const MATURITY_LABELS = [
   { v: 0, label: "No capability", desc: "Not in place, not planned" },
@@ -1035,8 +1035,12 @@ export default function RiosApp() {
   const saveTimer = useRef(null);
   const skipNextSave = useRef(true);
 
-  // Load the instrument once (public)
+  // Load the instrument once (public) — skipped on the R-Index subdomain,
+  // where this whole component tree short-circuits to IndexRivApp below
+  // anyway, so fetching RIOS's 165-question instrument here would be a
+  // wasted request.
   useEffect(() => {
+    if (isIndexSubdomain()) return;
     api.getQuestions().then(({ questions, modules }) => { setQuestions(questions); setModules(modules); setReady(true); });
   }, []);
 
@@ -1110,6 +1114,17 @@ export default function RiosApp() {
   }
 
   const stats = [{ value: "165", label: "diagnostic questions" }, { value: "19", label: "operating modules" }, { value: "5", label: "maturity bands" }];
+
+  // On the R-Index subdomain (audit.retailinnovation.ai), this is a
+  // completely different site as far as the visitor's concerned — skip
+  // the main RIOS shell (NavBar, Hero, footer, all of it) and hand off to
+  // IndexRivApp entirely, with clean root-level URLs (see IndexRiv.jsx's
+  // isIndexSubdomain()/INDEX_VIEW_TO_PATH). This check runs after every
+  // hook above has already been called, so it doesn't violate the Rules
+  // of Hooks — it just decides what to render, not which hooks to call.
+  if (isIndexSubdomain()) {
+    return <IndexRivApp />;
+  }
 
   return (
     <div style={{ fontFamily: "'Poppins',sans-serif", background: BRAND.cream, minHeight: "100vh" }}>
