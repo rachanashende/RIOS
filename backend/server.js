@@ -4,6 +4,7 @@ import cors from "cors";
 
 import { initSchema } from "./db.js";
 import { initRiseSchema } from "./db.rise.js";
+import { initIndexSchema } from "./db.index.js";
 import authRoutes from "./routes/auth.js";
 import adminRoutes from "./routes/admin.js";
 import responsesRoutes from "./routes/responses.js";
@@ -13,6 +14,9 @@ import ideasAdminRoutes from "./routes/ideasAdmin.js";
 import critAssistantRoutes from "./routes/critAssistant.js";
 import riseRoutes from "./routes/rise.js";
 import riseAdminRoutes from "./routes/riseAdmin.js";
+import indexRoutes from "./routes/index.js";
+import indexAdminRoutes from "./routes/indexAdmin.js";
+import indexExportRoutes from "./routes/indexExport.js";
 
 const app = express();
 app.use(cors());
@@ -22,12 +26,15 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 app.use("/api/auth", authRoutes);
 app.use("/api/admin/ideas", ideasAdminRoutes); // more specific path — must be mounted before /api/admin
 app.use("/api/admin/rise", riseAdminRoutes); // more specific path — must be mounted before /api/admin
+app.use("/api/admin/index", indexAdminRoutes); // more specific path — must be mounted before /api/admin
 app.use("/api/admin", adminRoutes);
 app.use("/api", responsesRoutes);
 app.use("/api/export", exportRoutes);
 app.use("/api/ideas", ideasRoutes);
 app.use("/api/ideas", critAssistantRoutes);
 app.use("/api/rise", riseRoutes);
+app.use("/api/index/export", indexExportRoutes); // more specific path — must be mounted before /api/index
+app.use("/api/index", indexRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
@@ -48,6 +55,7 @@ const PORT = process.env.PORT || 4000;
 // surgical edit inside the main schema function.
 initSchema()
   .then(() => initRiseSchema())
+  .then(() => initIndexSchema())
   .then(() => {
     app.listen(PORT, () => {
       console.log(`RIOS backend listening on http://localhost:${PORT}`);
