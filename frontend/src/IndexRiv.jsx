@@ -241,23 +241,39 @@ const CONVERSATION_AGENDA = [
 const YOU_RECEIVE = ["Private AI Readiness Benchmark", "Early access to the Index", "Anonymised peer insights", "Invitation to the Executive Roundtable"];
 
 function LandingView({ campaigns, loading, session, onPickCampaign, setView }) {
+  function scrollToCampaigns() {
+    document.getElementById("index-open-campaigns")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   return (
     <div>
-      {/* Hero */}
-      <div style={{ maxWidth: 820, margin: "0 auto", padding: "56px 24px 8px", textAlign: "center" }}>
-        <div style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 700, color: BRAND.coral, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 10 }}>
-          The India Retail AI &amp; Innovation Index
-        </div>
-        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 30, color: BRAND.ink, lineHeight: 1.25 }}>
-          From AI Experimentation to AI-Native Retail
-        </div>
-        <div style={{ fontFamily: FONT, fontSize: 14.5, color: "#7A746F", marginTop: 14, lineHeight: 1.65, maxWidth: 560, marginLeft: "auto", marginRight: "auto" }}>
-          A 30-minute executive conversation on where Retail AI is actually heading — and a private benchmark showing you where your organization stands against the cohort.
+      {/* Hero — full-width dark BRAND.ink band, matching the main Overview
+          page's hero pattern (pill badge, headline, italic subhead, single
+          CTA) rather than a plain light hero, so this reads as the same
+          product family even standing alone on its own subdomain. */}
+      <div style={{ background: BRAND.ink, padding: "64px 24px 56px" }}>
+        <div style={{ maxWidth: 720, margin: "0 auto", textAlign: "center" }}>
+          <div style={{
+            display: "inline-block", fontFamily: FONT, fontSize: 11.5, fontWeight: 700, color: "#fff",
+            letterSpacing: 0.5, textTransform: "uppercase", background: "rgba(255,255,255,0.12)",
+            padding: "6px 14px", borderRadius: 999, marginBottom: 20,
+          }}>
+            The India Retail AI &amp; Innovation Index
+          </div>
+          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 32, color: "#fff", lineHeight: 1.25 }}>
+            From AI Experimentation to AI-Native Retail
+          </div>
+          <div style={{ fontFamily: FONT, fontSize: 15, fontStyle: "italic", color: "rgba(255,255,255,0.72)", marginTop: 16, lineHeight: 1.65, maxWidth: 540, marginLeft: "auto", marginRight: "auto" }}>
+            A 30-minute executive conversation on where Retail AI is actually heading — and a private benchmark showing you where your organization stands against the cohort.
+          </div>
+          <PrimaryButton icon={ArrowRight} onClick={scrollToCampaigns} style={{ margin: "28px auto 0", padding: "13px 26px" }}>
+            {session ? "Take the Index" : "Get started"}
+          </PrimaryButton>
         </div>
       </div>
 
       {/* Retailers / Startups / Investors */}
-      <div style={{ maxWidth: 820, margin: "0 auto", padding: "28px 24px 8px", display: "flex", gap: 12, flexWrap: "wrap" }}>
+      <div style={{ maxWidth: 820, margin: "0 auto", padding: "40px 24px 8px", display: "flex", gap: 12, flexWrap: "wrap" }}>
         {VALUE_PROPS.map((v) => (
           <Card key={v.title} style={{ flex: "1 1 200px", padding: "18px 20px", background: BRAND.cream, border: "none" }}>
             <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: v.color }}>{v.title}</div>
@@ -267,7 +283,7 @@ function LandingView({ campaigns, loading, session, onPickCampaign, setView }) {
       </div>
 
       {/* Open campaigns / CTA */}
-      <div style={{ maxWidth: 720, margin: "0 auto", padding: "28px 24px 8px" }}>
+      <div id="index-open-campaigns" style={{ maxWidth: 720, margin: "0 auto", padding: "28px 24px 8px" }}>
         {loading ? <Spinner label="Loading campaigns…" /> : campaigns.length === 0 ? (
           <EmptyState icon={ClipboardList} title="No index is open right now" text="Check back soon, or contact the RIV team directly." />
         ) : (
@@ -1045,6 +1061,14 @@ export default function IndexRivApp() {
   return (
     <div style={{ fontFamily: FONT, background: BRAND.cream, minHeight: "100vh" }}>
       <style>{`
+        /* App.jsx normally loads this Google Font import, but on the
+           R-Index subdomain this component renders standalone — RiosApp's
+           own render (and its font import) never runs at all. Without this,
+           every 'Poppins' reference below would silently fall back to a
+           system sans-serif on audit.retailinnovation.ai specifically,
+           while looking correct everywhere else this module is reachable
+           (main domain, localhost) since App.jsx's import covers it there. */
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
         .index-spin { animation: index-spin 0.8s linear infinite; }
         @keyframes index-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
