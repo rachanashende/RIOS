@@ -1,7 +1,10 @@
 import { Router } from "express";
 import pool from "../db.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { QUESTIONS, scoreAnswers, cohortAverage } from "../lib/indexScoring.js";
+import {
+  QUESTIONS, SECTIONS, INDEX_DIMENSIONS, sanitizeAnswers, scoreAnswers,
+  computeIndexScore, cohortAverage, cohortDimensionAverages, stageForScore,
+} from "../lib/indexScoring.js";
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -129,7 +132,7 @@ router.post("/entries", async (req, res, next) => {
     );
     const userId = userRows[0]?.id || null;
 
-    const { clamped, score } = scoreAnswers(answers || {});
+    const scored = scoreAnswers(answers || {});
 
     const { rows } = await pool.query(
       `INSERT INTO index_entries (campaign_id, user_id, respondent_name, respondent_email, company, answers, score, source, updated_at)
@@ -138,10 +141,10 @@ router.post("/entries", async (req, res, next) => {
          answers = EXCLUDED.answers, score = EXCLUDED.score, company = EXCLUDED.company,
          respondent_name = EXCLUDED.respondent_name, updated_at = now()
        RETURNING *`,
-      [Number(campaignId), userId, String(respondentName).trim(), normalizedEmail, company || null, JSON.stringify(clamped), score]
+      [Number(campaignId), userId, String(respondentName).trim(), normalizedEmail, company || null, JSON.stringify(scored.answers), scored.overallScore]
     );
     const entry = rows[0];
-    res.status(201).json({ entry: { ...entry, score: entry.score != null ? Number(entry.score) : null } });
+    res.status(201).json({ entry: { ...entry, score: entry.score != null ? Number(entry.score) : null }, dimensionScores: scored.dimensionScores });
   } catch (err) {
     next(err);
   }
@@ -156,17 +159,17 @@ router.put("/entries/:id", async (req, res, next) => {
     const { rows: existingRows } = await pool.query("SELECT * FROM index_entries WHERE id = $1", [id]);
     if (!existingRows.length) return res.status(404).json({ error: "Entry not found." });
 
-    const mergedAnswers = { ...(existingRows[0].answers || {}), ...(answers || {}) };
-    const { clamped, score } = scoreAnswers(mergedAnswers);
+    const mergedAnswers = { ...(existingRows[0].answers || {}), ...sanitizeAnswers(answers || {}) };
+    const scored = scoreAnswers(mergedAnswers);
 
     const { rows } = await pool.query(
       `UPDATE index_entries SET
          answers = $2, score = $3, respondent_name = COALESCE($4, respondent_name),
          company = COALESCE($5, company), updated_at = now()
        WHERE id = $1 RETURNING *`,
-      [id, JSON.stringify(clamped), score, respondentName || null, company || null]
+      [id, JSON.stringify(scored.answers), scored.overallScore, respondentName || null, company || null]
     );
-    res.json({ entry: { ...rows[0], score: rows[0].score != null ? Number(rows[0].score) : null } });
+    res.json({ entry: { ...rows[0], score: rows[0].score != null ? Number(rows[0].score) : null }, dimensionScores: scored.dimensionScores });
   } catch (err) {
     next(err);
   }
@@ -184,8 +187,10 @@ router.delete("/entries/:id", async (req, res, next) => {
 
 // GET /api/admin/index/campaigns/:id/report — admin's own view of the
 // collated report data (same aggregate the respondent-facing report uses,
-// plus the full entry list, since admin is allowed to see individual
-// scores where a respondent isn't).
+// plus the full entry list with per-entry dimension breakdowns and stage,
+// since admin is allowed to see individual scores where a respondent
+// isn't — matches the sample report's leaderboard + "Five Dimensions"
+// table shape).
 router.get("/campaigns/:id/report", async (req, res, next) => {
   try {
     const campaignId = Number(req.params.id);
@@ -194,17 +199,29 @@ router.get("/campaigns/:id/report", async (req, res, next) => {
     if (!campaign) return res.status(404).json({ error: "Campaign not found." });
 
     const { rows: entries } = await pool.query(
-      "SELECT id, respondent_name, company, score, created_at FROM index_entries WHERE campaign_id = $1 ORDER BY score DESC NULLS LAST",
+      "SELECT id, respondent_name, company, answers, score, created_at FROM index_entries WHERE campaign_id = $1 ORDER BY score DESC NULLS LAST",
       [campaignId]
     );
+    const scoredEntries = entries.map((r) => {
+      const { dimensionScores } = computeIndexScore(r.answers || {});
+      return {
+        id: r.id, respondent_name: r.respondent_name, company: r.company,
+        score: r.score != null ? Number(r.score) : null,
+        stage: stageForScore(r.score), dimensionScores, created_at: r.created_at,
+      };
+    });
     const { average, count } = cohortAverage(entries.map((r) => r.score));
+    const dimensionAverages = cohortDimensionAverages(scoredEntries.map((r) => r.dimensionScores));
 
     res.json({
       campaign,
       cohortAverage: average,
       cohortSize: count,
-      entries: entries.map((r) => ({ ...r, score: r.score != null ? Number(r.score) : null })),
+      dimensionAverages,
+      indexDimensions: INDEX_DIMENSIONS,
+      entries: scoredEntries,
       questions: QUESTIONS,
+      sections: SECTIONS,
     });
   } catch (err) {
     next(err);

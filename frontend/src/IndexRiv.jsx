@@ -109,28 +109,39 @@ function EmptyState({ icon: Icon, title, text }) {
 // 1-5 (or scale-N) rating picker for a single audit question — plain
 // numbered buttons rather than stars, since this is a maturity/agreement
 // scale (per question `scale`, default 5), not a 5-star rating like
-// Startup's jury criteria.
-function ScalePicker({ value, onChange, scale = 5 }) {
+// Startup's jury criteria. `scaleLabels`, when supplied (every real
+// question has one — see indexQuestions.json), shows the actual sheet
+// wording (e.g. "Never / Rarely / Occasionally...") under the selected
+// point, so the number alone isn't the only cue.
+function ScalePicker({ value, onChange, scale = 5, scaleLabels }) {
   return (
-    <div style={{ display: "flex", gap: 8 }}>
-      {Array.from({ length: scale }, (_, i) => i + 1).map((n) => {
-        const active = value === n;
-        return (
-          <button
-            key={n} type="button" onClick={() => onChange(n)}
-            aria-label={`Rate ${n} out of ${scale}`}
-            style={{
-              width: 38, height: 38, borderRadius: 9, cursor: "pointer",
-              fontFamily: FONT, fontWeight: 700, fontSize: 14,
-              border: `1px solid ${active ? BRAND.coral : BRAND.line}`,
-              background: active ? BRAND.coral : "#fff",
-              color: active ? "#fff" : BRAND.ink,
-            }}
-          >
-            {n}
-          </button>
-        );
-      })}
+    <div>
+      <div style={{ display: "flex", gap: 8 }}>
+        {Array.from({ length: scale }, (_, i) => i + 1).map((n) => {
+          const active = value === n;
+          return (
+            <button
+              key={n} type="button" onClick={() => onChange(n)}
+              aria-label={scaleLabels?.[n - 1] ? `${n} — ${scaleLabels[n - 1]}` : `Rate ${n} out of ${scale}`}
+              title={scaleLabels?.[n - 1] || undefined}
+              style={{
+                width: 38, height: 38, borderRadius: 9, cursor: "pointer",
+                fontFamily: FONT, fontWeight: 700, fontSize: 14,
+                border: `1px solid ${active ? BRAND.coral : BRAND.line}`,
+                background: active ? BRAND.coral : "#fff",
+                color: active ? "#fff" : BRAND.ink,
+              }}
+            >
+              {n}
+            </button>
+          );
+        })}
+      </div>
+      {scaleLabels && (
+        <div style={{ fontFamily: FONT, fontSize: 11.5, color: value ? BRAND.coral : "#B7B2AE", marginTop: 7, fontWeight: 600 }}>
+          {value ? scaleLabels[value - 1] : scaleLabels.join(" · ")}
+        </div>
+      )}
     </div>
   );
 }
@@ -182,49 +193,140 @@ function IndexNavBar({ view, setView, session, onLogout }) {
 }
 
 /* =========================================================================
-   LANDING — public, lists every currently open campaign
+   LANDING — public. Content ported from "Turning Retail Innovation into a
+   Flywheel" / "From AI Experimentation to AI-Native Retail" (the Executive
+   Conversation deck) — RIV's value props, the 5-stage maturity model used
+   throughout the Index, the 30-minute conversation agenda, and what a
+   respondent gets at the end.
    ========================================================================= */
+const VALUE_PROPS = [
+  { title: "Retailers", copy: "Get an AI & Innovation edge", color: BRAND.coral },
+  { title: "Startups", copy: "Get customers & capital", color: "#2F6FEB" },
+  { title: "Investors", copy: "Get early access to quality opportunities", color: "#D9A441" },
+];
+const MATURITY_MODEL = [
+  { n: "01", label: "Curious", quote: "We're learning what AI can do." },
+  { n: "02", label: "Experimenting", quote: "We're testing where AI can help." },
+  { n: "03", label: "Deploying", quote: "We have AI working in production." },
+  { n: "04", label: "Scaling", quote: "We're redesigning and scaling workflows around AI." },
+  { n: "05", label: "AI-Native", quote: "AI is embedded in how we operate." },
+];
+const CONVERSATION_AGENDA = [
+  { n: "01", title: "Leadership & Strategy", copy: "How leadership is actually using AI" },
+  { n: "02", title: "AI Use Cases", copy: "Where AI is creating / could create value" },
+  { n: "03", title: "Technology & Data", copy: "What enables or constrains scale" },
+  { n: "04", title: "Organisation", copy: "How roles and workflows are changing" },
+  { n: "05", title: "Agentic AI", copy: "Where AI could move from assisting to executing" },
+  { n: "06", title: "Ecosystem", copy: "How you work with startups and external innovation" },
+];
+const YOU_RECEIVE = ["Private AI Readiness Benchmark", "Early access to the Index", "Anonymised peer insights", "Invitation to the Executive Roundtable"];
+
 function LandingView({ campaigns, loading, session, onPickCampaign, setView }) {
-  if (loading) return <Spinner label="Loading campaigns…" />;
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto", padding: "56px 24px 100px", textAlign: "center" }}>
-      <div style={{ width: 54, height: 54, borderRadius: 16, background: "#FCEEE1", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px" }}>
-        <BarChart3 size={26} color={BRAND.coralDark} />
-      </div>
-      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 27, color: BRAND.ink }}>
-        Retail AI &amp; Innovation Index
-      </div>
-      <div style={{ fontFamily: FONT, fontSize: 14.5, color: "#7A746F", marginTop: 12, lineHeight: 1.65 }}>
-        A short executive benchmark — see how your organization compares to peers in your cohort, quarter by quarter.
+    <div>
+      {/* Hero */}
+      <div style={{ maxWidth: 820, margin: "0 auto", padding: "56px 24px 8px", textAlign: "center" }}>
+        <div style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 700, color: BRAND.coral, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 10 }}>
+          The India Retail AI &amp; Innovation Index
+        </div>
+        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 30, color: BRAND.ink, lineHeight: 1.25 }}>
+          From AI Experimentation to AI-Native Retail
+        </div>
+        <div style={{ fontFamily: FONT, fontSize: 14.5, color: "#7A746F", marginTop: 14, lineHeight: 1.65, maxWidth: 560, marginLeft: "auto", marginRight: "auto" }}>
+          A 30-minute executive conversation on where Retail AI is actually heading — and a private benchmark showing you where your organization stands against the cohort.
+        </div>
       </div>
 
-      {campaigns.length === 0 ? (
-        <div style={{ marginTop: 32 }}>
+      {/* Retailers / Startups / Investors */}
+      <div style={{ maxWidth: 820, margin: "0 auto", padding: "28px 24px 8px", display: "flex", gap: 12, flexWrap: "wrap" }}>
+        {VALUE_PROPS.map((v) => (
+          <Card key={v.title} style={{ flex: "1 1 200px", padding: "18px 20px", background: BRAND.cream, border: "none" }}>
+            <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: v.color }}>{v.title}</div>
+            <div style={{ fontFamily: FONT, fontSize: 13, color: BRAND.ink, marginTop: 4 }}>{v.copy}</div>
+          </Card>
+        ))}
+      </div>
+
+      {/* Open campaigns / CTA */}
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "28px 24px 8px" }}>
+        {loading ? <Spinner label="Loading campaigns…" /> : campaigns.length === 0 ? (
           <EmptyState icon={ClipboardList} title="No index is open right now" text="Check back soon, or contact the RIV team directly." />
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 32, textAlign: "left" }}>
-          {campaigns.map((c) => (
-            <Card key={c.id} style={{ padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <div>
-                <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14.5, color: BRAND.ink }}>{c.name}</div>
-                <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginTop: 2 }}>
-                  {[c.geo, c.quarter_label].filter(Boolean).join(" · ") || "—"}
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {campaigns.map((c) => (
+              <Card key={c.id} style={{ padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <div>
+                  <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14.5, color: BRAND.ink }}>{c.name}</div>
+                  <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginTop: 2 }}>
+                    {[c.geo, c.quarter_label].filter(Boolean).join(" · ") || "—"}
+                  </div>
                 </div>
+                <PrimaryButton icon={ArrowRight} onClick={() => onPickCampaign(c, session ? "audit" : "signup")}>
+                  {session ? "Take the index" : "Get started"}
+                </PrimaryButton>
+              </Card>
+            ))}
+          </div>
+        )}
+        {!session && (
+          <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginTop: 18, textAlign: "center" }}>
+            Already have an account? <button onClick={() => setView("login")} style={{ background: "none", border: "none", color: BRAND.coral, fontWeight: 600, cursor: "pointer", fontFamily: FONT, fontSize: 12.5 }}>Log in</button>
+          </div>
+        )}
+      </div>
+
+      {/* RIV Retail AI Maturity Model */}
+      <div style={{ maxWidth: 820, margin: "0 auto", padding: "48px 24px 8px" }}>
+        <div style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 700, color: BRAND.coral, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 6 }}>
+          The RIV Retail AI Maturity Model
+        </div>
+        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: BRAND.ink, marginBottom: 18 }}>
+          Where is your organisation today?
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 1, borderRadius: 12, overflow: "hidden", border: `1px solid ${BRAND.line}` }}>
+          {MATURITY_MODEL.map((m, i) => (
+            <div key={m.n} style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 18px", background: i % 2 === 1 ? BRAND.cream : "#fff" }}>
+              <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: BRAND.coral, width: 22 }}>{m.n}</div>
+              <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13.5, color: BRAND.ink, width: 130 }}>{m.label.toUpperCase()}</div>
+              <div style={{ fontFamily: FONT, fontSize: 13, color: "#7A746F", fontStyle: "italic" }}>"{m.quote}"</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 30-minute conversation agenda */}
+      <div style={{ maxWidth: 820, margin: "0 auto", padding: "48px 24px 8px" }}>
+        <div style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 700, color: BRAND.coral, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 6 }}>
+          Executive Research Conversation
+        </div>
+        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: BRAND.ink, marginBottom: 18 }}>
+          Today's 30-Minute Executive Conversation
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+          {CONVERSATION_AGENDA.map((a) => (
+            <Card key={a.n} style={{ padding: "16px 18px", background: BRAND.cream, border: "none" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <div style={{ width: 22, height: 22, borderRadius: "50%", background: BRAND.coral, color: "#fff", fontFamily: FONT, fontWeight: 700, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>{a.n}</div>
+                <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13.5, color: BRAND.ink }}>{a.title}</div>
               </div>
-              <PrimaryButton icon={ArrowRight} onClick={() => onPickCampaign(c, session ? "audit" : "signup")}>
-                {session ? "Take the index" : "Get started"}
-              </PrimaryButton>
+              <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A746F" }}>{a.copy}</div>
             </Card>
           ))}
         </div>
-      )}
+      </div>
 
-      {!session && (
-        <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginTop: 26 }}>
-          Already have an account? <button onClick={() => setView("login")} style={{ background: "none", border: "none", color: BRAND.coral, fontWeight: 600, cursor: "pointer", fontFamily: FONT, fontSize: 12.5 }}>Log in</button>
+      {/* What you receive */}
+      <div style={{ maxWidth: 820, margin: "0 auto", padding: "48px 24px 100px" }}>
+        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink, marginBottom: 14 }}>At the end, you will receive</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          {YOU_RECEIVE.map((r) => (
+            <div key={r} style={{
+              fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: "#2F6FEB",
+              background: "#EEF3FD", padding: "8px 14px", borderRadius: 999,
+            }}>{r}</div>
+          ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -331,14 +433,89 @@ function LoginView({ onAuthed, setView }) {
 }
 
 /* =========================================================================
-   AUDIT FORM — dynamic renderer over the (currently placeholder) question
-   set in backend/data/indexQuestions.json. Nothing here assumes a fixed
-   question count or wording, so swapping in the real instrument later is a
-   data-file change, not a UI change.
+   AUDIT FORM — dynamic renderer over the real Q3 2026 instrument in
+   backend/data/indexQuestions.json (12 sections, 30 questions, 7 question
+   types). Grouped by section, in the order the sections come back from the
+   API, so re-ordering or adding sections later is a data-file change, not
+   a UI change.
    ========================================================================= */
+function MultiSelectChips({ options, value = [], onChange }) {
+  function toggle(opt) {
+    onChange(value.includes(opt) ? value.filter((v) => v !== opt) : [...value, opt]);
+  }
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {options.map((opt) => {
+        const active = value.includes(opt);
+        return (
+          <button key={opt} type="button" onClick={() => toggle(opt)} style={{
+            fontFamily: FONT, fontSize: 12.5, fontWeight: 600, padding: "7px 13px", borderRadius: 999,
+            border: `1px solid ${active ? BRAND.coral : BRAND.line}`,
+            background: active ? BRAND.coral : "#fff", color: active ? "#fff" : BRAND.ink, cursor: "pointer",
+          }}>
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function YesNoToggle({ value, onChange }) {
+  return (
+    <div style={{ display: "flex", gap: 8 }}>
+      {["Yes", "No"].map((opt) => {
+        const active = value === opt;
+        return (
+          <button key={opt} type="button" onClick={() => onChange(opt)} style={{
+            fontFamily: FONT, fontSize: 13, fontWeight: 600, padding: "9px 22px", borderRadius: 9,
+            border: `1px solid ${active ? BRAND.coral : BRAND.line}`,
+            background: active ? BRAND.coral : "#fff", color: active ? "#fff" : BRAND.ink, cursor: "pointer",
+          }}>
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Picks the right input for a question's `type` — the one place that has
+// to know about every type in the instrument. Everything else (AuditView,
+// the admin manual-entry form, etc.) just calls this.
+function QuestionInput({ q, value, onChange }) {
+  switch (q.type) {
+    case "scored":
+      return <ScalePicker scale={q.scale || 5} scaleLabels={q.scaleLabels} value={value} onChange={onChange} />;
+    case "single_select":
+      return (
+        <select style={inputStyle} value={value || ""} onChange={(e) => onChange(e.target.value)}>
+          <option value="">Choose one…</option>
+          {q.options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+        </select>
+      );
+    case "multi_select":
+      return <MultiSelectChips options={q.options} value={value || []} onChange={onChange} />;
+    case "yesno":
+    case "consent":
+      return <YesNoToggle value={value} onChange={onChange} />;
+    case "open":
+      return (
+        <textarea
+          value={value || ""} onChange={(e) => onChange(e.target.value)} rows={3}
+          style={{ ...inputStyle, resize: "vertical", fontFamily: FONT }}
+        />
+      );
+    case "profile":
+    default:
+      return <input style={inputStyle} value={value || ""} onChange={(e) => onChange(e.target.value)} />;
+  }
+}
+
 function AuditView({ campaign, campaigns, onDone }) {
   const [selectedCampaignId, setSelectedCampaignId] = useState(campaign?.id || campaigns[0]?.id || null);
   const [questions, setQuestions] = useState([]);
+  const [sections, setSections] = useState([]);
   const [answers, setAnswers] = useState({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -346,8 +523,12 @@ function AuditView({ campaign, campaigns, onDone }) {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    api.getIndexQuestions().then((d) => setQuestions(d.questions)).finally(() => setLoading(false));
+    api.getIndexQuestions()
+      .then((d) => { setQuestions(d.questions); setSections(d.sections); })
+      .finally(() => setLoading(false));
   }, []);
+
+  function setAnswer(id, val) { setAnswers((a) => ({ ...a, [id]: val })); }
 
   async function submit(e) {
     e.preventDefault();
@@ -380,7 +561,7 @@ function AuditView({ campaign, campaigns, onDone }) {
   }
 
   return (
-    <div style={{ maxWidth: 640, margin: "0 auto", padding: "44px 24px 100px" }}>
+    <div style={{ maxWidth: 680, margin: "0 auto", padding: "44px 24px 100px" }}>
       <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink, marginBottom: 4 }}>Take the index</div>
       <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 26 }}>
         Only your own responses and your cohort's average are ever shown to you — no other respondent's individual score is visible here.
@@ -394,23 +575,32 @@ function AuditView({ campaign, campaigns, onDone }) {
         </Field>
       )}
 
-      <Card style={{ padding: 26 }}>
-        <form onSubmit={submit}>
-          {questions.map((q, i) => (
-            <div key={q.id} style={{ marginBottom: 24, paddingBottom: 24, borderBottom: i < questions.length - 1 ? `1px solid ${BRAND.line}` : "none" }}>
-              <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: BRAND.coral, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>
-                {q.category}
+      <form onSubmit={submit}>
+        {sections.map((section) => {
+          const sectionQuestions = questions.filter((q) => q.section === section.id);
+          if (!sectionQuestions.length) return null;
+          return (
+            <div key={section.id} style={{ marginBottom: 22 }}>
+              <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: BRAND.coral, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, paddingLeft: 2 }}>
+                {section.id} · {section.label}
               </div>
-              <div style={{ fontFamily: FONT, fontSize: 14, color: BRAND.ink, marginBottom: 12, lineHeight: 1.5 }}>{q.text}</div>
-              <ScalePicker scale={q.scale || 5} value={answers[q.id]} onChange={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))} />
+              <Card style={{ padding: 24 }}>
+                {sectionQuestions.map((q, i) => (
+                  <div key={q.id} style={{ marginBottom: i < sectionQuestions.length - 1 ? 22 : 0, paddingBottom: i < sectionQuestions.length - 1 ? 22 : 0, borderBottom: i < sectionQuestions.length - 1 ? `1px solid ${BRAND.line}` : "none" }}>
+                    <div style={{ fontFamily: FONT, fontSize: 14, color: BRAND.ink, marginBottom: q.hint ? 4 : 12, lineHeight: 1.5 }}>{q.text}</div>
+                    {q.hint && <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginBottom: 12 }}>{q.hint}</div>}
+                    <QuestionInput q={q} value={answers[q.id]} onChange={(v) => setAnswer(q.id, v)} />
+                  </div>
+                ))}
+              </Card>
             </div>
-          ))}
-          <ErrorBanner text={error} />
-          <PrimaryButton type="submit" disabled={submitting} icon={submitting ? Loader2 : ArrowRight} style={{ width: "100%", marginTop: 6 }}>
-            {submitting ? "Submitting…" : "Submit responses"}
-          </PrimaryButton>
-        </form>
-      </Card>
+          );
+        })}
+        <ErrorBanner text={error} />
+        <PrimaryButton type="submit" disabled={submitting} icon={submitting ? Loader2 : ArrowRight} style={{ width: "100%", marginTop: 6 }}>
+          {submitting ? "Submitting…" : "Submit responses"}
+        </PrimaryButton>
+      </form>
     </div>
   );
 }
@@ -474,9 +664,34 @@ function MyEntriesView({ setView, setActiveEntryId }) {
 }
 
 /* =========================================================================
-   DASHBOARD — one entry's score vs. its campaign's cohort average, plus a
-   link to the collated report once that campaign closes.
+   DASHBOARD — one entry's overall score + Five Dimensions breakdown vs.
+   its campaign's cohort average, plus maturity stage. Same shape as the
+   sample report's "Five Dimensions" table, just for one respondent.
    ========================================================================= */
+function DimensionBar({ label, mine, cohort }) {
+  const pct = (v) => (v != null ? `${(v / 5) * 100}%` : "0%");
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
+        <div style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: BRAND.ink }}>{label}</div>
+        <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F" }}>
+          {mine != null ? mine.toFixed(1) : "—"} / 5
+          {cohort != null && <span> · cohort {cohort.toFixed(1)}</span>}
+        </div>
+      </div>
+      <div style={{ position: "relative", height: 8, borderRadius: 999, background: "#EFEBE7" }}>
+        {cohort != null && (
+          <div style={{ position: "absolute", left: pct(cohort), top: -3, width: 2, height: 14, background: "#B7B2AE" }} title="Cohort average" />
+        )}
+        <div style={{ height: 8, borderRadius: 999, background: BRAND.coral, width: pct(mine) }} />
+      </div>
+      {mine == null && (
+        <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#B7B2AE", marginTop: 3 }}>Not yet measurable for this campaign.</div>
+      )}
+    </div>
+  );
+}
+
 function DashboardView({ entryId, onBack }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -492,7 +707,7 @@ function DashboardView({ entryId, onBack }) {
   if (loading) return <Spinner label="Loading your dashboard…" />;
 
   return (
-    <div style={{ maxWidth: 560, margin: "0 auto", padding: "36px 24px 100px" }}>
+    <div style={{ maxWidth: 620, margin: "0 auto", padding: "36px 24px 100px" }}>
       <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginBottom: 16, padding: 0 }}>
         <ChevronLeft size={14} /> My entries
       </button>
@@ -500,26 +715,42 @@ function DashboardView({ entryId, onBack }) {
       <ErrorBanner text={error} />
 
       {data && (
-        <div style={{ display: "flex", gap: 14 }}>
-          <Card style={{ padding: 22, flex: 1, textAlign: "center" }}>
-            <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 6 }}>Your score</div>
-            <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 30, color: BRAND.coral }}>
-              {data.myScore != null ? data.myScore.toFixed(1) : "—"}<span style={{ fontSize: 15, color: "#9B958F" }}>/5</span>
+        <>
+          <div style={{ display: "flex", gap: 14, marginBottom: 22 }}>
+            <Card style={{ padding: 22, flex: 1, textAlign: "center" }}>
+              <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 6 }}>Your Index score</div>
+              <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 30, color: BRAND.coral }}>
+                {data.myScore != null ? data.myScore.toFixed(1) : "—"}<span style={{ fontSize: 15, color: "#9B958F" }}>/5</span>
+              </div>
+              {data.stage && <div style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 600, color: "#9B958F", marginTop: 4 }}>{data.stage}</div>}
+            </Card>
+            <Card style={{ padding: 22, flex: 1, textAlign: "center" }}>
+              <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 6 }}>Cohort average</div>
+              <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 30, color: BRAND.ink }}>
+                {data.cohortAverage != null ? data.cohortAverage.toFixed(1) : "—"}<span style={{ fontSize: 15, color: "#9B958F" }}>/5</span>
+              </div>
+              <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", marginTop: 4 }}>
+                across {data.cohortSize} {data.cohortSize === 1 ? "response" : "responses"}
+              </div>
+            </Card>
+          </div>
+
+          {data.selfReportedStage && data.selfReportedStage !== data.stage && (
+            <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 20 }}>
+              You described your organization as <strong style={{ color: BRAND.ink }}>{data.selfReportedStage}</strong> — the computed Index score places you closer to <strong style={{ color: BRAND.ink }}>{data.stage}</strong>.
             </div>
+          )}
+
+          <Card style={{ padding: 24, marginBottom: 20 }}>
+            <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 16 }}>Five Dimensions</div>
+            {(data.indexDimensions || []).map((dim) => (
+              <DimensionBar key={dim} label={dim} mine={data.dimensionScores?.[dim]} cohort={data.dimensionCohortAverage?.[dim]} />
+            ))}
           </Card>
-          <Card style={{ padding: 22, flex: 1, textAlign: "center" }}>
-            <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 6 }}>Cohort average</div>
-            <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 30, color: BRAND.ink }}>
-              {data.cohortAverage != null ? data.cohortAverage.toFixed(1) : "—"}<span style={{ fontSize: 15, color: "#9B958F" }}>/5</span>
-            </div>
-            <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", marginTop: 4 }}>
-              across {data.cohortSize} {data.cohortSize === 1 ? "response" : "responses"}
-            </div>
-          </Card>
-        </div>
+        </>
       )}
-      <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginTop: 16, display: "flex", alignItems: "center", gap: 6 }}>
-        <TrendingUp size={13} /> Only the cohort average is shown — no other respondent's individual score is ever visible here.
+      <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", display: "flex", alignItems: "center", gap: 6 }}>
+        <TrendingUp size={13} /> Only cohort averages are shown — no other respondent's individual score is ever visible here.
       </div>
     </div>
   );
