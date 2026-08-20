@@ -1,0 +1,24 @@
+{
+  "_placeholder": true,
+  "_note": "PLACEHOLDER question set. The real questions are being ported from the interview-capture Google Sheet and have not been supplied yet (see RIOS-PRD-RIndex-Module.md §11). This file exists so the Audit form, scoring, and dashboard can be built and tested end-to-end now. Replace the `questions` array below with the real set when it arrives — nothing else in the code needs to change as long as each question keeps an `id` (stable, never reused) and a 1-5 `scale`. Same convention as backend/data/questions.json / riseCriteria.json: this is the single source of truth, fetched by the frontend at runtime, not duplicated in code.",
+  "questions": [
+    {
+      "id": "q1",
+      "category": "AI Strategy",
+      "text": "PLACEHOLDER — How would you rate your organization's overall AI strategy maturity?",
+      "scale": 5
+    },
+    {
+      "id": "q2",
+      "category": "Data Infrastructure",
+      "text": "PLACEHOLDER — How would you rate your organization's data infrastructure readiness for AI?",
+      "scale": 5
+    },
+    {
+      "id": "q3",
+      "category": "Adoption",
+      "text": "PLACEHOLDER — How would you rate the current level of AI adoption across your retail operations?",
+      "scale": 5
+    }
+  ]
+}

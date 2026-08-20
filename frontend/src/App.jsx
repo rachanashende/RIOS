@@ -33,20 +33,24 @@ const OUTER_PATH_TO_VIEW = {
   "/leaderboard": "ideas-riv",
   "/startup": "rise-riv",
   "/rate-startup": "rise-riv",
+  "/rindex": "r-index",
+  "/rindex/my-entries": "r-index",
 };
 // The canonical URL for each view this component navigates to directly
-// (via goToView or a login redirect). Ideathon/Startup each get one
+// (via goToView or a login redirect). Ideathon/Startup/R-Index each get one
 // default entry path here -- the specific tab within them is decided by
-// IdeasRivMain/RiseRivApp reading the pathname themselves, independently.
+// IdeasRivMain/RiseRivApp/IndexRivApp reading the pathname themselves,
+// independently.
 const OUTER_VIEW_TO_PATH = {
   home: "/", admin: "/admin", assess: "/audit", dashboard: "/scorecard",
-  "ideas-riv": "/opportunities", "rise-riv": "/rate-startup",
+  "ideas-riv": "/opportunities", "rise-riv": "/rate-startup", "r-index": "/rindex",
 };
 function pathToOuterView(pathname) {
   const path = pathname.replace(/\/+$/, "") || "/";
   return OUTER_PATH_TO_VIEW[path] || "home";
 }
 import RiseRivApp from "./RiseRiv.jsx";
+import IndexRivApp from "./IndexRiv.jsx";
 
 const MATURITY_LABELS = [
   { v: 0, label: "No capability", desc: "Not in place, not planned" },
@@ -1126,7 +1130,7 @@ export default function RiosApp() {
           .rios-glance-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
-      {view !== "ideas-riv" && view !== "rise-riv" && (
+      {view !== "ideas-riv" && view !== "rise-riv" && view !== "r-index" && (
         <NavBar view={view} setView={goToView} user={user} onLogout={handleLogout} />
       )}
       {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip /></>)}
@@ -1134,6 +1138,7 @@ export default function RiosApp() {
       {view === "signup" && <SignupView onSignup={handleSignup} setView={goToView} />}
       {view === "ideas-riv" && <IdeasRivApp />}
       {view === "rise-riv" && <RiseRivApp />}
+      {view === "r-index" && <IndexRivApp />}
       {view === "assess" && user?.role === "client" && ready && (
         <AssessmentView questions={questions} modules={modules} responses={responses} setResponses={setResponses} moduleIdx={moduleIdx} setModuleIdx={setModuleIdx} />
       )}
@@ -1141,7 +1146,7 @@ export default function RiosApp() {
       {view === "dashboard" && user && ready && (
         <DashboardView questions={questions} modules={modules} responses={responses} setView={goToView} user={user} viewingClient={viewingClient} />
       )}
-      <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#B7B2AE", display: (view === "ideas-riv" || view === "rise-riv") ? "none" : "block" }}>
+      <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#B7B2AE", display: (view === "ideas-riv" || view === "rise-riv" || view === "r-index") ? "none" : "block" }}>
         <div>Questions? Write to us at <a href="mailto:contact@retailinnovation.ventures" style={{ color: BRAND.coralDark }}>contact@retailinnovation.ventures</a></div>
       </div>
     </div>

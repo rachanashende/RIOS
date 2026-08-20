@@ -1,0 +1,825 @@
+import React, { useState, useEffect } from "react";
+import {
+  BarChart3, LogOut, CheckCircle2, ArrowRight, ChevronLeft, ChevronRight,
+  Loader2, ClipboardList, AlertCircle, UserCircle2, Plus, Trash2,
+  FileSpreadsheet, FileText, TrendingUp,
+} from "lucide-react";
+import {
+  api, getStoredIndexUser, setIndexSession, clearIndexSession,
+} from "./api.js";
+import { BRAND } from "./brand.js";
+
+// R-Index's own tabs, each with a real URL. IndexRivApp owns this entirely
+// once mounted -- the outer App.jsx only knows this maps to its single
+// "r-index" container view (same treatment as Ideathon/Startup). Every
+// other internal screen (signup, login, audit, my-entries, dashboard,
+// report, admin-*) is a sub-view with no URL of its own -- same convention
+// as Startup's "apply"/"jury-login"/"jury-score".
+const INDEX_VIEW_TO_PATH = { landing: "/rindex", "my-entries": "/rindex/my-entries" };
+const INDEX_PATH_TO_VIEW = { "/rindex": "landing", "/rindex/my-entries": "my-entries" };
+function pathToIndexView(pathname) {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  return INDEX_PATH_TO_VIEW[path] || "landing";
+}
+
+const FONT = "'Poppins',sans-serif";
+
+/* =========================================================================
+   SMALL UI PRIMITIVES — deliberately redefined here rather than imported
+   from App.jsx/RiseRiv.jsx, so this module has zero dependency on the
+   other two beyond api.js/brand.js (same isolation as RiseRiv.jsx).
+   ========================================================================= */
+function PrimaryButton({ children, onClick, disabled, style, icon: Icon, type = "button" }) {
+  return (
+    <button type={type} onClick={onClick} disabled={disabled} style={{
+      display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+      fontFamily: FONT, fontWeight: 600, fontSize: 13.5, background: disabled ? "#E7B4B4" : BRAND.coral,
+      color: "#fff", border: "none", borderRadius: 9, padding: "11px 18px",
+      cursor: disabled ? "not-allowed" : "pointer", ...style,
+    }}>
+      {Icon && <Icon size={14} />} {children}
+    </button>
+  );
+}
+
+function GhostButton({ children, onClick, style, icon: Icon }) {
+  return (
+    <button onClick={onClick} style={{
+      display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+      fontFamily: FONT, fontWeight: 600, fontSize: 13, background: "#fff",
+      color: BRAND.ink, border: `1px solid ${BRAND.line}`, borderRadius: 9, padding: "10px 16px",
+      cursor: "pointer", ...style,
+    }}>
+      {Icon && <Icon size={14} />} {children}
+    </button>
+  );
+}
+
+function Card({ children, style }) {
+  return <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 14, background: "#fff", ...style }}>{children}</div>;
+}
+
+function Field({ label, children, required, hint }) {
+  return (
+    <label style={{ display: "block", marginBottom: 16 }}>
+      <div style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: BRAND.ink, marginBottom: 6 }}>
+        {label}{required && <span style={{ color: BRAND.coral }}> *</span>}
+      </div>
+      {children}
+      {hint && <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 5 }}>{hint}</div>}
+    </label>
+  );
+}
+
+const inputStyle = {
+  width: "100%", fontFamily: FONT, fontSize: 13.5, padding: "10px 12px",
+  borderRadius: 9, border: `1px solid ${BRAND.line}`, background: "#fff", color: BRAND.ink,
+};
+
+function ErrorBanner({ text }) {
+  if (!text) return null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderRadius: 12, background: "#FBEAEA", border: "1px solid #F3C6C6", marginBottom: 16 }}>
+      <AlertCircle size={15} color={BRAND.coralDark} />
+      <div style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.ink }}>{text}</div>
+    </div>
+  );
+}
+
+function Spinner({ label }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", padding: "60px 20px", fontFamily: FONT, fontSize: 13, color: "#9B958F" }}>
+      <Loader2 size={16} className="index-spin" /> {label || "Loading…"}
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, title, text }) {
+  return (
+    <div style={{ textAlign: "center", padding: "48px 20px", border: `1px dashed ${BRAND.line}`, borderRadius: 14 }}>
+      <div style={{ width: 48, height: 48, borderRadius: 14, background: BRAND.cream, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", border: `1px solid ${BRAND.line}` }}>
+        <Icon size={20} color={BRAND.coral} />
+      </div>
+      <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15, color: BRAND.ink }}>{title}</div>
+      <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginTop: 6, maxWidth: 340, marginLeft: "auto", marginRight: "auto", lineHeight: 1.6 }}>{text}</div>
+    </div>
+  );
+}
+
+// 1-5 (or scale-N) rating picker for a single audit question — plain
+// numbered buttons rather than stars, since this is a maturity/agreement
+// scale (per question `scale`, default 5), not a 5-star rating like
+// Startup's jury criteria.
+function ScalePicker({ value, onChange, scale = 5 }) {
+  return (
+    <div style={{ display: "flex", gap: 8 }}>
+      {Array.from({ length: scale }, (_, i) => i + 1).map((n) => {
+        const active = value === n;
+        return (
+          <button
+            key={n} type="button" onClick={() => onChange(n)}
+            aria-label={`Rate ${n} out of ${scale}`}
+            style={{
+              width: 38, height: 38, borderRadius: 9, cursor: "pointer",
+              fontFamily: FONT, fontWeight: 700, fontSize: 14,
+              border: `1px solid ${active ? BRAND.coral : BRAND.line}`,
+              background: active ? BRAND.coral : "#fff",
+              color: active ? "#fff" : BRAND.ink,
+            }}
+          >
+            {n}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* =========================================================================
+   NAV
+   ========================================================================= */
+function IndexNavBar({ view, setView, session, onLogout }) {
+  const items = [{ id: "landing", label: "Overview" }];
+  if (session) items.push({ id: "my-entries", label: "My entries" });
+  if (session?.role === "admin") items.push({ id: "admin-campaigns", label: "Manage campaigns" });
+
+  return (
+    <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(251,249,246,0.95)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${BRAND.line}` }}>
+      <div style={{ maxWidth: 1000, margin: "0 auto", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink }}>
+            <BarChart3 size={18} color={BRAND.coral} /> R-Index
+          </div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {/* Real link (full navigation) back to the main site's Overview
+                page — this module doesn't render inside the main site's own
+                header, so this is the only way back to it. */}
+            <a href="/" style={{
+              fontFamily: FONT, fontSize: 13.5, fontWeight: 500, padding: "8px 14px", borderRadius: 999,
+              textDecoration: "none", color: BRAND.ink, display: "inline-block",
+            }}>RIOS</a>
+            {items.map((it) => (
+              <button key={it.id} onClick={() => setView(it.id)} style={{
+                fontFamily: FONT, fontSize: 13.5, fontWeight: 500, padding: "8px 14px", borderRadius: 999,
+                border: "none", cursor: "pointer", background: view === it.id ? BRAND.ink : "transparent",
+                color: view === it.id ? "#fff" : BRAND.ink,
+              }}>
+                {it.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          {session ? (
+            <GhostButton onClick={onLogout} icon={LogOut}>{session.name}</GhostButton>
+          ) : (
+            <GhostButton onClick={() => setView("login")} icon={UserCircle2}>Log in</GhostButton>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   LANDING — public, lists every currently open campaign
+   ========================================================================= */
+function LandingView({ campaigns, loading, session, onPickCampaign, setView }) {
+  if (loading) return <Spinner label="Loading campaigns…" />;
+  return (
+    <div style={{ maxWidth: 720, margin: "0 auto", padding: "56px 24px 100px", textAlign: "center" }}>
+      <div style={{ width: 54, height: 54, borderRadius: 16, background: "#FCEEE1", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px" }}>
+        <BarChart3 size={26} color={BRAND.coralDark} />
+      </div>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 27, color: BRAND.ink }}>
+        Retail AI &amp; Innovation Index
+      </div>
+      <div style={{ fontFamily: FONT, fontSize: 14.5, color: "#7A746F", marginTop: 12, lineHeight: 1.65 }}>
+        A short executive benchmark — see how your organization compares to peers in your cohort, quarter by quarter.
+      </div>
+
+      {campaigns.length === 0 ? (
+        <div style={{ marginTop: 32 }}>
+          <EmptyState icon={ClipboardList} title="No index is open right now" text="Check back soon, or contact the RIV team directly." />
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 32, textAlign: "left" }}>
+          {campaigns.map((c) => (
+            <Card key={c.id} style={{ padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div>
+                <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14.5, color: BRAND.ink }}>{c.name}</div>
+                <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginTop: 2 }}>
+                  {[c.geo, c.quarter_label].filter(Boolean).join(" · ") || "—"}
+                </div>
+              </div>
+              <PrimaryButton icon={ArrowRight} onClick={() => onPickCampaign(c, session ? "audit" : "signup")}>
+                {session ? "Take the index" : "Get started"}
+              </PrimaryButton>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {!session && (
+        <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginTop: 26 }}>
+          Already have an account? <button onClick={() => setView("login")} style={{ background: "none", border: "none", color: BRAND.coral, fontWeight: 600, cursor: "pointer", fontFamily: FONT, fontSize: 12.5 }}>Log in</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================================
+   SIGNUP / LOGIN — self-service, always creates an 'index_respondent'
+   account (distinct role from the main site's 'client' — see
+   RIOS-PRD-RIndex-Module.md §3). Login reuses the shared /api/auth/login
+   endpoint, same as Rise.RIV jury does.
+   ========================================================================= */
+function SignupView({ pendingCampaign, onAuthed, setView }) {
+  const [form, setForm] = useState({ name: "", email: "", company: "", password: "" });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  function set(key) { return (e) => setForm((f) => ({ ...f, [key]: e.target.value })); }
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!form.name.trim() || !form.email.trim() || !form.password.trim()) {
+      setError("Name, email, and password are required.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const { token, user } = await api.indexSignup(form);
+      onAuthed(token, user);
+    } catch (e) {
+      setError(e.message || "Couldn't sign up — please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 440, margin: "0 auto", padding: "56px 24px 100px" }}>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink, marginBottom: 4 }}>Create your account</div>
+      {pendingCampaign && (
+        <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 22 }}>
+          To take the <strong>{pendingCampaign.name}</strong> index.
+        </div>
+      )}
+      <Card style={{ padding: 26 }}>
+        <form onSubmit={submit}>
+          <Field label="Full name" required><input style={inputStyle} value={form.name} onChange={set("name")} /></Field>
+          <Field label="Email" required><input type="email" style={inputStyle} value={form.email} onChange={set("email")} /></Field>
+          <Field label="Company"><input style={inputStyle} value={form.company} onChange={set("company")} /></Field>
+          <Field label="Password" required hint="At least 8 characters."><input type="password" style={inputStyle} value={form.password} onChange={set("password")} /></Field>
+          <ErrorBanner text={error} />
+          <PrimaryButton type="submit" disabled={submitting} icon={submitting ? Loader2 : ArrowRight} style={{ width: "100%" }}>
+            {submitting ? "Creating account…" : "Sign up"}
+          </PrimaryButton>
+        </form>
+        <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginTop: 16, textAlign: "center" }}>
+          Already have an account? <button onClick={() => setView("login")} style={{ background: "none", border: "none", color: BRAND.coral, fontWeight: 600, cursor: "pointer", fontFamily: FONT, fontSize: 12.5 }}>Log in</button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function LoginView({ onAuthed, setView }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function submit(e) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const { token, user } = await api.indexLogin(email, password);
+      if (user.role !== "index_respondent" && user.role !== "admin") {
+        throw new Error("This login isn't set up for R-Index.");
+      }
+      onAuthed(token, user);
+    } catch (e) {
+      setError(e.message || "Couldn't log in.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 400, margin: "0 auto", padding: "56px 24px 100px" }}>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink, marginBottom: 22 }}>Log in</div>
+      <Card style={{ padding: 26 }}>
+        <form onSubmit={submit}>
+          <Field label="Email" required><input type="email" style={inputStyle} value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+          <Field label="Password" required><input type="password" style={inputStyle} value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+          <ErrorBanner text={error} />
+          <PrimaryButton type="submit" disabled={submitting} icon={submitting ? Loader2 : ArrowRight} style={{ width: "100%" }}>
+            {submitting ? "Logging in…" : "Log in"}
+          </PrimaryButton>
+        </form>
+        <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginTop: 16, textAlign: "center" }}>
+          New here? <button onClick={() => setView("signup")} style={{ background: "none", border: "none", color: BRAND.coral, fontWeight: 600, cursor: "pointer", fontFamily: FONT, fontSize: 12.5 }}>Create an account</button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/* =========================================================================
+   AUDIT FORM — dynamic renderer over the (currently placeholder) question
+   set in backend/data/indexQuestions.json. Nothing here assumes a fixed
+   question count or wording, so swapping in the real instrument later is a
+   data-file change, not a UI change.
+   ========================================================================= */
+function AuditView({ campaign, campaigns, onDone }) {
+  const [selectedCampaignId, setSelectedCampaignId] = useState(campaign?.id || campaigns[0]?.id || null);
+  const [questions, setQuestions] = useState([]);
+  const [answers, setAnswers] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    api.getIndexQuestions().then((d) => setQuestions(d.questions)).finally(() => setLoading(false));
+  }, []);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!selectedCampaignId) { setError("Please choose which campaign you're submitting for."); return; }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.submitIndexEntry({ campaignId: selectedCampaignId, answers });
+      setDone(true);
+    } catch (e) {
+      setError(e.message || "Couldn't submit — please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (loading) return <Spinner label="Loading the audit…" />;
+
+  if (done) {
+    return (
+      <div style={{ maxWidth: 520, margin: "0 auto", padding: "80px 24px", textAlign: "center" }}>
+        <CheckCircle2 size={44} color={BRAND.coral} style={{ marginBottom: 16 }} />
+        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: BRAND.ink }}>Thanks — your responses are in.</div>
+        <div style={{ fontFamily: FONT, fontSize: 14, color: "#7A746F", marginTop: 8 }}>
+          Check your dashboard to see how you compare to your cohort.
+        </div>
+        <GhostButton onClick={onDone} style={{ margin: "26px auto 0" }}>Go to my entries</GhostButton>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 640, margin: "0 auto", padding: "44px 24px 100px" }}>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink, marginBottom: 4 }}>Take the index</div>
+      <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 26 }}>
+        Only your own responses and your cohort's average are ever shown to you — no other respondent's individual score is visible here.
+      </div>
+
+      {campaigns.length > 1 && (
+        <Field label="Campaign" required>
+          <select style={inputStyle} value={selectedCampaignId || ""} onChange={(e) => setSelectedCampaignId(Number(e.target.value))}>
+            {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </Field>
+      )}
+
+      <Card style={{ padding: 26 }}>
+        <form onSubmit={submit}>
+          {questions.map((q, i) => (
+            <div key={q.id} style={{ marginBottom: 24, paddingBottom: 24, borderBottom: i < questions.length - 1 ? `1px solid ${BRAND.line}` : "none" }}>
+              <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: BRAND.coral, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>
+                {q.category}
+              </div>
+              <div style={{ fontFamily: FONT, fontSize: 14, color: BRAND.ink, marginBottom: 12, lineHeight: 1.5 }}>{q.text}</div>
+              <ScalePicker scale={q.scale || 5} value={answers[q.id]} onChange={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))} />
+            </div>
+          ))}
+          <ErrorBanner text={error} />
+          <PrimaryButton type="submit" disabled={submitting} icon={submitting ? Loader2 : ArrowRight} style={{ width: "100%", marginTop: 6 }}>
+            {submitting ? "Submitting…" : "Submit responses"}
+          </PrimaryButton>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+/* =========================================================================
+   MY ENTRIES — every campaign this respondent has ever submitted to,
+   supports re-participation across quarters/geos (PRD §7).
+   ========================================================================= */
+function MyEntriesView({ setView, setActiveEntryId }) {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    api.getMyIndexEntries()
+      .then((d) => setEntries(d.entries))
+      .catch((e) => setError(e.message || "Couldn't load your entries."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <Spinner label="Loading your entries…" />;
+
+  return (
+    <div style={{ maxWidth: 720, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink }}>My entries</div>
+      <ErrorBanner text={error} />
+
+      {entries.length === 0 ? (
+        <div style={{ marginTop: 20 }}>
+          <EmptyState icon={ClipboardList} title="No entries yet" text="Take an open index from the Overview tab to get started." />
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 20 }}>
+          {entries.map((e) => (
+            <Card key={e.id} style={{ padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div>
+                <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14.5, color: BRAND.ink }}>{e.campaign_name}</div>
+                <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginTop: 2 }}>
+                  {[e.geo, e.quarter_label].filter(Boolean).join(" · ") || "—"}
+                  {" · "}{e.campaign_is_open ? "Open" : "Closed"}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1B7A5A", background: "#E7F5EF", padding: "4px 10px", borderRadius: 999 }}>
+                  {e.score != null ? `${e.score.toFixed(1)}/5` : "Not scored"}
+                </span>
+                <button
+                  onClick={() => { setActiveEntryId(e.id); setView("dashboard"); }}
+                  style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}
+                  aria-label={`View dashboard for ${e.campaign_name}`}
+                >
+                  <ChevronRight size={18} color="#B7B2AE" />
+                </button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================================
+   DASHBOARD — one entry's score vs. its campaign's cohort average, plus a
+   link to the collated report once that campaign closes.
+   ========================================================================= */
+function DashboardView({ entryId, onBack }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    api.getIndexEntryDashboard(entryId)
+      .then(setData)
+      .catch((e) => setError(e.message || "Couldn't load your dashboard."))
+      .finally(() => setLoading(false));
+  }, [entryId]);
+
+  if (loading) return <Spinner label="Loading your dashboard…" />;
+
+  return (
+    <div style={{ maxWidth: 560, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginBottom: 16, padding: 0 }}>
+        <ChevronLeft size={14} /> My entries
+      </button>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink, marginBottom: 20 }}>Your dashboard</div>
+      <ErrorBanner text={error} />
+
+      {data && (
+        <div style={{ display: "flex", gap: 14 }}>
+          <Card style={{ padding: 22, flex: 1, textAlign: "center" }}>
+            <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 6 }}>Your score</div>
+            <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 30, color: BRAND.coral }}>
+              {data.myScore != null ? data.myScore.toFixed(1) : "—"}<span style={{ fontSize: 15, color: "#9B958F" }}>/5</span>
+            </div>
+          </Card>
+          <Card style={{ padding: 22, flex: 1, textAlign: "center" }}>
+            <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 6 }}>Cohort average</div>
+            <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 30, color: BRAND.ink }}>
+              {data.cohortAverage != null ? data.cohortAverage.toFixed(1) : "—"}<span style={{ fontSize: 15, color: "#9B958F" }}>/5</span>
+            </div>
+            <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", marginTop: 4 }}>
+              across {data.cohortSize} {data.cohortSize === 1 ? "response" : "responses"}
+            </div>
+          </Card>
+        </div>
+      )}
+      <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginTop: 16, display: "flex", alignItems: "center", gap: 6 }}>
+        <TrendingUp size={13} /> Only the cohort average is shown — no other respondent's individual score is ever visible here.
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   ADMIN — campaign management (self-contained here so this module has
+   everything it needs without a large edit to App.jsx's admin panel; an
+   admin reaches this by logging in with their existing main-site admin
+   credentials through the same login form above).
+   ========================================================================= */
+function AdminCampaignsView({ setView, setActiveCampaignId }) {
+  const [campaigns, setCampaigns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({ name: "", geo: "", quarterLabel: "", endsAt: "" });
+
+  function load() {
+    setLoading(true);
+    api.listIndexCampaignsAdmin()
+      .then((d) => setCampaigns(d.campaigns))
+      .catch((e) => setError(e.message || "Couldn't load campaigns."))
+      .finally(() => setLoading(false));
+  }
+  useEffect(load, []);
+
+  async function createCampaign(e) {
+    e.preventDefault();
+    if (!form.name.trim()) { setError("Campaign name is required."); return; }
+    setCreating(true);
+    setError(null);
+    try {
+      await api.createIndexCampaign(form);
+      setForm({ name: "", geo: "", quarterLabel: "", endsAt: "" });
+      load();
+    } catch (e) {
+      setError(e.message || "Couldn't create campaign.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function toggleOpen(c) {
+    try {
+      if (c.is_open) await api.closeIndexCampaign(c.id); else await api.openIndexCampaign(c.id);
+      load();
+    } catch (e) {
+      setError(e.message || "Couldn't update campaign.");
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink }}>Manage campaigns</div>
+      <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginTop: 4, marginBottom: 22 }}>
+        Each campaign is its own quarter/geo cohort — comparisons never blend across campaigns.
+      </div>
+
+      <Card style={{ padding: 22, marginBottom: 26 }}>
+        <form onSubmit={createCampaign} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <Field label="Campaign name" required>
+              <input style={inputStyle} placeholder="e.g. Q4 2026 Dubai Retail AI and Innovation Index" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+            </Field>
+          </div>
+          <Field label="Geo"><input style={inputStyle} placeholder="e.g. India, Dubai" value={form.geo} onChange={(e) => setForm((f) => ({ ...f, geo: e.target.value }))} /></Field>
+          <Field label="Quarter label"><input style={inputStyle} placeholder="e.g. Q4 2026" value={form.quarterLabel} onChange={(e) => setForm((f) => ({ ...f, quarterLabel: e.target.value }))} /></Field>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <ErrorBanner text={error} />
+            <PrimaryButton type="submit" disabled={creating} icon={creating ? Loader2 : Plus}>
+              {creating ? "Creating…" : "Create campaign"}
+            </PrimaryButton>
+          </div>
+        </form>
+      </Card>
+
+      {loading ? <Spinner label="Loading campaigns…" /> : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {campaigns.map((c) => (
+            <Card key={c.id} style={{ padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div>
+                <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14.5, color: BRAND.ink }}>{c.name}</div>
+                <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginTop: 2 }}>
+                  {[c.geo, c.quarter_label].filter(Boolean).join(" · ") || "—"} · {c.entry_count} {c.entry_count === 1 ? "entry" : "entries"}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{
+                  fontFamily: FONT, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999,
+                  color: c.is_open ? "#1B7A5A" : "#7A746F", background: c.is_open ? "#E7F5EF" : "#EFEBE7",
+                }}>{c.is_open ? "Open" : "Closed"}</span>
+                <GhostButton onClick={() => toggleOpen(c)}>{c.is_open ? "Close" : "Reopen"}</GhostButton>
+                <PrimaryButton onClick={() => { setActiveCampaignId(c.id); setView("admin-entries"); }}>
+                  View entries
+                </PrimaryButton>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================================
+   ADMIN — entries for one campaign: full list, manual add (interview-sheet
+   entry), and report export.
+   ========================================================================= */
+function AdminEntriesView({ campaignId, onBack }) {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({ respondentName: "", respondentEmail: "", company: "" });
+
+  function load() {
+    setLoading(true);
+    api.listIndexEntriesAdmin(campaignId)
+      .then((d) => setEntries(d.entries))
+      .catch((e) => setError(e.message || "Couldn't load entries."))
+      .finally(() => setLoading(false));
+  }
+  useEffect(load, [campaignId]);
+
+  async function addEntry(e) {
+    e.preventDefault();
+    if (!form.respondentName.trim() || !form.respondentEmail.trim()) {
+      setError("Respondent name and email are required.");
+      return;
+    }
+    setAdding(true);
+    setError(null);
+    try {
+      // Manual add here doesn't collect per-question answers inline (the
+      // interview-capture sheet's questions aren't ported yet — see
+      // RIOS-PRD-RIndex-Module.md §11); this creates the respondent record
+      // now, and answers/score can be filled in via a follow-up edit once
+      // the real question set lands, using PUT /api/admin/index/entries/:id.
+      await api.createIndexEntryAdmin({ campaignId, ...form, answers: {} });
+      setForm({ respondentName: "", respondentEmail: "", company: "" });
+      load();
+    } catch (e) {
+      setError(e.message || "Couldn't add entry.");
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function removeEntry(id) {
+    try {
+      await api.deleteIndexEntryAdmin(id);
+      load();
+    } catch (e) {
+      setError(e.message || "Couldn't delete entry.");
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginBottom: 16, padding: 0 }}>
+        <ChevronLeft size={14} /> Campaigns
+      </button>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 22 }}>
+        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink }}>Entries</div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <a href={api.indexExportUrl("excel", campaignId)} target="_blank" rel="noreferrer">
+            <GhostButton icon={FileSpreadsheet}>Excel</GhostButton>
+          </a>
+          <a href={api.indexExportUrl("pdf", campaignId)} target="_blank" rel="noreferrer">
+            <GhostButton icon={FileText}>PDF</GhostButton>
+          </a>
+        </div>
+      </div>
+
+      <Card style={{ padding: 22, marginBottom: 26 }}>
+        <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13.5, color: BRAND.ink, marginBottom: 14 }}>
+          Add a respondent (e.g. from the interview-capture sheet)
+        </div>
+        <form onSubmit={addEntry} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+          <Field label="Name" required><input style={inputStyle} value={form.respondentName} onChange={(e) => setForm((f) => ({ ...f, respondentName: e.target.value }))} /></Field>
+          <Field label="Email" required><input type="email" style={inputStyle} value={form.respondentEmail} onChange={(e) => setForm((f) => ({ ...f, respondentEmail: e.target.value }))} /></Field>
+          <Field label="Company"><input style={inputStyle} value={form.company} onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))} /></Field>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <ErrorBanner text={error} />
+            <PrimaryButton type="submit" disabled={adding} icon={adding ? Loader2 : Plus}>
+              {adding ? "Adding…" : "Add respondent"}
+            </PrimaryButton>
+          </div>
+        </form>
+      </Card>
+
+      {loading ? <Spinner label="Loading entries…" /> : entries.length === 0 ? (
+        <EmptyState icon={ClipboardList} title="No entries yet" text="Respondents who sign up, or entries you add above, will show up here." />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {entries.map((e) => (
+            <Card key={e.id} style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div>
+                <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: BRAND.ink }}>{e.respondent_name}</div>
+                <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginTop: 2 }}>
+                  {e.respondent_email}{e.company ? ` · ${e.company}` : ""} · {e.source === "admin" ? "Added by admin" : "Self-signup"}{!e.account_email && e.source === "admin" ? " (no account yet)" : ""}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1B7A5A", background: "#E7F5EF", padding: "4px 10px", borderRadius: 999 }}>
+                  {e.score != null ? `${e.score.toFixed(1)}/5` : "Not scored"}
+                </span>
+                <button onClick={() => removeEntry(e.id)} aria-label={`Remove ${e.respondent_name}`} style={{ background: "none", border: "none", cursor: "pointer", color: "#B7B2AE", display: "flex", alignItems: "center", padding: 4 }}>
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* =========================== ROOT =========================== */
+export default function IndexRivApp() {
+  const [view, setView] = useState(() => {
+    const v = pathToIndexView(window.location.pathname);
+    return v === "my-entries" && !getStoredIndexUser() ? "login" : v;
+  });
+  const [session, setSession] = useState(getStoredIndexUser());
+  const [campaigns, setCampaigns] = useState([]);
+  const [campaignsLoading, setCampaignsLoading] = useState(true);
+  const [pendingCampaign, setPendingCampaign] = useState(null);
+  const [activeEntryId, setActiveEntryId] = useState(null);
+  const [activeCampaignId, setActiveCampaignId] = useState(null);
+
+  useEffect(() => {
+    api.getIndexCampaigns()
+      .then((d) => setCampaigns(d.campaigns))
+      .finally(() => setCampaignsLoading(false));
+  }, []);
+
+  useEffect(() => {
+    function onPopState() {
+      const v = pathToIndexView(window.location.pathname);
+      setView(v === "my-entries" && !session ? "login" : v);
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [session]);
+
+  function handleAuthed(token, user) {
+    setIndexSession(token, user);
+    setSession(user);
+    window.history.pushState(null, "", "/rindex/my-entries");
+    setView(pendingCampaign ? "audit" : "my-entries");
+  }
+  function handleLogout() {
+    clearIndexSession();
+    setSession(null);
+    window.history.pushState(null, "", "/rindex");
+    setView("landing");
+  }
+  function goToView(v) {
+    if ((v === "my-entries" || v === "admin-campaigns") && !session) { setView("login"); return; }
+    const path = INDEX_VIEW_TO_PATH[v];
+    if (path) window.history.pushState(null, "", path);
+    setView(v);
+  }
+  function onPickCampaign(campaign, nextView) {
+    setPendingCampaign(campaign);
+    if (nextView === "audit" && !session) { setView("login"); return; }
+    setView(nextView);
+  }
+
+  return (
+    <div style={{ fontFamily: FONT, background: BRAND.cream, minHeight: "100vh" }}>
+      <style>{`
+        .index-spin { animation: index-spin 0.8s linear infinite; }
+        @keyframes index-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
+      <IndexNavBar view={view} setView={goToView} session={session} onLogout={handleLogout} />
+
+      {view === "landing" && (
+        <LandingView campaigns={campaigns} loading={campaignsLoading} session={session} onPickCampaign={onPickCampaign} setView={goToView} />
+      )}
+      {view === "signup" && <SignupView pendingCampaign={pendingCampaign} onAuthed={handleAuthed} setView={goToView} />}
+      {view === "login" && <LoginView onAuthed={handleAuthed} setView={goToView} />}
+      {view === "audit" && session && (
+        <AuditView campaign={pendingCampaign} campaigns={campaigns} onDone={() => goToView("my-entries")} />
+      )}
+      {view === "my-entries" && session && (
+        <MyEntriesView setView={goToView} setActiveEntryId={setActiveEntryId} />
+      )}
+      {view === "dashboard" && session && activeEntryId && (
+        <DashboardView entryId={activeEntryId} onBack={() => goToView("my-entries")} />
+      )}
+      {view === "admin-campaigns" && session?.role === "admin" && (
+        <AdminCampaignsView setView={goToView} setActiveCampaignId={setActiveCampaignId} />
+      )}
+      {view === "admin-entries" && session?.role === "admin" && activeCampaignId && (
+        <AdminEntriesView campaignId={activeCampaignId} onBack={() => goToView("admin-campaigns")} />
+      )}
+    </div>
+  );
+}

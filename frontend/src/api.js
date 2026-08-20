@@ -10,6 +10,8 @@ const IDEAS_TOKEN_KEY = "rios-ideas-token";
 const IDEAS_USER_KEY = "rios-ideas-user";
 const RISE_TOKEN_KEY = "rios-rise-token";
 const RISE_USER_KEY = "rios-rise-user";
+const INDEX_TOKEN_KEY = "rios-index-token";
+const INDEX_USER_KEY = "rios-index-user";
 
 // In local dev, the Vite dev server proxies /api/* to the backend (see
 // vite.config.js) — no env var needed. In a real deployment, frontend and
@@ -60,6 +62,20 @@ export function clearRiseSession() {
   localStorage.removeItem(RISE_USER_KEY);
 }
 
+// ---- R-Index session (index_respondent) — fully separate from the above.
+export function getIndexToken() { return localStorage.getItem(INDEX_TOKEN_KEY); }
+export function getStoredIndexUser() {
+  try { return JSON.parse(localStorage.getItem(INDEX_USER_KEY)); } catch { return null; }
+}
+export function setIndexSession(token, user) {
+  localStorage.setItem(INDEX_TOKEN_KEY, token);
+  localStorage.setItem(INDEX_USER_KEY, JSON.stringify(user));
+}
+export function clearIndexSession() {
+  localStorage.removeItem(INDEX_TOKEN_KEY);
+  localStorage.removeItem(INDEX_USER_KEY);
+}
+
 async function requestWithToken(path, { method = "GET", body, raw } = {}, token) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -85,6 +101,8 @@ function request(path, opts) { return requestWithToken(path, opts, getToken()); 
 function ideasRequest(path, opts) { return requestWithToken(path, opts, getIdeasToken()); }
 // Rise.RIV calls (rise_jury) attach Rise.RIV's own token instead.
 function riseRequest(path, opts) { return requestWithToken(path, opts, getRiseToken()); }
+// R-Index calls (index_respondent) attach R-Index's own token instead.
+function indexRequest(path, opts) { return requestWithToken(path, opts, getIndexToken()); }
 
 export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
@@ -147,4 +165,31 @@ export const api = {
   listRiseJury: () => request("/admin/rise/jury"),
   createRiseJury: (payload) => request("/admin/rise/jury", { method: "POST", body: payload }),
   deleteRiseJury: (id) => request(`/admin/rise/jury/${id}`, { method: "DELETE" }),
+
+  // ---- R-Index (public + index_respondent) — uses its own isolated token
+  getIndexCampaigns: () => request("/index/campaigns"), // public, no token needed either way
+  getIndexQuestions: () => request("/index/questions"), // public
+  indexSignup: (payload) => request("/index/signup", { method: "POST", body: payload }),
+  indexLogin: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }), // same shared endpoint, token just isn't attached to anything yet here
+  getMyIndexEntries: () => indexRequest("/index/my-entries"),
+  submitIndexEntry: (payload) => indexRequest("/index/entries", { method: "POST", body: payload }),
+  getIndexEntry: (id) => indexRequest(`/index/entries/${id}`),
+  getIndexEntryDashboard: (id) => indexRequest(`/index/entries/${id}/dashboard`),
+  getIndexCampaignReport: (campaignId) => indexRequest(`/index/campaigns/${campaignId}/report`),
+  indexExportUrl: (type, campaignId) => `${API_BASE}/api/index/export/${type}?campaignId=${campaignId}`,
+
+  // ---- R-Index admin (campaigns + entries) -------------------------
+  // Called only from the main site's admin panel (or this module's own
+  // admin-only tabs, reusing an admin's main-site token), same convention
+  // as Rise.RIV admin calls above.
+  listIndexCampaignsAdmin: () => request("/admin/index/campaigns"),
+  createIndexCampaign: (payload) => request("/admin/index/campaigns", { method: "POST", body: payload }),
+  updateIndexCampaign: (id, payload) => request(`/admin/index/campaigns/${id}`, { method: "PUT", body: payload }),
+  openIndexCampaign: (id) => request(`/admin/index/campaigns/${id}/open`, { method: "PUT" }),
+  closeIndexCampaign: (id) => request(`/admin/index/campaigns/${id}/close`, { method: "PUT" }),
+  listIndexEntriesAdmin: (campaignId) => request(`/admin/index/campaigns/${campaignId}/entries`),
+  createIndexEntryAdmin: (payload) => request("/admin/index/entries", { method: "POST", body: payload }),
+  updateIndexEntryAdmin: (id, payload) => request(`/admin/index/entries/${id}`, { method: "PUT", body: payload }),
+  deleteIndexEntryAdmin: (id) => request(`/admin/index/entries/${id}`, { method: "DELETE" }),
+  getIndexCampaignReportAdmin: (campaignId) => request(`/admin/index/campaigns/${campaignId}/report`),
 };
