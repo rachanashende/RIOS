@@ -2,7 +2,10 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import pool from "../db.js";
 import { requireAuth, requireRole, signToken } from "../middleware/auth.js";
-import { QUESTIONS, scoreAnswers, cohortAverage } from "../lib/indexScoring.js";
+import {
+  QUESTIONS, SECTIONS, INDEX_DIMENSIONS, scoreAnswers, computeIndexScore,
+  cohortAverage, cohortDimensionAverages,
+} from "../lib/indexScoring.js";
 
 const router = Router();
 
@@ -26,9 +29,11 @@ router.get("/campaigns", async (req, res, next) => {
   }
 });
 
-// GET /api/index/questions — the (placeholder, pending) instrument.
+// GET /api/index/questions — the real Q3 2026 instrument, grouped by
+// section, plus the 5 official Index dimensions for anything (dashboard,
+// report) that needs to render a breakdown by dimension.
 router.get("/questions", (req, res) => {
-  res.json({ questions: QUESTIONS });
+  res.json({ questions: QUESTIONS, sections: SECTIONS, indexDimensions: INDEX_DIMENSIONS });
 });
 
 // POST /api/index/signup — self-service sign-up, always creates an
@@ -112,6 +117,13 @@ router.get("/my-entries", async (req, res, next) => {
 // the partial unique index in db.index.js: one entry per respondent per
 // campaign, but a *different* campaign_id always creates a new row, which
 // is exactly how re-participation across quarters is meant to work.
+//
+// The full sanitized answers object (every question type, not just the
+// scored ones) is what gets stored — the DB's `answers` JSONB column holds
+// the whole audit response. `score` stores just the overall composite
+// Index score; the dimension breakdown is cheap to recompute from
+// `answers` on read (see the dashboard/report endpoints below), so it's
+// not duplicated in its own column.
 router.post("/entries", async (req, res, next) => {
   try {
     const { campaignId, answers, company } = req.body || {};
@@ -125,7 +137,7 @@ router.post("/entries", async (req, res, next) => {
     if (!campaign) return res.status(404).json({ error: "Campaign not found." });
     if (!campaign.is_open) return res.status(400).json({ error: "This campaign is closed and no longer accepting submissions." });
 
-    const { clamped, score } = scoreAnswers(answers || {});
+    const scored = scoreAnswers(answers || {});
 
     const { rows } = await pool.query(
       `INSERT INTO index_entries (campaign_id, user_id, respondent_name, respondent_email, company, answers, score, source, updated_at)
@@ -133,10 +145,15 @@ router.post("/entries", async (req, res, next) => {
        ON CONFLICT (campaign_id, user_id) WHERE user_id IS NOT NULL DO UPDATE SET
          answers = EXCLUDED.answers, score = EXCLUDED.score, company = EXCLUDED.company, updated_at = now()
        RETURNING *`,
-      [campaign.id, req.user.id, req.user.name, req.user.email, company || null, JSON.stringify(clamped), score]
+      [campaign.id, req.user.id, req.user.name, req.user.email, company || null, JSON.stringify(scored.answers), scored.overallScore]
     );
     const entry = rows[0];
-    res.status(201).json({ entry: { ...entry, score: entry.score != null ? Number(entry.score) : null } });
+    res.status(201).json({
+      entry: { ...entry, score: entry.score != null ? Number(entry.score) : null },
+      dimensionScores: scored.dimensionScores,
+      stage: scored.stage,
+      selfReportedStage: scored.selfReportedStage,
+    });
   } catch (err) {
     next(err);
   }
@@ -162,10 +179,13 @@ router.get("/entries/:id", async (req, res, next) => {
 });
 
 // GET /api/index/entries/:id/dashboard — this entry's score vs. its
-// campaign's cohort average. Aggregate only — see cohortAverage()'s doc
-// comment. This is always available once a respondent has an entry (not
-// gated to the campaign being closed); the *collated report* below is the
-// piece that's gated to closed + that campaign's own respondents/admin.
+// campaign's cohort average, broken down by the 5 Index dimensions (same
+// shape as the sample report's "Five Dimensions" table), plus the overall
+// composite and maturity stage. Aggregate-only across the cohort — see
+// cohortAverage()/cohortDimensionAverages()'s doc comments. This is always
+// available once a respondent has an entry (not gated to the campaign
+// being closed); the *collated report* below is the piece that's gated to
+// closed + that campaign's own respondents/admin.
 router.get("/entries/:id/dashboard", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
@@ -176,16 +196,26 @@ router.get("/entries/:id/dashboard", async (req, res, next) => {
       return res.status(403).json({ error: "You can only view your own dashboard." });
     }
 
+    const my = computeIndexScore(entry.answers || {});
+
     const { rows: cohortRows } = await pool.query(
-      "SELECT score FROM index_entries WHERE campaign_id = $1 AND score IS NOT NULL",
+      "SELECT answers, score FROM index_entries WHERE campaign_id = $1 AND score IS NOT NULL",
       [entry.campaign_id]
     );
     const { average, count } = cohortAverage(cohortRows.map((r) => r.score));
+    const dimensionCohortAverage = cohortDimensionAverages(
+      cohortRows.map((r) => computeIndexScore(r.answers || {}).dimensionScores)
+    );
 
     res.json({
       myScore: entry.score != null ? Number(entry.score) : null,
+      stage: my.stage,
+      selfReportedStage: my.selfReportedStage,
+      dimensionScores: my.dimensionScores,
       cohortAverage: average,
       cohortSize: count,
+      dimensionCohortAverage,
+      indexDimensions: INDEX_DIMENSIONS,
     });
   } catch (err) {
     next(err);
@@ -195,7 +225,8 @@ router.get("/entries/:id/dashboard", async (req, res, next) => {
 // GET /api/index/campaigns/:id/report — the collated quarterly report, but
 // gated: only visible once the admin closes the campaign, and only to that
 // campaign's own respondents (or admin) — per PRD §11 resolution. Returns
-// aggregate stats only, same access-control shape as the dashboard above.
+// aggregate stats only (overall + per-dimension), same access-control
+// shape as the dashboard above — never individual respondent scores.
 router.get("/campaigns/:id/report", async (req, res, next) => {
   try {
     const campaignId = Number(req.params.id);
@@ -217,15 +248,20 @@ router.get("/campaigns/:id/report", async (req, res, next) => {
     }
 
     const { rows: entryRows } = await pool.query(
-      "SELECT score FROM index_entries WHERE campaign_id = $1 AND score IS NOT NULL",
+      "SELECT answers, score FROM index_entries WHERE campaign_id = $1 AND score IS NOT NULL",
       [campaignId]
     );
     const { average, count } = cohortAverage(entryRows.map((r) => r.score));
+    const dimensionAverages = cohortDimensionAverages(
+      entryRows.map((r) => computeIndexScore(r.answers || {}).dimensionScores)
+    );
 
     res.json({
       campaign,
       cohortAverage: average,
       cohortSize: count,
+      dimensionAverages,
+      indexDimensions: INDEX_DIMENSIONS,
     });
   } catch (err) {
     next(err);

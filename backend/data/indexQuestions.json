@@ -1,24 +1,118 @@
 {
-  "_placeholder": true,
-  "_note": "PLACEHOLDER question set. The real questions are being ported from the interview-capture Google Sheet and have not been supplied yet (see RIOS-PRD-RIndex-Module.md §11). This file exists so the Audit form, scoring, and dashboard can be built and tested end-to-end now. Replace the `questions` array below with the real set when it arrives — nothing else in the code needs to change as long as each question keeps an `id` (stable, never reused) and a 1-5 `scale`. Same convention as backend/data/questions.json / riseCriteria.json: this is the single source of truth, fetched by the frontend at runtime, not duplicated in code.",
+  "_meta": {
+    "instrument": "RIV Index Interview Capture — Q3 2026",
+    "note": "Real question set, ported from the interview-capture sheet (RIV_Index_Interview_Capture_Q3_2026). Only 'scored' questions with an indexDimension contribute to the composite Index score — see lib/indexScoring.js. Everything else (profile, open, single_select, multi_select, yesno, consent) is still collected and stored, just not averaged."
+  },
+  "sections": [
+    { "id": "A", "label": "Respondent Profile" },
+    { "id": "B", "label": "Leadership & Strategy" },
+    { "id": "C", "label": "AI Maturity" },
+    { "id": "D", "label": "Retail AI Use Cases" },
+    { "id": "E", "label": "Technology & Data" },
+    { "id": "F", "label": "Organisation & Operating Model" },
+    { "id": "G", "label": "Agentic AI" },
+    { "id": "H", "label": "Innovation Ecosystem" },
+    { "id": "I", "label": "Measurement & ROI" },
+    { "id": "J", "label": "Leadership Perspective" },
+    { "id": "K", "label": "RIV / RIOS Opportunity" },
+    { "id": "L", "label": "Research Administration" }
+  ],
+  "indexDimensions": [
+    "Leadership & Strategy",
+    "Retail AI Use Cases",
+    "Technology & Data",
+    "Organisation & Operating Model",
+    "Agentic AI"
+  ],
+  "_indexDimensionsNote": "These 5 match the RIV Retail AI Maturity Model exactly (see the Executive Conversation deck). IMPORTANT GAP: the interview-capture sheet as supplied has no 'Scored' (1-5) item under Section D (Retail AI Use Cases) — D02/D09 are open-ended only. Until a scored D-section item is added, 'Retail AI Use Cases' will show as null in every dimension breakdown and the overall Index score is computed from the 4 dimensions that do have data. Flagged for follow-up rather than guessed at.",
   "questions": [
-    {
-      "id": "q1",
-      "category": "AI Strategy",
-      "text": "PLACEHOLDER — How would you rate your organization's overall AI strategy maturity?",
-      "scale": 5
-    },
-    {
-      "id": "q2",
-      "category": "Data Infrastructure",
-      "text": "PLACEHOLDER — How would you rate your organization's data infrastructure readiness for AI?",
-      "scale": 5
-    },
-    {
-      "id": "q3",
-      "category": "Adoption",
-      "text": "PLACEHOLDER — How would you rate the current level of AI adoption across your retail operations?",
-      "scale": 5
-    }
+    { "id": "A01", "section": "A", "priority": true, "type": "profile", "text": "Name of Organisation" },
+    { "id": "A02", "section": "A", "priority": true, "type": "profile", "text": "Respondent Name" },
+    { "id": "A03", "section": "A", "priority": true, "type": "profile", "text": "Designation" },
+    { "id": "A04", "section": "A", "priority": true, "type": "single_select", "text": "Primary Role in AI / Innovation",
+      "options": ["CEO", "CIO", "CTO", "CDO", "Chief Innovation", "Strategy", "COO", "GCC", "Other"] },
+    { "id": "A05", "section": "A", "priority": true, "type": "single_select", "text": "Organisation Type",
+      "options": ["Retailer", "CPG", "Retail GCC", "Consumer GCC", "Other"] },
+    { "id": "A06", "section": "A", "priority": true, "type": "single_select", "text": "Primary Geography",
+      "options": ["India", "Global", "India + Global"] },
+    { "id": "A07", "section": "A", "priority": true, "type": "open", "text": "Approximate Organisation Scale",
+      "hint": "e.g. revenue, number of stores, employee count — whatever's most meaningful for your organisation." },
+
+    { "id": "B01", "section": "B", "priority": true, "type": "scored", "scale": 5, "indexDimension": "Leadership & Strategy",
+      "text": "Does leadership actively use AI in their own daily work, not just sponsor it for others?",
+      "scaleLabels": ["Never", "Rarely", "Occasionally", "Frequently", "Routinely"],
+      "probe": "Ask for one concrete example." },
+    { "id": "B04", "section": "B", "priority": true, "type": "scored", "scale": 5, "indexDimension": "Leadership & Strategy",
+      "text": "Does the organisation have a clearly accountable executive owner for AI?",
+      "scaleLabels": ["No owner", "Informal", "Shared ownership", "Named owner", "Strong executive ownership"] },
+    { "id": "B09", "section": "B", "priority": true, "type": "open",
+      "text": "What is the biggest thing leadership currently gets wrong or underestimates about AI?" },
+
+    { "id": "C01", "section": "C", "priority": true, "type": "scored", "scale": 5, "indexDimension": null,
+      "selfReportedStage": true,
+      "text": "Which best describes your organisation's current AI maturity?",
+      "scaleLabels": ["Curious", "Experimenting", "Deploying", "Scaling", "AI-Native"],
+      "note": "Self-reported maturity stage — kept separate from the computed Index score (which is derived from the dimension-scored questions), shown alongside it for comparison rather than averaged in." },
+    { "id": "C05", "section": "C", "priority": true, "type": "single_select",
+      "text": "What is the biggest barrier preventing AI pilots from moving into production?",
+      "options": ["Data", "Integration", "Security", "ROI", "Ownership", "Procurement", "Talent", "Change", "Governance", "Other"] },
+
+    { "id": "D02", "section": "D", "priority": true, "type": "open",
+      "text": "Which 3 AI use cases currently create the greatest business value?",
+      "hint": "Ask for measurable outcomes if possible." },
+    { "id": "D09", "section": "D", "priority": true, "type": "open",
+      "text": "If you could redesign one major retail workflow from scratch using AI, which would you choose?",
+      "probe": "This is a key qualitative question." },
+
+    { "id": "E01", "section": "E", "priority": true, "type": "scored", "scale": 5, "indexDimension": "Technology & Data",
+      "text": "How ready is your data environment to support enterprise AI?",
+      "scaleLabels": ["Very Low", "Low", "Moderate", "High", "Very High"] },
+
+    { "id": "F04", "section": "F", "priority": true, "type": "scored", "scale": 5, "indexDimension": "Organisation & Operating Model",
+      "text": "How often does AI adoption result in a redesign of roles or workflows?",
+      "scaleLabels": ["Never", "Rarely", "Sometimes", "Frequently", "Routinely"] },
+
+    { "id": "G02", "section": "G", "priority": true, "type": "scored", "scale": 5, "indexDimension": "Agentic AI",
+      "text": "Has the organisation experimented with AI agents executing multi-step workflows?",
+      "scaleLabels": ["No", "Exploring", "Experimenting", "Piloting", "Production"] },
+    { "id": "G03", "section": "G", "priority": true, "type": "multi_select",
+      "text": "Which workflows would you be most comfortable allowing an AI agent to execute today?",
+      "options": ["Customer Service", "Marketing", "Reporting", "Knowledge Management", "Inventory", "Replenishment", "Pricing", "Procurement", "Merchandising", "Workforce", "Other"] },
+    { "id": "G07", "section": "G", "priority": true, "type": "open",
+      "text": "If you could give one AI agent a meaningful job tomorrow, what would that job be?",
+      "probe": "Strong qualitative question." },
+
+    { "id": "H07", "section": "H", "priority": true, "type": "scored", "scale": 5, "indexDimension": null,
+      "text": "Would a curated, retail-specific pipeline of validated AI startups be valuable to your organisation?",
+      "scaleLabels": ["Not valuable", "Slightly", "Moderately", "Very", "Extremely"],
+      "note": "Opportunity signal for RIV, not one of the 5 core Index dimensions — excluded from the composite score." },
+
+    { "id": "I04", "section": "I", "priority": true, "type": "open",
+      "text": "What is the single most important metric you would use to judge whether your AI strategy is working?" },
+
+    { "id": "J01", "section": "J", "priority": true, "type": "open",
+      "text": "What is your organisation currently doing exceptionally well in AI?",
+      "probe": "Capture exact wording where possible." },
+    { "id": "J05", "section": "J", "priority": true, "type": "open",
+      "text": "If you could change one thing about how your organisation approaches AI over the next 12 months, what would it be?",
+      "probe": "Final question. Allow reflection." },
+
+    { "id": "K01", "section": "K", "priority": true, "type": "scored", "scale": 5, "indexDimension": null,
+      "text": "Would an independent assessment of your organisation's AI & innovation readiness be useful?",
+      "scaleLabels": ["Not useful", "Slightly", "Moderately", "Very", "Extremely"],
+      "note": "Opportunity signal for RIV, not one of the 5 core Index dimensions — excluded from the composite score." },
+    { "id": "K03", "section": "K", "priority": true, "type": "yesno",
+      "text": "Would you be interested in receiving your organisation's private benchmark against the Index cohort?" },
+    { "id": "K04", "section": "K", "priority": true, "type": "yesno",
+      "text": "Would you be interested in a follow-up discussion on your organisation's AI & Innovation priorities?" },
+
+    { "id": "L01", "section": "L", "priority": true, "type": "consent",
+      "text": "Can RIV use anonymised responses in the Index?" },
+    { "id": "L02", "section": "L", "priority": true, "type": "consent",
+      "text": "Can RIV identify your organisation as a participating organisation?" },
+    { "id": "L03", "section": "L", "priority": true, "type": "consent",
+      "text": "Can RIV attribute direct quotations to you / your organisation?" },
+    { "id": "L04", "section": "L", "priority": true, "type": "yesno",
+      "text": "Would you be interested in joining the RIV Retail AI Research Council / Executive Roundtable?" }
   ]
 }
