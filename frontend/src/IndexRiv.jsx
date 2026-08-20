@@ -448,7 +448,7 @@ function LoginView({ onAuthed, setView }) {
   }
 
   return (
-    <div style={{ maxWidth: 400, margin: "0 auto", padding: "56px 24px 100px" }}>
+    <div style={{ maxWidth: 440, margin: "0 auto", padding: "56px 24px 100px" }}>
       <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink, marginBottom: 22 }}>Log in</div>
       <Card style={{ padding: 26 }}>
         <form onSubmit={submit}>
@@ -1061,6 +1061,15 @@ export default function IndexRivApp() {
   return (
     <div style={{ fontFamily: FONT, background: BRAND.cream, minHeight: "100vh" }}>
       <style>{`
+        /* App.jsx normally sets this globally, but on the R-Index subdomain
+           this component renders standalone — App.jsx's own render never
+           runs, so its reset never applies here. Without it, every input/
+           button/card below that combines width:100% with padding
+           overflows its container (padding adds to the width instead of
+           being included in it) — exactly what "boxes look wrong" looks
+           like. Same fix as the font-loading issue: anything App.jsx would
+           normally provide has to be self-contained here too. */
+        * { box-sizing: border-box; }
         /* App.jsx normally loads this Google Font import, but on the
            R-Index subdomain this component renders standalone — RiosApp's
            own render (and its font import) never runs at all. Without this,
