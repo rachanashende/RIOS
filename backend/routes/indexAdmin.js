@@ -91,10 +91,17 @@ router.put("/campaigns/:id/close", async (req, res, next) => {
 
 // GET /api/admin/index/campaigns/:id/entries — every entry in a campaign,
 // admin-only full view (individual respondent scores — never exposed to
-// other respondents, only to admin here).
+// other respondents, only to admin here). Returns the campaign itself
+// alongside the entries — the admin UI needs to show which campaign
+// (and whether it's open or closed) it's looking at without a second
+// round-trip back to the campaign list.
 router.get("/campaigns/:id/entries", async (req, res, next) => {
   try {
     const campaignId = Number(req.params.id);
+    const { rows: campaignRows } = await pool.query("SELECT * FROM index_campaigns WHERE id = $1", [campaignId]);
+    const campaign = campaignRows[0];
+    if (!campaign) return res.status(404).json({ error: "Campaign not found." });
+
     const { rows } = await pool.query(
       `SELECT e.*, u.email AS account_email
        FROM index_entries e
@@ -103,7 +110,7 @@ router.get("/campaigns/:id/entries", async (req, res, next) => {
        ORDER BY e.created_at DESC`,
       [campaignId]
     );
-    res.json({ entries: rows.map((r) => ({ ...r, score: r.score != null ? Number(r.score) : null })) });
+    res.json({ campaign, entries: rows.map((r) => ({ ...r, score: r.score != null ? Number(r.score) : null })) });
   } catch (err) {
     next(err);
   }

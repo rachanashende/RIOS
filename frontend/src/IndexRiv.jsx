@@ -166,10 +166,10 @@ function ScalePicker({ value, onChange, scale = 5, scaleLabels }) {
 /* =========================================================================
    NAV
    ========================================================================= */
-function IndexNavBar({ view, setView, session, onLogout }) {
+function IndexNavBar({ view, setView, session, onLogout, openCampaignCount }) {
   const items = [{ id: "landing", label: "Overview" }];
   if (session) items.push({ id: "my-entries", label: "My entries" });
-  if (session?.role === "admin") items.push({ id: "admin-campaigns", label: "Manage campaigns" });
+  if (session?.role === "admin") items.push({ id: "admin-campaigns", label: "Manage campaigns", badge: openCampaignCount });
 
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(251,249,246,0.95)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${BRAND.line}` }}>
@@ -192,9 +192,22 @@ function IndexNavBar({ view, setView, session, onLogout }) {
               <button key={it.id} onClick={() => setView(it.id)} style={{
                 fontFamily: FONT, fontSize: 13.5, fontWeight: 500, padding: "8px 14px", borderRadius: 999,
                 border: "none", cursor: "pointer", background: view === it.id ? BRAND.ink : "transparent",
-                color: view === it.id ? "#fff" : BRAND.ink,
+                color: view === it.id ? "#fff" : BRAND.ink, display: "flex", alignItems: "center", gap: 6,
               }}>
                 {it.label}
+                {/* Live count of open campaigns, right on the nav tab — so
+                    "which campaign is going on" doesn't require clicking in
+                    at all, per the admin request this satisfies. Only shown
+                    once campaigns have actually loaded (undefined while
+                    loading), not as a misleading "0" flash. */}
+                {it.id === "admin-campaigns" && it.badge !== undefined && (
+                  <span style={{
+                    fontFamily: FONT, fontSize: 10.5, fontWeight: 700, minWidth: 16, height: 16, padding: "0 4px",
+                    borderRadius: 999, display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    background: it.badge > 0 ? BRAND.coral : (view === it.id ? "rgba(255,255,255,0.18)" : "#EFEBE7"),
+                    color: it.badge > 0 ? "#fff" : (view === it.id ? "#fff" : "#9B958F"),
+                  }}>{it.badge}</span>
+                )}
               </button>
             ))}
           </div>
@@ -838,12 +851,42 @@ function AdminCampaignsView({ setView, setActiveCampaignId }) {
     }
   }
 
+  const openCampaigns = campaigns.filter((c) => c.is_open);
+  // Open campaigns first (most recent first within each group) — matches
+  // what actually matters day-to-day: "what's live right now" outranks
+  // chronological order once a few quarters of history pile up.
+  const sortedCampaigns = [...campaigns].sort((a, b) => (b.is_open - a.is_open) || (new Date(b.created_at) - new Date(a.created_at)));
+
   return (
     <div style={{ maxWidth: 800, margin: "0 auto", padding: "36px 24px 100px" }}>
       <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink }}>Manage campaigns</div>
-      <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginTop: 4, marginBottom: 22 }}>
+      <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginTop: 4, marginBottom: 18 }}>
         Each campaign is its own quarter/geo cohort — comparisons never blend across campaigns.
       </div>
+
+      {/* At-a-glance summary — campaigns can pile up over quarters, so
+          "which one is actually live right now" shouldn't require scanning
+          the whole list below. */}
+      {!loading && (
+        <Card style={{ padding: "16px 18px", marginBottom: 22, background: openCampaigns.length ? "#E7F5EF" : BRAND.cream, border: "none" }}>
+          {openCampaigns.length === 0 ? (
+            <div style={{ fontFamily: FONT, fontSize: 13, color: "#7A746F" }}>No campaign is currently open — respondents will see an empty landing page until one is.</div>
+          ) : (
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#1B7A5A", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
+                Currently open ({openCampaigns.length})
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {openCampaigns.map((c) => (
+                  <div key={c.id} style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: BRAND.ink, background: "#fff", padding: "6px 12px", borderRadius: 999, border: "1px solid #CFE9DD" }}>
+                    {c.name}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
 
       <Card style={{ padding: 22, marginBottom: 26 }}>
         <form onSubmit={createCampaign} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
@@ -865,7 +908,7 @@ function AdminCampaignsView({ setView, setActiveCampaignId }) {
 
       {loading ? <Spinner label="Loading campaigns…" /> : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {campaigns.map((c) => (
+          {sortedCampaigns.map((c) => (
             <Card key={c.id} style={{ padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div>
                 <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14.5, color: BRAND.ink }}>{c.name}</div>
@@ -896,6 +939,7 @@ function AdminCampaignsView({ setView, setActiveCampaignId }) {
    entry), and report export.
    ========================================================================= */
 function AdminEntriesView({ campaignId, onBack }) {
+  const [campaign, setCampaign] = useState(null);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -905,7 +949,7 @@ function AdminEntriesView({ campaignId, onBack }) {
   function load() {
     setLoading(true);
     api.listIndexEntriesAdmin(campaignId)
-      .then((d) => setEntries(d.entries))
+      .then((d) => { setCampaign(d.campaign); setEntries(d.entries); })
       .catch((e) => setError(e.message || "Couldn't load entries."))
       .finally(() => setLoading(false));
   }
@@ -950,7 +994,22 @@ function AdminEntriesView({ campaignId, onBack }) {
         <ChevronLeft size={14} /> Campaigns
       </button>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 22 }}>
-        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink }}>Entries</div>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink }}>{campaign?.name || "Entries"}</div>
+            {campaign && (
+              <span style={{
+                fontFamily: FONT, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999,
+                color: campaign.is_open ? "#1B7A5A" : "#7A746F", background: campaign.is_open ? "#E7F5EF" : "#EFEBE7",
+              }}>{campaign.is_open ? "Open" : "Closed"}</span>
+            )}
+          </div>
+          {campaign && (
+            <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginTop: 3 }}>
+              {[campaign.geo, campaign.quarter_label].filter(Boolean).join(" · ") || "—"}
+            </div>
+          )}
+        </div>
         <div style={{ display: "flex", gap: 10 }}>
           <a href={api.indexExportUrl("excel", campaignId)} target="_blank" rel="noreferrer">
             <GhostButton icon={FileSpreadsheet}>Excel</GhostButton>
@@ -1072,7 +1131,7 @@ export default function IndexRivApp() {
         .index-spin { animation: index-spin 0.8s linear infinite; }
         @keyframes index-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
-      <IndexNavBar view={view} setView={goToView} session={session} onLogout={handleLogout} />
+      <IndexNavBar view={view} setView={goToView} session={session} onLogout={handleLogout} openCampaignCount={campaignsLoading ? undefined : campaigns.length} />
 
       {view === "landing" && (
         <LandingView campaigns={campaigns} loading={campaignsLoading} session={session} onPickCampaign={onPickCampaign} setView={goToView} />
