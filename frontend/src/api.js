@@ -179,17 +179,23 @@ export const api = {
   indexExportUrl: (type, campaignId) => `${API_BASE}/api/index/export/${type}?campaignId=${campaignId}`,
 
   // ---- R-Index admin (campaigns + entries) -------------------------
-  // Called only from the main site's admin panel (or this module's own
-  // admin-only tabs, reusing an admin's main-site token), same convention
-  // as Rise.RIV admin calls above.
-  listIndexCampaignsAdmin: () => request("/admin/index/campaigns"),
-  createIndexCampaign: (payload) => request("/admin/index/campaigns", { method: "POST", body: payload }),
-  updateIndexCampaign: (id, payload) => request(`/admin/index/campaigns/${id}`, { method: "PUT", body: payload }),
-  openIndexCampaign: (id) => request(`/admin/index/campaigns/${id}/open`, { method: "PUT" }),
-  closeIndexCampaign: (id) => request(`/admin/index/campaigns/${id}/close`, { method: "PUT" }),
-  listIndexEntriesAdmin: (campaignId) => request(`/admin/index/campaigns/${campaignId}/entries`),
-  createIndexEntryAdmin: (payload) => request("/admin/index/entries", { method: "POST", body: payload }),
-  updateIndexEntryAdmin: (id, payload) => request(`/admin/index/entries/${id}`, { method: "PUT", body: payload }),
-  deleteIndexEntryAdmin: (id) => request(`/admin/index/entries/${id}`, { method: "DELETE" }),
-  getIndexCampaignReportAdmin: (campaignId) => request(`/admin/index/campaigns/${campaignId}/report`),
+  // These use indexRequest() (the R-Index-isolated token), NOT request()
+  // (the main site's token) — an admin reaches these actions by logging
+  // in through R-Index's OWN login form (getIndexToken()), which is a
+  // completely separate session from the main site's, by design (see
+  // setIndexSession()/getIndexToken() above). Using request() here would
+  // attach whatever token the main site happens to have (often none, if
+  // this admin never separately logged into the main site in this
+  // browser), producing a "Not logged in" error despite a valid R-Index
+  // session actually being active — exactly the bug this fixes.
+  listIndexCampaignsAdmin: () => indexRequest("/admin/index/campaigns"),
+  createIndexCampaign: (payload) => indexRequest("/admin/index/campaigns", { method: "POST", body: payload }),
+  updateIndexCampaign: (id, payload) => indexRequest(`/admin/index/campaigns/${id}`, { method: "PUT", body: payload }),
+  openIndexCampaign: (id) => indexRequest(`/admin/index/campaigns/${id}/open`, { method: "PUT" }),
+  closeIndexCampaign: (id) => indexRequest(`/admin/index/campaigns/${id}/close`, { method: "PUT" }),
+  listIndexEntriesAdmin: (campaignId) => indexRequest(`/admin/index/campaigns/${campaignId}/entries`),
+  createIndexEntryAdmin: (payload) => indexRequest("/admin/index/entries", { method: "POST", body: payload }),
+  updateIndexEntryAdmin: (id, payload) => indexRequest(`/admin/index/entries/${id}`, { method: "PUT", body: payload }),
+  deleteIndexEntryAdmin: (id) => indexRequest(`/admin/index/entries/${id}`, { method: "DELETE" }),
+  getIndexCampaignReportAdmin: (campaignId) => indexRequest(`/admin/index/campaigns/${campaignId}/report`),
 };
