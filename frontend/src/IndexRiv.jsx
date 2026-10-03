@@ -1198,6 +1198,19 @@ export default function IndexRivApp() {
   return (
     <div style={{ fontFamily: FONT, background: BRAND.cream, minHeight: "100vh" }}>
       <style>{`
+        /* MUST be the first rule in this stylesheet — @import is only
+           honored by the browser when nothing (not even a comment-adjacent
+           rule like the box-sizing reset below) precedes it in the same
+           <style> tag. It was placed AFTER the box-sizing reset in an
+           earlier fix, which silently voided it: the whole R-Index module
+           has been rendering in the browser's default system font ever
+           since, on every element, not just the italic ones — "the font is
+           not proper" was this, not a narrower mismatch. Matches
+           App.jsx/IdeasRiv.jsx, which both also lead with their @import.
+           Also pulls in Newsreader italic — this module's hero subhead and
+           pull-quotes use SERIF for the same italic pitch-line look the
+           other modules use. */
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Newsreader:ital@1&display=swap');
         /* App.jsx normally sets this globally, but on the R-Index subdomain
            this component renders standalone — App.jsx's own render never
            runs, so its reset never applies here. Without it, every input/
@@ -1207,19 +1220,6 @@ export default function IndexRivApp() {
            like. Same fix as the font-loading issue: anything App.jsx would
            normally provide has to be self-contained here too. */
         * { box-sizing: border-box; }
-        /* App.jsx normally loads this Google Font import, but on the
-           R-Index subdomain this component renders standalone — RiosApp's
-           own render (and its font import) never runs at all. Without this,
-           every 'Poppins' reference below would silently fall back to a
-           system sans-serif on audit.retailinnovation.ai specifically,
-           while looking correct everywhere else this module is reachable
-           (main domain, localhost) since App.jsx's import covers it there.
-           Also pulls in Newsreader italic (same family list as App.jsx and
-           IdeasRiv.jsx) — this module's hero subhead and pull-quotes use
-           SERIF for the same italic pitch-line look the other modules use,
-           and previously fell back to Poppins's synthesized oblique here
-           since Newsreader was never requested. */
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Newsreader:ital@1&display=swap');
         .index-spin { animation: index-spin 0.8s linear infinite; }
         @keyframes index-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
