@@ -19,9 +19,12 @@ const router = Router();
 // a list, not a single object.
 router.get("/campaigns", async (req, res, next) => {
   try {
+    // Featured campaign (admin-picked, see indexAdmin.js) sorts first so
+    // the landing page's list and the hero CTA agree on "the" current one
+    // when several campaigns are open at once.
     const { rows } = await pool.query(
-      `SELECT id, name, geo, quarter_label, starts_at, ends_at, created_at
-       FROM index_campaigns WHERE is_open = true ORDER BY created_at DESC`
+      `SELECT id, name, geo, quarter_label, starts_at, ends_at, created_at, is_featured
+       FROM index_campaigns WHERE is_open = true ORDER BY is_featured DESC, created_at DESC`
     );
     res.json({ campaigns: rows });
   } catch (err) {

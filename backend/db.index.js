@@ -53,10 +53,19 @@ export async function initIndexSchema() {
       geo TEXT,                         -- e.g. "India", "Dubai" — free text, not an enum, since new geos will keep appearing
       quarter_label TEXT,               -- e.g. "Q3 2026" — used to scope comparisons; entries never compare across quarter_label values
       is_open BOOLEAN NOT NULL DEFAULT true,
+      is_featured BOOLEAN NOT NULL DEFAULT false, -- the single campaign spotlighted on the public landing/login — see note below
       starts_at TIMESTAMPTZ,
       ends_at TIMESTAMPTZ,              -- e.g. Q3 2026 ends by September; informational + used to auto-flag "closed" in the UI, doesn't hard-block submission on its own (admin's is_open toggle is the actual gate)
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    -- Campaigns can legitimately overlap (India Q3 open alongside Dubai Q4),
+    -- so is_open alone doesn't tell the landing page which one to put front
+    -- and center. is_featured is admin-controlled and exclusive (enforced
+    -- in app code in indexAdmin.js, not a DB constraint, since "none
+    -- featured" is a valid state too) — it picks the single campaign the
+    -- public landing page's hero CTA sends a new visitor straight into.
+    ALTER TABLE index_campaigns ADD COLUMN IF NOT EXISTS is_featured BOOLEAN NOT NULL DEFAULT false;
 
     -- One row per respondent submission into a campaign. user_id is
     -- nullable: a self-signup respondent (index_respondent role) has one,

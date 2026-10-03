@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   BarChart3, LogOut, CheckCircle2, ArrowRight, ChevronLeft, ChevronRight,
   Loader2, ClipboardList, AlertCircle, UserCircle2, Plus, Trash2,
-  FileSpreadsheet, FileText, TrendingUp,
+  FileSpreadsheet, FileText, TrendingUp, Star,
 } from "lucide-react";
 import {
   api, getStoredIndexUser, setIndexSession, clearIndexSession,
@@ -40,6 +40,12 @@ function pathToIndexView(pathname) {
 }
 
 const FONT = "'Poppins',sans-serif";
+// Matches App.jsx/IdeasRiv.jsx's SERIF constant — used for the same italic
+// "pitch line" treatment those modules use (hero subhead, pull-quotes),
+// instead of italicizing Poppins, which has no italic face in the weights
+// loaded below and renders as a browser-synthesized oblique — the actual
+// "font is not proper" mismatch against the other modules.
+const SERIF = "'Newsreader',Georgia,serif";
 
 /* =========================================================================
    SMALL UI PRIMITIVES — deliberately redefined here rather than imported
@@ -254,7 +260,17 @@ const CONVERSATION_AGENDA = [
 const YOU_RECEIVE = ["Private AI Readiness Benchmark", "Early access to the Index", "Anonymised peer insights", "Invitation to the Executive Roundtable"];
 
 function LandingView({ campaigns, loading, session, onPickCampaign, setView }) {
-  function scrollToCampaigns() {
+  // Admin can pin one open campaign as "featured" (AdminCampaignsView) —
+  // when there's one, the hero CTA sends a new visitor straight into it
+  // instead of making them pick off a list, which is the only thing to do
+  // when nothing's featured or several campaigns are open with no pick.
+  const featuredCampaign = campaigns.find((c) => c.is_featured) || null;
+
+  function handleHeroCta() {
+    if (featuredCampaign) {
+      onPickCampaign(featuredCampaign, session ? "audit" : "signup");
+      return;
+    }
     document.getElementById("index-open-campaigns")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -276,12 +292,17 @@ function LandingView({ campaigns, loading, session, onPickCampaign, setView }) {
           <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 32, color: "#fff", lineHeight: 1.25 }}>
             From AI Experimentation to AI-Native Retail
           </div>
-          <div style={{ fontFamily: FONT, fontSize: 15, fontStyle: "italic", color: "rgba(255,255,255,0.72)", marginTop: 16, lineHeight: 1.65, maxWidth: 540, marginLeft: "auto", marginRight: "auto" }}>
+          <div style={{ fontFamily: SERIF, fontSize: 15, fontStyle: "italic", color: "rgba(255,255,255,0.72)", marginTop: 16, lineHeight: 1.65, maxWidth: 540, marginLeft: "auto", marginRight: "auto" }}>
             A 30-minute executive conversation on where Retail AI is actually heading — and a private benchmark showing you where your organization stands against the cohort.
           </div>
-          <PrimaryButton icon={ArrowRight} onClick={scrollToCampaigns} style={{ margin: "28px auto 0", padding: "13px 26px" }}>
+          <PrimaryButton icon={ArrowRight} onClick={handleHeroCta} style={{ margin: "28px auto 0", padding: "13px 26px" }}>
             {session ? "Take the Index" : "Get started"}
           </PrimaryButton>
+          {featuredCampaign && (
+            <div style={{ fontFamily: FONT, fontSize: 12, color: "rgba(255,255,255,0.56)", marginTop: 12 }}>
+              Currently featured: {featuredCampaign.name}
+            </div>
+          )}
         </div>
       </div>
 
@@ -302,9 +323,18 @@ function LandingView({ campaigns, loading, session, onPickCampaign, setView }) {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {campaigns.map((c) => (
-              <Card key={c.id} style={{ padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <Card key={c.id} style={c.is_featured
+                ? { padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, border: `1px solid ${BRAND.coral}` }
+                : { padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                 <div>
-                  <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14.5, color: BRAND.ink }}>{c.name}</div>
+                  <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14.5, color: BRAND.ink, display: "flex", alignItems: "center", gap: 6 }}>
+                    {c.name}
+                    {c.is_featured && (
+                      <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: BRAND.coral, background: "#FDEAE7", padding: "2px 8px", borderRadius: 999, textTransform: "uppercase", letterSpacing: 0.3 }}>
+                        Featured
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginTop: 2 }}>
                     {[c.geo, c.quarter_label].filter(Boolean).join(" · ") || "—"}
                   </div>
@@ -336,7 +366,7 @@ function LandingView({ campaigns, loading, session, onPickCampaign, setView }) {
             <div key={m.n} style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 18px", background: i % 2 === 1 ? BRAND.cream : "#fff" }}>
               <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: BRAND.coral, width: 22 }}>{m.n}</div>
               <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13.5, color: BRAND.ink, width: 130 }}>{m.label.toUpperCase()}</div>
-              <div style={{ fontFamily: FONT, fontSize: 13, color: "#7A746F", fontStyle: "italic" }}>"{m.quote}"</div>
+              <div style={{ fontFamily: SERIF, fontSize: 13, color: "#7A746F", fontStyle: "italic" }}>"{m.quote}"</div>
             </div>
           ))}
         </div>
@@ -851,7 +881,20 @@ function AdminCampaignsView({ setView, setActiveCampaignId }) {
     }
   }
 
+  // Which single campaign the public landing page's hero CTA sends a new
+  // visitor straight into. Exclusive — featuring one clears any other
+  // (enforced server-side too, see indexAdmin.js's /feature route).
+  async function toggleFeatured(c) {
+    try {
+      if (c.is_featured) await api.unfeatureIndexCampaign(c.id); else await api.featureIndexCampaign(c.id);
+      load();
+    } catch (e) {
+      setError(e.message || "Couldn't update which campaign is featured.");
+    }
+  }
+
   const openCampaigns = campaigns.filter((c) => c.is_open);
+  const featuredCampaign = campaigns.find((c) => c.is_featured) || null;
   // Open campaigns first (most recent first within each group) — matches
   // what actually matters day-to-day: "what's live right now" outranks
   // chronological order once a few quarters of history pile up.
@@ -878,10 +921,20 @@ function AdminCampaignsView({ setView, setActiveCampaignId }) {
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {openCampaigns.map((c) => (
-                  <div key={c.id} style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: BRAND.ink, background: "#fff", padding: "6px 12px", borderRadius: 999, border: "1px solid #CFE9DD" }}>
+                  <div key={c.id} style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: BRAND.ink, background: "#fff", padding: "6px 12px", borderRadius: 999, border: "1px solid #CFE9DD", display: "flex", alignItems: "center", gap: 5 }}>
+                    {c.is_featured && <Star size={12} fill={BRAND.coral} color={BRAND.coral} />}
                     {c.name}
                   </div>
                 ))}
+              </div>
+              {/* With several campaigns open at once, respondents landing
+                  on the public page need one clear "the current index" —
+                  this is which one that is, and the star below is how to
+                  change it. */}
+              <div style={{ fontFamily: FONT, fontSize: 12, color: "#4F8A6E", marginTop: 10 }}>
+                {featuredCampaign
+                  ? <>Featured on the public landing page: <strong>{featuredCampaign.name}</strong></>
+                  : "No campaign is featured — the landing page shows all open campaigns with none highlighted. Star one below to feature it."}
               </div>
             </div>
           )}
@@ -911,7 +964,14 @@ function AdminCampaignsView({ setView, setActiveCampaignId }) {
           {sortedCampaigns.map((c) => (
             <Card key={c.id} style={{ padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div>
-                <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14.5, color: BRAND.ink }}>{c.name}</div>
+                <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14.5, color: BRAND.ink, display: "flex", alignItems: "center", gap: 6 }}>
+                  {c.name}
+                  {c.is_featured && (
+                    <span style={{ fontFamily: FONT, fontSize: 10.5, fontWeight: 700, color: BRAND.coral, background: "#FDEAE7", padding: "2px 8px", borderRadius: 999, textTransform: "uppercase", letterSpacing: 0.3 }}>
+                      Featured
+                    </span>
+                  )}
+                </div>
                 <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginTop: 2 }}>
                   {[c.geo, c.quarter_label].filter(Boolean).join(" · ") || "—"} · {c.entry_count} {c.entry_count === 1 ? "entry" : "entries"}
                 </div>
@@ -921,6 +981,24 @@ function AdminCampaignsView({ setView, setActiveCampaignId }) {
                   fontFamily: FONT, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999,
                   color: c.is_open ? "#1B7A5A" : "#7A746F", background: c.is_open ? "#E7F5EF" : "#EFEBE7",
                 }}>{c.is_open ? "Open" : "Closed"}</span>
+                {/* Which quarter/campaign shows on the public landing/login
+                    page — the ask that was missing before: open/close only
+                    controlled visibility, not which one is "the" featured
+                    one when more than one is open. Only open campaigns can
+                    be featured — a closed one has nothing for a new visitor
+                    to take anyway. */}
+                <button
+                  onClick={() => toggleFeatured(c)}
+                  disabled={!c.is_open && !c.is_featured}
+                  title={c.is_featured ? "Stop featuring this campaign" : "Feature this campaign on the public landing page"}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8,
+                    border: `1px solid ${c.is_featured ? BRAND.coral : BRAND.line}`, background: c.is_featured ? "#FDEAE7" : "#fff",
+                    cursor: (!c.is_open && !c.is_featured) ? "not-allowed" : "pointer", opacity: (!c.is_open && !c.is_featured) ? 0.4 : 1,
+                  }}
+                >
+                  <Star size={15} fill={c.is_featured ? BRAND.coral : "none"} color={BRAND.coral} />
+                </button>
                 <GhostButton onClick={() => toggleOpen(c)}>{c.is_open ? "Close" : "Reopen"}</GhostButton>
                 <PrimaryButton onClick={() => { setActiveCampaignId(c.id); setView("admin-entries"); }}>
                   View entries
@@ -1135,8 +1213,13 @@ export default function IndexRivApp() {
            every 'Poppins' reference below would silently fall back to a
            system sans-serif on audit.retailinnovation.ai specifically,
            while looking correct everywhere else this module is reachable
-           (main domain, localhost) since App.jsx's import covers it there. */
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+           (main domain, localhost) since App.jsx's import covers it there.
+           Also pulls in Newsreader italic (same family list as App.jsx and
+           IdeasRiv.jsx) — this module's hero subhead and pull-quotes use
+           SERIF for the same italic pitch-line look the other modules use,
+           and previously fell back to Poppins's synthesized oblique here
+           since Newsreader was never requested. */
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Newsreader:ital@1&display=swap');
         .index-spin { animation: index-spin 0.8s linear infinite; }
         @keyframes index-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
