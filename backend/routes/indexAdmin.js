@@ -89,6 +89,42 @@ router.put("/campaigns/:id/close", async (req, res, next) => {
   }
 });
 
+// PUT /api/admin/index/campaigns/:id/feature — spotlight this one campaign
+// on the public landing page (hero CTA sends a new visitor straight into
+// it instead of just scrolling to the full open-campaigns list). Exclusive
+// by app logic, not a DB constraint: unset is_featured on every other
+// campaign first, then set it on this one, in a single transaction so a
+// concurrent request can never leave two campaigns featured at once.
+router.put("/campaigns/:id/feature", async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const id = Number(req.params.id);
+    await client.query("BEGIN");
+    const { rows } = await client.query("UPDATE index_campaigns SET is_featured = false WHERE is_featured = true RETURNING id");
+    await client.query("UPDATE index_campaigns SET is_featured = true WHERE id = $1", [id]);
+    await client.query("COMMIT");
+    res.json({ ok: true, previouslyFeatured: rows.map((r) => r.id) });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    next(err);
+  } finally {
+    client.release();
+  }
+});
+
+// PUT /api/admin/index/campaigns/:id/unfeature — clear the spotlight so no
+// campaign is featured (landing page hero falls back to "scroll to the
+// list" behavior). Kept separate from /feature rather than a toggle so the
+// frontend never has to guess the resulting state.
+router.put("/campaigns/:id/unfeature", async (req, res, next) => {
+  try {
+    await pool.query("UPDATE index_campaigns SET is_featured = false WHERE id = $1", [Number(req.params.id)]);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/admin/index/campaigns/:id/entries — every entry in a campaign,
 // admin-only full view (individual respondent scores — never exposed to
 // other respondents, only to admin here). Returns the campaign itself
