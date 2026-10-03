@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Menu, X, Award, Eye, EyeOff, FileSpreadsheet, FileText, Loader2,
   Compass, AlertTriangle, Gavel,
 } from "lucide-react";
-import { api, getToken, getStoredUser, setSession, clearSession, setIdeasSession, setRiseSession } from "./api.js";
+import { api, getToken, getStoredUser, setSession, clearSession, setIdeasSession, setRiseSession, setIndexSession } from "./api.js";
 import { computeScores, tierFor, fmtMoney, computeCategoryScores } from "./scoring.js";
 import { BRAND } from "./brand.js";
 import IdeasRivApp from "./IdeasRiv.jsx";
@@ -1087,6 +1087,19 @@ export default function RiosApp() {
     } else if (loggedInUser.role === "rise_jury") {
       setRiseSession(token, loggedInUser);
       path = "/rate-startup"; v = "rise-riv";
+    } else if (loggedInUser.role === "index_respondent") {
+      // index_respondent accounts normally log in through R-Index's own
+      // isolated login (its own token, its own UI — see IndexRiv.jsx), but
+      // this same shared login form also authenticates them correctly (the
+      // backend doesn't care which form was used). Without this branch
+      // they fell into the else case below — redirected to "assess", which
+      // only renders for role === "client" — leaving a blank page with
+      // just the nav bar and footer, exactly what was reported. Also seed
+      // R-Index's own isolated session (same as the ideas-riv/rise-riv
+      // branches above) so IndexRivApp recognizes them as logged in
+      // instead of showing its landing page as if logged out.
+      setIndexSession(token, loggedInUser);
+      path = "/rindex"; v = "r-index";
     } else {
       path = "/audit"; v = "assess";
     }
