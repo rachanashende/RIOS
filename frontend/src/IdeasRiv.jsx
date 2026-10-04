@@ -453,8 +453,11 @@ function JuryListView({ opportunities, ideas, myRatings, loading, error, onOpenI
     .map((opp) => ({ opp, ideas: ideas.filter((i) => i.question_id === opp.id) }))
     .filter((g) => g.ideas.length > 0);
 
-  const totalIdeas = ideas.length;
-  const ratedCount = ideas.filter((i) => myRatings[i.id]).length;
+  // Count only the ideas actually listed below (those under a current Top-5 opportunity),
+  // so the counter can always reach "N of N".
+  const visibleIdeas = grouped.flatMap((g) => g.ideas);
+  const totalIdeas = visibleIdeas.length;
+  const ratedCount = visibleIdeas.filter((i) => myRatings[i.id]).length;
 
   if (loading) return <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 24px" }}><Spinner label="Loading ideas…" /></div>;
 
