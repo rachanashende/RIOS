@@ -378,21 +378,40 @@ function SignupView({ onSignup, setView }) {
 const inputStyle = { width: "100%", marginTop: 6, fontFamily: "'Poppins',sans-serif", fontSize: 13.5, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: "10px 12px", boxSizing: "border-box", background: BRAND.cream, color: BRAND.ink };
 const demoBtnStyle = { flex: 1, fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "7px 0", borderRadius: 7, cursor: "pointer", background: "#fff", color: BRAND.ink, border: `1px solid ${BRAND.line}` };
 
+/* CR-01: acknowledge a successful admin "create" instead of silently clearing the form. */
+function useNotice(ms = 6000) {
+  const [notice, setNotice] = useState("");
+  const timer = useRef(null);
+  const show = useCallback((msg) => {
+    setNotice(msg);
+    clearTimeout(timer.current);
+    if (msg) timer.current = setTimeout(() => setNotice(""), ms);
+  }, [ms]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return [notice, show];
+}
+function Notice({ text }) {
+  if (!text) return null;
+  return <div role="status" style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 500, color: "#1B7A5A", background: "#E7F5EF", border: "1px solid #BFE3D2", borderRadius: 8, padding: "9px 12px", marginTop: 10, lineHeight: 1.45 }}>{text}</div>;
+}
+
 /* ---------------- Admin: Manage Clients ---------------- */
 function AdminView({ setView, setSelectedClient }) {
   const [clients, setClients] = useState(null);
   const [form, setForm] = useState({ name: "", email: "", company: "", password: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [notice, showNotice] = useNotice();
 
   const refresh = useCallback(() => { api.listClients().then((d) => setClients(d.clients)).catch(() => setClients([])); }, []);
   useEffect(() => { refresh(); }, [refresh]);
 
   async function createClient(e) {
     e.preventDefault();
-    setError(""); setBusy(true);
+    setError(""); showNotice(""); setBusy(true);
     try {
       await api.createClient(form);
+      showNotice(`Login created for ${form.name}${form.company ? ` (${form.company})` : ""}. Share the email and temporary password with the client.`);
       setForm({ name: "", email: "", company: "", password: "" });
       refresh();
     } catch (err) { setError(err.message); } finally { setBusy(false); }
@@ -442,6 +461,7 @@ function AdminView({ setView, setSelectedClient }) {
             <input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             <input placeholder="Temporary password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: BRAND.coralDark, marginTop: 10 }}>{error}</div>}
+            <Notice text={notice} />
             <button type="submit" disabled={busy} style={{ width: "100%", marginTop: 14, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>Create login</button>
           </form>
         </div>
@@ -459,6 +479,8 @@ function RiseTeamPanel() {
   const [jury, setJury] = useState(null);
   const [oppForm, setOppForm] = useState({ title: "", description: "" });
   const [viewingOpp, setViewingOpp] = useState(null); // O3/ST3: opportunity whose applications are open
+  const [oppNotice, showOppNotice] = useNotice();
+  const [juryNotice, showJuryNotice] = useNotice();
   const [juryForm, setJuryForm] = useState({ name: "", email: "", password: "", company: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -471,9 +493,10 @@ function RiseTeamPanel() {
 
   async function createOpportunity(e) {
     e.preventDefault();
-    setError(""); setBusy(true);
+    setError(""); showOppNotice(""); setBusy(true);
     try {
       await api.createRiseOpportunity(oppForm);
+      showOppNotice(`Opportunity "${oppForm.title}" added. It stays closed to applicants until you click Open.`);
       setOppForm({ title: "", description: "" });
       refresh();
     } catch (err) { setError(err.message); } finally { setBusy(false); }
@@ -483,9 +506,10 @@ function RiseTeamPanel() {
 
   async function createJury(e) {
     e.preventDefault();
-    setError(""); setBusy(true);
+    setError(""); showJuryNotice(""); setBusy(true);
     try {
       await api.createRiseJury(juryForm);
+      showJuryNotice(`Login created for ${juryForm.name}. Share the email and temporary password with them.`);
       setJuryForm({ name: "", email: "", password: "", company: "" });
       refresh();
     } catch (err) { setError(err.message); } finally { setBusy(false); }
@@ -531,6 +555,7 @@ function RiseTeamPanel() {
           <input placeholder="Description (optional)" value={oppForm.description} onChange={(e) => setOppForm({ ...oppForm, description: e.target.value })} style={{ ...inputStyle, marginTop: 0, flex: "2 1 260px" }} />
           <button type="submit" disabled={busy} style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "0 16px", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>Add</button>
         </form>
+        <Notice text={oppNotice} />
       </div>
 
       {viewingOpp && <RiseApplicationsAdmin opportunity={viewingOpp} onClose={() => setViewingOpp(null)} />}
@@ -566,6 +591,7 @@ function RiseTeamPanel() {
             <input placeholder="Email" type="email" value={juryForm.email} onChange={(e) => setJuryForm({ ...juryForm, email: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             <input placeholder="Temporary password" value={juryForm.password} onChange={(e) => setJuryForm({ ...juryForm, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: BRAND.coralDark, marginTop: 10 }}>{error}</div>}
+            <Notice text={juryNotice} />
             <button type="submit" disabled={busy} style={{ width: "100%", marginTop: 14, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>Create login</button>
           </form>
         </div>
@@ -593,6 +619,7 @@ function IdeasTeamPanel({ clients }) {
   // I1: Ideathon is per client — this picker decides whose people are listed, and which
   // client a new login is created for. It changes nothing for anyone currently using the Ideathon.
   const [selectedClientId, setSelectedClientId] = useState("");
+  const [notice, showNotice] = useNotice();
   const [employees, setEmployees] = useState(null);
   const [jury, setJury] = useState(null);
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "junior_employee", company: "" });
@@ -619,9 +646,10 @@ function IdeasTeamPanel({ clients }) {
   async function createUser(e) {
     e.preventDefault();
     if (!selectedClientId) { setError("Choose a client above first — every employee and jury login belongs to one client."); return; }
-    setError(""); setBusy(true);
+    setError(""); showNotice(""); setBusy(true);
     try {
       await api.createIdeasUser({ ...form, clientId: Number(selectedClientId) });
+      showNotice(`${form.role === "jury" ? "Jury" : "Employee"} login created for ${form.name}${selectedClient ? ` (${selectedClient.company || selectedClient.name})` : ""}. Share the email and temporary password with them.`);
       setForm({ name: "", email: "", password: "", role: form.role, company: form.company });
       refresh();
     } catch (err) { setError(err.message); } finally { setBusy(false); }
@@ -752,6 +780,7 @@ function IdeasTeamPanel({ clients }) {
             <input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             <input placeholder="Temporary password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: BRAND.coralDark, marginTop: 10 }}>{error}</div>}
+            <Notice text={notice} />
             <button type="submit" disabled={busy} style={{ width: "100%", marginTop: 14, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>Create login</button>
           </form>
         </div>
