@@ -764,7 +764,20 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
   function randomFillAll() {
     setResponses((prev) => { const next = { ...prev }; questions.forEach((q) => { next[q.id] = { ...(next[q.id] || {}), maturity: Math.floor(Math.random() * 5) }; }); return next; });
   }
-  function resetAll() { if (confirm("Clear every scored answer?")) setResponses({}); }
+  // A1/A2: Reset must also delete the saved answers on the server. Clearing only the
+  // screen let autosave send an empty set (which deletes nothing), so the old answers
+  // came back after a refresh and mixed with any new ones.
+  async function resetAll() {
+    if (!confirm("Clear every scored answer? This permanently deletes your saved answers.")) return;
+    const previous = responses;
+    setResponses({}); // also cancels any autosave still waiting to fire with the old answers
+    try {
+      await api.clearResponses();
+    } catch (err) {
+      setResponses(previous);
+      alert("Could not reset your scorecard — your answers have been kept. Please check your connection and try again.");
+    }
+  }
 
   const moduleAnswered = qs.filter((q) => responses[q.id] && responses[q.id].maturity != null).length;
 
