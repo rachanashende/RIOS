@@ -747,7 +747,24 @@ function IdeasTeamPanel({ clients }) {
 // hidden unless this build is explicitly a demo/test one (VITE_ENABLE_DEMO_TOOLS=true).
 const DEMO_TOOLS_ENABLED = import.meta.env.VITE_ENABLE_DEMO_TOOLS === "true";
 
-function AssessmentView({ questions, modules, responses, setResponses, moduleIdx, setModuleIdx }) {
+// A3: tells the client whether their answers are actually saved on the server.
+function SaveIndicator({ status, onRetry }) {
+  const base = { fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 8 };
+  if (status.state === "saving") return <span style={{ ...base, color: "#9B958F" }}>Saving…</span>;
+  if (status.state === "error") {
+    return (
+      <span role="alert" style={{ ...base, color: BRAND.coralDark }}>
+        {status.message || "Not saved"}
+        {!/log in again/i.test(status.message || "") && (
+          <button onClick={onRetry} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 7, padding: "4px 10px", cursor: "pointer" }}>Retry</button>
+        )}
+      </span>
+    );
+  }
+  return <span style={{ ...base, color: "#2E9E6B" }}>Saved ✓</span>;
+}
+
+function AssessmentView({ questions, modules, responses, setResponses, moduleIdx, setModuleIdx, saveStatus, onRetrySave }) {
   const module = modules[moduleIdx];
   const qs = useMemo(() => questions.filter((q) => q.module === module), [questions, module]);
   const totalAnswered = Object.values(responses).filter((r) => r && r.maturity != null).length;
@@ -786,7 +803,7 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
       <div className="rios-assess-sidebar" style={{ width: 250, flexShrink: 0 }}>
         <div style={{ position: "sticky", top: 84 }}>
           <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink, marginBottom: 2 }}>Discover intake</div>
-          <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#9B958F", marginBottom: 14 }}>{totalAnswered} / {questions.length} scored · saved automatically</div>
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#9B958F", marginBottom: 14 }}>{totalAnswered} / {questions.length} scored</div>
           <div style={{ height: 6, background: BRAND.line, borderRadius: 999, overflow: "hidden", marginBottom: 18 }}>
             <div style={{ height: "100%", width: `${(totalAnswered / questions.length) * 100}%`, background: BRAND.coral, transition: "width .3s" }} />
           </div>
@@ -823,7 +840,10 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
             <button onClick={randomFillModule} style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, padding: "8px 13px", borderRadius: 9, cursor: "pointer", background: "#fff", color: BRAND.ink, border: `1px solid ${BRAND.line}` }}><Shuffle size={12} /> Random-fill this module</button>
           )}
         </div>
-        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>{moduleAnswered} of {qs.length} scored in this module</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+          <span>{moduleAnswered} of {qs.length} scored in this module</span>
+          <SaveIndicator status={saveStatus} onRetry={onRetrySave} />
+        </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {qs.map((q) => {
@@ -1055,6 +1075,10 @@ export default function RiosApp() {
   const [ready, setReady] = useState(false);
   const saveTimer = useRef(null);
   const skipNextSave = useRef(true);
+  // A3: visible save state. "saved" | "saving" | "error" (+ message for the error case)
+  const [saveStatus, setSaveStatus] = useState({ state: "saved", message: "" });
+  const [retryTick, setRetryTick] = useState(0);
+  const saveSeq = useRef(0); // only the latest save request may update the status
 
   // Load the instrument once (public) — skipped on the R-Index subdomain,
   // where this whole component tree short-circuits to IndexRivApp below
@@ -1081,9 +1105,19 @@ export default function RiosApp() {
     if (!user || user.role !== "client") return;
     if (skipNextSave.current) { skipNextSave.current = false; return; }
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => { api.saveResponses(responses).catch(() => {}); }, 700);
+    setSaveStatus({ state: "saving", message: "" });
+    saveTimer.current = setTimeout(() => {
+      const seq = ++saveSeq.current;
+      api.saveResponses(responses)
+        .then(() => { if (seq === saveSeq.current) setSaveStatus({ state: "saved", message: "" }); })
+        .catch((err) => {
+          if (seq !== saveSeq.current) return;
+          const expired = /401|403|token|expired|unauthor|not logged/i.test((err && err.message) || "");
+          setSaveStatus({ state: "error", message: expired ? "Session expired — please log in again" : "Not saved" });
+        });
+    }, 700);
     return () => clearTimeout(saveTimer.current);
-  }, [responses, user]);
+  }, [responses, user, retryTick]);
 
   // Keep the URL in sync with the outer view on browser back/forward.
   // Ideathon/Startup handle their own back/forward internally once
@@ -1189,7 +1223,7 @@ export default function RiosApp() {
       {view === "rise-riv" && <RiseRivApp />}
       {view === "r-index" && <IndexRivApp />}
       {view === "assess" && user?.role === "client" && ready && (
-        <AssessmentView questions={questions} modules={modules} responses={responses} setResponses={setResponses} moduleIdx={moduleIdx} setModuleIdx={setModuleIdx} />
+        <AssessmentView questions={questions} modules={modules} responses={responses} setResponses={setResponses} moduleIdx={moduleIdx} setModuleIdx={setModuleIdx} saveStatus={saveStatus} onRetrySave={() => setRetryTick((n) => n + 1)} />
       )}
       {view === "admin" && user?.role === "admin" && <AdminView setView={goToView} setSelectedClient={setViewingClient} />}
       {view === "dashboard" && user && ready && (
