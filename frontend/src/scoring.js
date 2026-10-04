@@ -101,9 +101,19 @@ export function computeCategoryScores(moduleScores) {
 }
 
 
+// SC1: one currency convention (US$) used everywhere. The old formatter mixed a "$" sign
+// with Indian units ("$5.3Cr" is really US$53 million), so figures could be misread ~80x.
 export function fmtMoney(n) {
-  if (!n) return "$0";
-  if (n >= 1e7) return "$" + (n / 1e7).toFixed(1) + "Cr";
-  if (n >= 1e5) return "$" + (n / 1e5).toFixed(1) + "L";
-  return "$" + Math.round(n).toLocaleString();
+  if (!n) return "US$0";
+  const trim = (x) => String(Number(x.toFixed(1)));
+  if (n >= 1e9) return "US$" + trim(n / 1e9) + "B";
+  if (n >= 1e6) return "US$" + trim(n / 1e6) + "M";
+  if (n >= 1e3) return "US$" + Math.round(n / 1e3).toLocaleString() + "K";
+  return "US$" + Math.round(n).toLocaleString();
+}
+
+// A single estimate is shown once ("~US$52.5M"), not as a fake range ("X – X").
+export function fmtMoneyRange(low, high) {
+  const a = fmtMoney(low), b = fmtMoney(high);
+  return a === b ? "~" + a : a + " – " + b;
 }
