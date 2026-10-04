@@ -50,6 +50,7 @@ function pathToOuterView(pathname) {
   return OUTER_PATH_TO_VIEW[path] || "home";
 }
 import RiseRivApp from "./RiseRiv.jsx";
+import RiseApplicationsAdmin from "./RiseApplicationsAdmin.jsx";
 import IndexRivApp, { isIndexSubdomain } from "./IndexRiv.jsx";
 
 const MATURITY_LABELS = [
@@ -457,6 +458,7 @@ function RiseTeamPanel() {
   const [opportunities, setOpportunities] = useState(null);
   const [jury, setJury] = useState(null);
   const [oppForm, setOppForm] = useState({ title: "", description: "" });
+  const [viewingOpp, setViewingOpp] = useState(null); // O3/ST3: opportunity whose applications are open
   const [juryForm, setJuryForm] = useState({ name: "", email: "", password: "", company: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -509,8 +511,8 @@ function RiseTeamPanel() {
             {opportunities.map((o) => (
               <div key={o.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                 <div>
-                  <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, color: BRAND.ink }}>{o.title}</div>
-                  <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{o.application_count} application{o.application_count !== 1 ? "s" : ""}</div>
+                  <button onClick={() => setViewingOpp(o)} title="View applications" style={{ display: "block", textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, color: BRAND.ink }}>{o.title}</button>
+                  <button onClick={() => setViewingOpp(o)} title="View applications" style={{ display: "block", textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, color: BRAND.coralDark, textDecoration: "underline" }}>{o.application_count} application{o.application_count !== 1 ? "s" : ""} — view</button>
                 </div>
                 {o.is_open ? (
                   <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -530,6 +532,8 @@ function RiseTeamPanel() {
           <button type="submit" disabled={busy} style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "0 16px", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>Add</button>
         </form>
       </div>
+
+      {viewingOpp && <RiseApplicationsAdmin opportunity={viewingOpp} onClose={() => setViewingOpp(null)} />}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24 }} className="rios-admin-grid">
         <div>
