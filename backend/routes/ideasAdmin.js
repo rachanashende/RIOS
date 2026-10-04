@@ -52,9 +52,17 @@ router.put("/settings", async (req, res, next) => {
 router.get("/users", async (req, res, next) => {
   try {
     const role = req.query.role === "jury" ? "jury" : "junior_employee";
+    // I1: optional ?clientId= narrows the list to one client's people
+    const clientId = Number(req.query.clientId) || null;
+    const params = [role];
+    let where = "u.role = $1";
+    if (clientId) { params.push(clientId); where += ` AND u.client_id = $${params.length}`; }
     const { rows } = await pool.query(
-      "SELECT id, email, name, company, expertise, created_at FROM users WHERE role = $1 ORDER BY created_at DESC",
-      [role]
+      `SELECT u.id, u.email, u.name, u.company, u.expertise, u.created_at, u.client_id,
+              COALESCE(NULLIF(c.company, ''), c.name) AS client_name
+       FROM users u LEFT JOIN users c ON c.id = u.client_id
+       WHERE ${where} ORDER BY u.created_at DESC`,
+      params
     );
     res.json({ users: rows });
   } catch (err) {
@@ -67,10 +75,14 @@ router.get("/users", async (req, res, next) => {
 // accepted either way rather than silently dropped if sent.
 router.post("/users", async (req, res, next) => {
   try {
-    const { email, password, name, role, company, expertise } = req.body || {};
+    const { email, password, name, role, company, expertise, clientId } = req.body || {};
     if (!email || !password || !name || !["junior_employee", "jury"].includes(role)) {
       return res.status(400).json({ error: "Name, email, temporary password, and role ('junior_employee' or 'jury') are required." });
     }
+    // I1: every employee/jury login belongs to one client
+    if (!clientId) return res.status(400).json({ error: "Choose which client this person belongs to." });
+    const { rows: clientRows } = await pool.query("SELECT id, name, company FROM users WHERE id = $1 AND role = 'client'", [clientId]);
+    if (!clientRows.length) return res.status(404).json({ error: "That client account doesn't exist." });
     const normalizedEmail = String(email).toLowerCase().trim();
 
     const { rows: existing } = await pool.query("SELECT id FROM users WHERE email = $1", [normalizedEmail]);
@@ -78,11 +90,28 @@ router.post("/users", async (req, res, next) => {
 
     const password_hash = bcrypt.hashSync(password, 10);
     const { rows } = await pool.query(
-      "INSERT INTO users (email, password_hash, name, role, company, expertise) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-      [normalizedEmail, password_hash, name, role, company || null, (expertise || "").trim() || null]
+      "INSERT INTO users (email, password_hash, name, role, company, expertise, client_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+      [normalizedEmail, password_hash, name, role, (company || "").trim() || clientRows[0].company || null, (expertise || "").trim() || null, clientRows[0].id]
     );
 
-    res.status(201).json({ id: rows[0].id, email: normalizedEmail, name, role, company, expertise: expertise || null });
+    res.status(201).json({ id: rows[0].id, email: normalizedEmail, name, role, company, expertise: expertise || null, clientId: clientRows[0].id });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/admin/ideas/users/:id/client { clientId } — assign (or move) an employee/jury login to a client.
+router.put("/users/:id/client", async (req, res, next) => {
+  try {
+    const { clientId } = req.body || {};
+    const { rows: clientRows } = await pool.query("SELECT id FROM users WHERE id = $1 AND role = 'client'", [clientId]);
+    if (!clientRows.length) return res.status(404).json({ error: "That client account doesn't exist." });
+    const { rowCount } = await pool.query(
+      "UPDATE users SET client_id = $1 WHERE id = $2 AND role IN ('junior_employee','jury')",
+      [clientId, req.params.id]
+    );
+    if (!rowCount) return res.status(404).json({ error: "Employee or jury login not found." });
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

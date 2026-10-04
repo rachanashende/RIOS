@@ -574,16 +574,30 @@ function RiseTeamPanel() {
   );
 }
 
+/* I1: shows which client an Ideathon login belongs to; lets an admin assign one that has none yet. */
+function ClientTag({ user, clients, onAssign }) {
+  if (user.client_id) return <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 600, color: BRAND.coralDark, marginTop: 2 }}>Client: {user.client_name}</div>;
+  return (
+    <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 700, color: "#B23A3D" }}>Not assigned to a client</span>
+      <select value="" onChange={(e) => onAssign(user.id, e.target.value)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, border: `1px solid ${BRAND.line}`, borderRadius: 6, padding: "3px 6px", background: "#fff", color: BRAND.ink }}>
+        <option value="">Assign to…</option>
+        {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.company || c.name}</option>)}
+      </select>
+    </div>
+  );
+}
+
 /* ---------------- Admin: Ideathon team + source-client control ---------------- */
 function IdeasTeamPanel({ clients }) {
-  const [sourceClient, setSourceClient] = useState(null);
+  // I1: Ideathon is per client — this picker decides whose people are listed, and which
+  // client a new login is created for. It changes nothing for anyone currently using the Ideathon.
   const [selectedClientId, setSelectedClientId] = useState("");
   const [employees, setEmployees] = useState(null);
   const [jury, setJury] = useState(null);
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "junior_employee", company: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [savingSource, setSavingSource] = useState(false);
 
   // Which employee's submissions panel is expanded, and what's in it —
   // admin drill-down per the spec ("admin should be able to see my idea
@@ -594,28 +608,28 @@ function IdeasTeamPanel({ clients }) {
   const [loadingEmployeeIdeas, setLoadingEmployeeIdeas] = useState(false);
 
   const refresh = useCallback(() => {
-    api.getIdeasSettings().then((d) => { setSourceClient(d.sourceClient); setSelectedClientId(d.sourceClient?.id ? String(d.sourceClient.id) : ""); }).catch(() => {});
-    api.listIdeasUsers("junior_employee").then((d) => setEmployees(d.users)).catch(() => setEmployees([]));
-    api.listIdeasUsers("jury").then((d) => setJury(d.users)).catch(() => setJury([]));
-  }, []);
-  useEffect(() => { refresh(); }, [refresh]);
+    const cid = selectedClientId ? Number(selectedClientId) : undefined;
+    api.listIdeasUsers("junior_employee", cid).then((d) => setEmployees(d.users)).catch(() => setEmployees([]));
+    api.listIdeasUsers("jury", cid).then((d) => setJury(d.users)).catch(() => setJury([]));
+  }, [selectedClientId]);
+  useEffect(() => { setExpandedEmployeeId(null); refresh(); }, [refresh]);
 
-  async function saveSourceClient() {
-    setSavingSource(true);
-    try {
-      await api.setIdeasSourceClient(selectedClientId ? Number(selectedClientId) : null);
-      refresh();
-    } catch (err) { setError(err.message); } finally { setSavingSource(false); }
-  }
+  const selectedClient = (clients || []).find((c) => String(c.id) === String(selectedClientId));
 
   async function createUser(e) {
     e.preventDefault();
+    if (!selectedClientId) { setError("Choose a client above first — every employee and jury login belongs to one client."); return; }
     setError(""); setBusy(true);
     try {
-      await api.createIdeasUser(form);
+      await api.createIdeasUser({ ...form, clientId: Number(selectedClientId) });
       setForm({ name: "", email: "", password: "", role: form.role, company: form.company });
       refresh();
     } catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
+  async function assignClient(userId, clientId) {
+    if (!clientId) return;
+    setError("");
+    try { await api.assignIdeasUserClient(userId, Number(clientId)); refresh(); } catch (err) { setError(err.message); }
   }
   async function removeUser(id) {
     if (!confirm("Remove this login?")) return;
@@ -641,20 +655,17 @@ function IdeasTeamPanel({ clients }) {
   return (
     <div style={{ marginTop: 44 }}>
       <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>Ideathon team</div>
-      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Choose which client's scored audit feeds the 5 opportunities, then create employee and jury logins.</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Each client runs its own Ideathon. Pick a client to see its employees and jury and to create logins for it. People only ever see their own client's opportunities and ideas.</div>
 
       <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 20, background: "#fff", marginBottom: 24 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}><Compass size={15} /> Opportunity source</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}><Compass size={15} /> Client</div>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F", marginBottom: 12 }}>
-          {sourceClient ? <>Currently sourcing from <strong style={{ color: BRAND.ink }}>{sourceClient.company || sourceClient.name}</strong>.</> : "No source client set yet — Ideathon will show no opportunities until you pick one."}
+          {selectedClient ? <>Showing the Ideathon team for <strong style={{ color: BRAND.ink }}>{selectedClient.company || selectedClient.name}</strong>. Its opportunities come from that client's own scored audit.</> : "Showing everyone across all clients. Choose a client to see its team and create logins for it."}
         </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <select value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} style={{ ...inputStyle, marginTop: 0, flex: 1, minWidth: 200 }}>
-            <option value="">— No source client —</option>
-            {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.company || c.name} ({c.answered}/165 scored)</option>)}
-          </select>
-          <button onClick={saveSourceClient} disabled={savingSource} style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.ink, color: "#fff", border: "none", borderRadius: 8, padding: "0 18px", cursor: "pointer", opacity: savingSource ? 0.7 : 1 }}>Save</button>
-        </div>
+        <select value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} style={{ ...inputStyle, marginTop: 0, width: "100%" }}>
+          <option value="">— All clients —</option>
+          {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.company || c.name} ({c.answered}/165 scored)</option>)}
+        </select>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24 }} className="rios-admin-grid">
@@ -672,6 +683,7 @@ function IdeasTeamPanel({ clients }) {
                     <div>
                       <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink }}>{u.name}</div>
                       <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email} {u.company ? `· ${u.company}` : ""}</div>
+                      <ClientTag user={u} clients={clients} onAssign={assignClient} />
                     </div>
                     <div style={{ display: "flex", gap: 6 }}>
                       <button onClick={() => toggleEmployeeIdeas(u.id)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "7px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: expandedEmployeeId === u.id ? BRAND.ink : "#fff", color: expandedEmployeeId === u.id ? "#fff" : BRAND.ink }}>
@@ -718,6 +730,7 @@ function IdeasTeamPanel({ clients }) {
                   <div>
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: BRAND.ink }}>{u.name}</div>
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email} {u.company ? `· ${u.company}` : ""}</div>
+                    <ClientTag user={u} clients={clients} onAssign={assignClient} />
                   </div>
                   <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
                 </div>
@@ -733,6 +746,7 @@ function IdeasTeamPanel({ clients }) {
               <button type="button" onClick={() => setForm({ ...form, role: "junior_employee" })} style={{ flex: 1, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 12.5, padding: "9px 0", borderRadius: 8, cursor: "pointer", border: `1px solid ${BRAND.line}`, background: form.role === "junior_employee" ? BRAND.ink : "#fff", color: form.role === "junior_employee" ? "#fff" : BRAND.ink }}>Employee</button>
               <button type="button" onClick={() => setForm({ ...form, role: "jury" })} style={{ flex: 1, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 12.5, padding: "9px 0", borderRadius: 8, cursor: "pointer", border: `1px solid ${BRAND.line}`, background: form.role === "jury" ? BRAND.ink : "#fff", color: form.role === "jury" ? "#fff" : BRAND.ink }}>Jury</button>
             </div>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: selectedClient ? "#1B7A5A" : "#9B958F", marginBottom: 10 }}>{selectedClient ? `For: ${selectedClient.company || selectedClient.name}` : "Choose a client above first."}</div>
             <input placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required style={{ ...inputStyle, marginTop: 0 }} />
             <input placeholder="Company (optional)" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} style={{ ...inputStyle, marginTop: 10 }} />
             <input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />

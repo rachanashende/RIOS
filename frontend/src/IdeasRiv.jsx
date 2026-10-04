@@ -239,7 +239,7 @@ function OpportunityCard({ opp, ideaCount, onOpen }) {
 /* =========================================================================
    LANDING VIEW
    ========================================================================= */
-function LandingView({ session, setView, opportunities, ideas, loading, error, sourceClient, setActiveOpp }) {
+function LandingView({ session, setView, opportunities, ideas, loading, error, sourceClient, unassigned, setActiveOpp }) {
   return (
     <div>
       <div style={{ background: BRAND.ink, color: "#fff", position: "relative", overflow: "hidden" }}>
@@ -254,7 +254,9 @@ function LandingView({ session, setView, opportunities, ideas, loading, error, s
           <p style={{ fontFamily: SERIF, fontStyle: "italic", fontSize: "clamp(15px,1.6vw,18px)", color: "#D8D3CF", maxWidth: 600, marginTop: 18, lineHeight: 1.6 }}>
             {sourceClient
               ? `These five opportunities are the current Top 5 from ${sourceClient.company || sourceClient.name}'s scored audit. Junior employees submit ideas against each one; leaders sit as jury and rate them.`
-              : "Junior employees submit ideas against each opportunity; leaders sit as jury and rate them."}
+              : unassigned
+                ? "Your account isn't linked to a client yet — please ask RIV to assign you, and your client's opportunities will appear here."
+                : "Junior employees submit ideas against each opportunity; leaders sit as jury and rate them."}
           </p>
         </div>
       </div>
@@ -711,6 +713,7 @@ function IdeasRivMain({ session, onLogout }) {
 
   const [opportunities, setOpportunities] = useState([]);
   const [sourceClient, setSourceClient] = useState(null);
+  const [unassigned, setUnassigned] = useState(false);
   const [ideas, setIdeas] = useState([]);
   const [myIdeas, setMyIdeas] = useState([]);
   const [myRatings, setMyRatings] = useState({}); // ideaId -> rating
@@ -754,7 +757,7 @@ function IdeasRivMain({ session, onLogout }) {
   useEffect(() => {
     setLoadingOpps(true);
     api.getOpportunities()
-      .then((d) => { setOpportunities(d.opportunities || []); setSourceClient(d.sourceClient || null); })
+      .then((d) => { setOpportunities(d.opportunities || []); setSourceClient(d.sourceClient || null); setUnassigned(!!d.unassigned); })
       .catch((e) => setError(e.message || "Couldn't load opportunities."))
       .finally(() => setLoadingOpps(false));
     refreshIdeas();
@@ -819,7 +822,7 @@ function IdeasRivMain({ session, onLogout }) {
           <LandingView
             session={session} setView={goToView}
             opportunities={opportunities} ideas={ideas}
-            loading={loadingOpps} error={error} sourceClient={sourceClient}
+            loading={loadingOpps} error={error} sourceClient={sourceClient} unassigned={unassigned}
             setActiveOpp={setActiveOppId}
           />
         )}
