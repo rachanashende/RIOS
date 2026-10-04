@@ -52,8 +52,13 @@ export function computeScores(responses) {
     .map((q) => {
       const r = responses[q.id];
       if (!r || r.maturity == null || r.maturity >= 4 || !q.hasDollar) return null;
-      const midpoint = (q.revLow + q.revHigh) / 2 + (q.costLow + q.costHigh) / 2;
-      return { ...q, maturity: r.maturity, evidence: r.evidence || "", midpoint };
+      // SC2: the stored $ values are the full potential at maturity 0. Scale them by how much
+      // improvement is actually left, so a question scored 3/4 is worth a quarter of one scored 0/4.
+      const gapFactor = (4 - r.maturity) / 4;
+      const revLow = q.revLow * gapFactor, revHigh = q.revHigh * gapFactor;
+      const costLow = q.costLow * gapFactor, costHigh = q.costHigh * gapFactor;
+      const midpoint = (revLow + revHigh) / 2 + (costLow + costHigh) / 2;
+      return { ...q, revLow, revHigh, costLow, costHigh, gapFactor, maturity: r.maturity, evidence: r.evidence || "", midpoint };
     })
     .filter(Boolean)
     .sort((a, b) => b.midpoint - a.midpoint)

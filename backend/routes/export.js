@@ -95,7 +95,7 @@ router.get("/excel", requireAuth, async (req, res, next) => {
   os.addRow(["Generated", new Date().toISOString()]);
   os.addRow([]);
   os.addRow(["Top 5 Innovation Opportunities"]).font = { bold: true };
-  os.addRow(["Rank", "Module", "Question", "Maturity", "Est. Benefit Midpoint ($)"]).font = { bold: true };
+  os.addRow(["Rank", "Module", "Question", "Maturity", "Est. Remaining Benefit ($, scaled to maturity gap)"]).font = { bold: true };
   scores.opportunities.forEach((o, i) => {
     os.addRow([i + 1, o.module, o.q, o.maturity, Math.round(o.midpoint)]);
   });
