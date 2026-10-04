@@ -845,6 +845,7 @@ function AdminCampaignsView({ setView, setActiveCampaignId }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [notice, setNotice] = useState(""); // CR-01: confirm a campaign was created
   const [form, setForm] = useState({ name: "", geo: "", quarterLabel: "", endsAt: "" });
 
   function load() {
@@ -861,8 +862,11 @@ function AdminCampaignsView({ setView, setActiveCampaignId }) {
     if (!form.name.trim()) { setError("Campaign name is required."); return; }
     setCreating(true);
     setError(null);
+    setNotice("");
     try {
       await api.createIndexCampaign(form);
+      setNotice(`Campaign "${form.name.trim()}" created.`);
+      setTimeout(() => setNotice(""), 6000);
       setForm({ name: "", geo: "", quarterLabel: "", endsAt: "" });
       load();
     } catch (e) {
@@ -952,6 +956,9 @@ function AdminCampaignsView({ setView, setActiveCampaignId }) {
           <Field label="Quarter label"><input style={inputStyle} placeholder="e.g. Q4 2026" value={form.quarterLabel} onChange={(e) => setForm((f) => ({ ...f, quarterLabel: e.target.value }))} /></Field>
           <div style={{ gridColumn: "1 / -1" }}>
             <ErrorBanner text={error} />
+            {notice && (
+              <div role="status" style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 500, color: "#1B7A5A", background: "#E7F5EF", border: "1px solid #BFE3D2", borderRadius: 12, padding: "12px 16px", marginBottom: 16 }}>{notice}</div>
+            )}
             <PrimaryButton type="submit" disabled={creating} icon={creating ? Loader2 : Plus}>
               {creating ? "Creating…" : "Create campaign"}
             </PrimaryButton>
