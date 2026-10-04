@@ -11,6 +11,20 @@ function questionById(id) {
   return QUESTIONS.find((q) => q.id === Number(id)) || null;
 }
 
+// I1: which client's Ideathon is this request about?
+// Employees and jury only ever see their own client's Ideathon (users.client_id).
+// Admins choose one with ?clientId=, falling back to the legacy global source setting.
+async function resolveClientId(req) {
+  if (req.user.role === "admin") {
+    const q = Number(req.query.clientId);
+    if (q) return q;
+    const { rows } = await pool.query("SELECT source_client_id FROM ideas_settings WHERE id = 1");
+    return rows[0]?.source_client_id || null;
+  }
+  const { rows } = await pool.query("SELECT client_id FROM users WHERE id = $1", [req.user.id]);
+  return rows[0]?.client_id || null;
+}
+
 // Attach the static question text/module/submodule to a DB row that only
 // stores question_id, and coerce the aggregate columns Postgres returns
 // as strings (COUNT/AVG) back into numbers. Every score is always on a
@@ -35,10 +49,9 @@ function enrich(row) {
  */
 router.get("/opportunities", requireRole("junior_employee", "jury", "admin"), async (req, res, next) => {
   try {
-    const { rows: settingsRows } = await pool.query("SELECT source_client_id FROM ideas_settings WHERE id = 1");
-    const sourceClientId = settingsRows[0]?.source_client_id;
+    const sourceClientId = await resolveClientId(req);
     if (!sourceClientId) {
-      return res.json({ opportunities: [], sourceClient: null });
+      return res.json({ opportunities: [], sourceClient: null, unassigned: req.user.role !== "admin" });
     }
 
     const { rows: clientRows } = await pool.query(
@@ -90,7 +103,9 @@ router.get("/criteria", requireRole("junior_employee", "jury", "admin"), (req, r
 router.get("/", requireRole("junior_employee", "jury", "admin"), async (req, res, next) => {
   try {
     const { questionId } = req.query;
-    const params = [];
+    const clientId = await resolveClientId(req);
+    if (!clientId) return res.json({ ideas: [] });
+    const params = [clientId];
     let sql = `
       SELECT i.id, i.question_id, i.title, i.description, i.created_at,
              u.name AS submitted_by_name,
@@ -99,10 +114,11 @@ router.get("/", requireRole("junior_employee", "jury", "admin"), async (req, res
       FROM ideas i
       JOIN users u ON u.id = i.submitted_by
       LEFT JOIN idea_ratings r ON r.idea_id = i.id
+      WHERE i.source_client_id = $1
     `;
     if (questionId) {
       params.push(Number(questionId));
-      sql += ` WHERE i.question_id = $${params.length}`;
+      sql += ` AND i.question_id = $${params.length}`;
     }
     sql += ` GROUP BY i.id, u.name ORDER BY i.created_at DESC`;
 
@@ -155,8 +171,10 @@ router.post("/", requireRole("junior_employee", "admin"), async (req, res, next)
       return res.status(400).json({ error: "Expected a non-empty array of ideas." });
     }
 
-    const { rows: settingsRows } = await pool.query("SELECT source_client_id FROM ideas_settings WHERE id = 1");
-    const sourceClientId = settingsRows[0]?.source_client_id || null;
+    const sourceClientId = await resolveClientId(req);
+    if (!sourceClientId) {
+      return res.status(403).json({ error: "Your account isn't linked to a client yet — please ask RIV to assign you." });
+    }
 
     const inserted = [];
     for (const idea of ideas) {
@@ -236,8 +254,15 @@ router.post("/:id/ratings", requireRole("jury", "admin"), async (req, res, next)
     const ideaId = Number(req.params.id);
     const { criteria, comment } = req.body || {};
 
-    const { rows: ideaRows } = await pool.query("SELECT id FROM ideas WHERE id = $1", [ideaId]);
+    const { rows: ideaRows } = await pool.query("SELECT id, source_client_id FROM ideas WHERE id = $1", [ideaId]);
     if (!ideaRows.length) return res.status(404).json({ error: "Idea not found." });
+    // I1: jury may only rate ideas from their own client's Ideathon
+    if (req.user.role !== "admin") {
+      const clientId = await resolveClientId(req);
+      if (!clientId || ideaRows[0].source_client_id !== clientId) {
+        return res.status(403).json({ error: "You can only rate ideas from your own client's Ideathon." });
+      }
+    }
 
     if (!criteria || typeof criteria !== "object") {
       return res.status(400).json({ error: "criteria is required — an object with a 1-5 rating for each of: " + CRITERIA.map((c) => c.key).join(", ") });
@@ -278,6 +303,8 @@ router.post("/:id/ratings", requireRole("jury", "admin"), async (req, res, next)
  */
 router.get("/leaderboard", requireRole("admin", "jury"), async (req, res, next) => {
   try {
+    const clientId = await resolveClientId(req);
+    if (!clientId) return res.json({ leaderboard: [] });
     const { rows } = await pool.query(`
       SELECT i.id, i.question_id, i.title, i.description, i.created_at,
              u.name AS submitted_by_name,
@@ -286,9 +313,10 @@ router.get("/leaderboard", requireRole("admin", "jury"), async (req, res, next) 
       FROM ideas i
       JOIN users u ON u.id = i.submitted_by
       JOIN idea_ratings r ON r.idea_id = i.id
+      WHERE i.source_client_id = $1
       GROUP BY i.id, u.name
       ORDER BY avg_score DESC
-    `);
+    `, [clientId]);
     const ranked = rows.map(enrich).map((row, i) => ({ ...row, published: i < 3 }));
     res.json({ leaderboard: ranked });
   } catch (err) {

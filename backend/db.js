@@ -239,6 +239,35 @@ export async function initSchema() {
   // PRD alignment migration 3: §6 allows an optional "expertise" field at
   // jury sign-up.
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS expertise TEXT;`);
+
+  // I1: per-client Ideathon. Employees and jury belong to exactly one client, and
+  // everything they see (opportunities, ideas, ratings, leaderboard) is scoped to it.
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
+  // One-time-style backfill (only touches users that have no client yet): link each
+  // employee/jury to the client account whose company name matches theirs, when exactly
+  // one client matches. Anyone left unmatched is assigned by an admin.
+  await pool.query(`
+    UPDATE users u
+    SET client_id = m.client_id
+    FROM (
+      SELECT u2.id AS user_id, MIN(c.id) AS client_id
+      FROM users u2
+      JOIN users c ON c.role = 'client'
+                  AND NULLIF(TRIM(c.company), '') IS NOT NULL
+                  AND LOWER(TRIM(c.company)) = LOWER(TRIM(u2.company))
+      WHERE u2.role IN ('junior_employee', 'jury') AND u2.client_id IS NULL
+      GROUP BY u2.id
+      HAVING COUNT(c.id) = 1
+    ) m
+    WHERE u.id = m.user_id;
+  `);
+  // Older ideas that never recorded which client they were for take their author's client.
+  await pool.query(`
+    UPDATE ideas i
+    SET source_client_id = u.client_id
+    FROM users u
+    WHERE i.submitted_by = u.id AND i.source_client_id IS NULL AND u.client_id IS NOT NULL;
+  `);
 }
 
 export default pool;

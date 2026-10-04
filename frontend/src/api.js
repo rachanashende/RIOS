@@ -138,7 +138,8 @@ export const api = {
   // the main site's (admin) token, not the Ideas.RIV one.
   getIdeasSettings: () => request("/admin/ideas/settings"),
   setIdeasSourceClient: (sourceClientId) => request("/admin/ideas/settings", { method: "PUT", body: { sourceClientId } }),
-  listIdeasUsers: (role) => request(`/admin/ideas/users?role=${role}`),
+  listIdeasUsers: (role, clientId) => request(`/admin/ideas/users?role=${role}${clientId ? `&clientId=${clientId}` : ""}`),
+  assignIdeasUserClient: (id, clientId) => request(`/admin/ideas/users/${id}/client`, { method: "PUT", body: { clientId } }),
   createIdeasUser: (payload) => request("/admin/ideas/users", { method: "POST", body: payload }),
   deleteIdeasUser: (id) => request(`/admin/ideas/users/${id}`, { method: "DELETE" }),
   getEmployeeIdeas: (id) => request(`/admin/ideas/users/${id}/ideas`),
