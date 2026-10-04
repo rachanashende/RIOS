@@ -16,6 +16,14 @@ function fmtUSD(n) {
 }
 
 
+// SC4: AI angle, incumbent vendors and RIV network startups for an opportunity / gap
+function pdfSolutions(doc, o, gray) {
+  [["How AI helps", o.aiAngle], ["Incumbent vendors", o.incumbent], ["RIV network startups", o.rivNetwork]].forEach(([label, v]) => {
+    if (v) doc.fillColor(gray).fontSize(8.5).text(`   ${label}: ${v}`, { width: 480 });
+  });
+  doc.fontSize(9.5);
+}
+
 const router = Router();
 
 // Admins may export any client's scorecard via ?userId=; everyone else gets their own.
@@ -95,15 +103,15 @@ router.get("/excel", requireAuth, async (req, res, next) => {
   os.addRow(["Generated", new Date().toISOString()]);
   os.addRow([]);
   os.addRow(["Top 5 Innovation Opportunities"]).font = { bold: true };
-  os.addRow(["Rank", "Module", "Question", "Maturity", "Est. Remaining Benefit ($, scaled to maturity gap)"]).font = { bold: true };
+  os.addRow(["Rank", "Module", "Question", "Maturity", "Est. Remaining Benefit ($, scaled to maturity gap)", "How AI helps", "Incumbent vendors", "RIV network startups"]).font = { bold: true };
   scores.opportunities.forEach((o, i) => {
-    os.addRow([i + 1, o.module, o.q, o.maturity, Math.round(o.midpoint)]);
+    os.addRow([i + 1, o.module, o.q, o.maturity, Math.round(o.midpoint), o.aiAngle || "", o.incumbent || "", o.rivNetwork || ""]);
   });
   os.addRow([]);
   os.addRow(["Priority AI-Maturity Gaps (no $ data)"]).font = { bold: true };
-  os.addRow(["Rank", "Module", "Question", "Maturity", "Weighted Severity"]).font = { bold: true };
+  os.addRow(["Rank", "Module", "Question", "Maturity", "Weighted Severity", "How AI helps", "Incumbent vendors", "RIV network startups"]).font = { bold: true };
   scores.priorityGaps.forEach((o, i) => {
-    os.addRow([i + 1, o.module, o.q, o.maturity, o.severity]);
+    os.addRow([i + 1, o.module, o.q, o.maturity, o.severity, o.aiAngle || "", o.incumbent || "", o.rivNetwork || ""]);
   });
   os.columns.forEach((col) => { col.width = 30; });
 
@@ -167,6 +175,7 @@ router.get("/pdf", requireAuth, async (req, res, next) => {
     doc.fillColor(coral).text(`${i + 1}. `, { continued: true });
     doc.fillColor(ink).text(`${o.q}`, { width: 480 });
     doc.fillColor(gray).text(`   ${o.module} · Maturity ${o.maturity}/4 · Est. benefit ~${fmtUSD(o.midpoint)}`);
+    pdfSolutions(doc, o, gray);
     if (showEvidence && o.evidence) doc.fillColor(gray).fontSize(8.5).text(`   Evidence: ${o.evidence}`, { italics: true });
     doc.fontSize(9.5);
     doc.moveDown(0.4);
@@ -183,6 +192,7 @@ router.get("/pdf", requireAuth, async (req, res, next) => {
     doc.fillColor(coral).text(`${i + 1}. `, { continued: true });
     doc.fillColor(ink).text(`${o.q}`, { width: 480 });
     doc.fillColor(gray).text(`   ${o.module} · Maturity ${o.maturity}/4 · Severity ${o.severity}`);
+    pdfSolutions(doc, o, gray);
     doc.moveDown(0.4);
   });
 
