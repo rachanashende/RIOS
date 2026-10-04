@@ -129,7 +129,7 @@ export const api = {
   getMyIdeas: () => ideasRequest("/ideas/mine"),
   submitIdeas: (ideas) => ideasRequest("/ideas", { method: "POST", body: { ideas } }),
   getMyRatingForIdea: (ideaId) => ideasRequest(`/ideas/${ideaId}/ratings/mine`),
-  submitRating: (ideaId, payload) => ideasRequest(`/ideas/${ideaId}/ratings`, { method: "POST", body: payload }),
+  submitRating: (ideaId, criteria, comment) => ideasRequest(`/ideas/${ideaId}/ratings`, { method: "POST", body: { criteria, comment } }),
   getLeaderboard: () => ideasRequest("/ideas/leaderboard"),
   critTurn: (ideaId, messages) => ideasRequest("/ideas/crit-turn", { method: "POST", body: { ideaId, messages } }),
 
