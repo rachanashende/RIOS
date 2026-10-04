@@ -927,6 +927,15 @@ function OpportunityCard({ rank, q, tag, muted }) {
         <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 700, color: muted ? "#8a8480" : BRAND.coralDark, background: muted ? "#EFEAE4" : "#FCEEE1", padding: "4px 9px", borderRadius: 999, whiteSpace: "nowrap", height: "fit-content" }}>{tag}</div>
       </div>
       <div style={{ display: "flex", gap: 14, marginTop: 10, fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}><span>Maturity {q.maturity}/4</span><span>AI weight ×{q.weight}</span></div>
+      {(q.aiAngle || q.incumbent || q.rivNetwork) && (
+        <div style={{ marginTop: 10, borderTop: `1px solid ${BRAND.line}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+          {[["How AI helps", q.aiAngle], ["Incumbent vendors", q.incumbent], ["RIV network startups", q.rivNetwork]].filter(([, v]) => v).map(([label, v]) => (
+            <div key={label} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, lineHeight: 1.5, color: BRAND.ink }}>
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: "#9B958F", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</span><br />{v}
+            </div>
+          ))}
+        </div>
+      )}
       {q.evidence && <div style={{ fontFamily: "'Newsreader',Georgia,serif", fontStyle: "italic", fontSize: 12.5, color: "#7A746F", marginTop: 8, borderTop: `1px solid ${BRAND.line}`, paddingTop: 8 }}>"{q.evidence}"</div>}
     </div>
   );
