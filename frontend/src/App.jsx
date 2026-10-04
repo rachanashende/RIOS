@@ -743,6 +743,10 @@ function IdeasTeamPanel({ clients }) {
 }
 
 /* ---------------- Assessment (client, self-serve) ---------------- */
+// CR-02: demo fill buttons overwrite real answers with random scores, so they are
+// hidden unless this build is explicitly a demo/test one (VITE_ENABLE_DEMO_TOOLS=true).
+const DEMO_TOOLS_ENABLED = import.meta.env.VITE_ENABLE_DEMO_TOOLS === "true";
+
 function AssessmentView({ questions, modules, responses, setResponses, moduleIdx, setModuleIdx }) {
   const module = modules[moduleIdx];
   const qs = useMemo(() => questions.filter((q) => q.module === module), [questions, module]);
@@ -788,7 +792,9 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
             })}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 20 }}>
-            <button onClick={randomFillAll} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, padding: "9px 0", borderRadius: 9, cursor: "pointer", background: BRAND.ink, color: "#fff", border: "none" }}><Shuffle size={13} /> Quick-fill all 165 (demo)</button>
+            {DEMO_TOOLS_ENABLED && (
+              <button onClick={randomFillAll} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, padding: "9px 0", borderRadius: 9, cursor: "pointer", background: BRAND.ink, color: "#fff", border: "none" }}><Shuffle size={13} /> Quick-fill all 165 (demo)</button>
+            )}
             <button onClick={resetAll} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, padding: "9px 0", borderRadius: 9, cursor: "pointer", background: "#fff", color: "#8a8480", border: `1px solid ${BRAND.line}` }}><RotateCcw size={13} /> Reset scorecard</button>
           </div>
         </div>
@@ -800,7 +806,9 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
             <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 700, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.04em" }}>Module {moduleIdx + 1} of {modules.length}</div>
             <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginTop: 2 }}>{module}</div>
           </div>
-          <button onClick={randomFillModule} style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, padding: "8px 13px", borderRadius: 9, cursor: "pointer", background: "#fff", color: BRAND.ink, border: `1px solid ${BRAND.line}` }}><Shuffle size={12} /> Random-fill this module</button>
+          {DEMO_TOOLS_ENABLED && (
+            <button onClick={randomFillModule} style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, padding: "8px 13px", borderRadius: 9, cursor: "pointer", background: "#fff", color: BRAND.ink, border: `1px solid ${BRAND.line}` }}><Shuffle size={12} /> Random-fill this module</button>
+          )}
         </div>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>{moduleAnswered} of {qs.length} scored in this module</div>
 
@@ -908,7 +916,7 @@ function DashboardView({ questions, modules, responses, setView, user, viewingCl
         <div style={{ width: 56, height: 56, borderRadius: 16, background: BRAND.cream, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", border: `1px solid ${BRAND.line}` }}><LayoutDashboard size={24} color={BRAND.coral} /></div>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 22, color: BRAND.ink }}>No scorecard yet</div>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14, color: "#9B958F", marginTop: 8, lineHeight: 1.6 }}>
-          {isAdminViewing ? `${viewingClient.name} hasn't scored any questions yet.` : `Score at least one question in the Audit to see this populate — or use "Quick-fill" for a full demo run.`}
+          {isAdminViewing ? `${viewingClient.name} hasn't scored any questions yet.` : `Score at least one question in the Audit to see this populate.`}
         </div>
         {!isAdminViewing && <button onClick={() => setView("assess")} style={{ marginTop: 24, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 9, padding: "12px 20px", cursor: "pointer" }}>Go to Audit</button>}
       </div>
