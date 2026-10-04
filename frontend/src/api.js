@@ -177,6 +177,27 @@ export const api = {
   getIndexEntryDashboard: (id) => indexRequest(`/index/entries/${id}/dashboard`),
   getIndexCampaignReport: (campaignId) => indexRequest(`/index/campaigns/${campaignId}/report`),
   indexExportUrl: (type, campaignId) => `${API_BASE}/api/index/export/${type}?campaignId=${campaignId}`,
+  // O22: the export routes require a login token, which a plain <a href> link can't send
+  // (it opened "Not logged in"). Fetch with R-Index's own token, then save the file.
+  downloadIndexExport: async (type, campaignId) => {
+    const token = getIndexToken();
+    const res = await fetch(`${API_BASE}/api/index/export/${type}?campaignId=${campaignId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      let message = `Export failed (${res.status})`;
+      try { message = (await res.json()).error || message; } catch {}
+      throw new Error(message);
+    }
+    const blob = await res.blob();
+    const match = (res.headers.get("Content-Disposition") || "").match(/filename="(.+)"/);
+    const filename = match ? match[1] : `rindex-campaign-${campaignId}.${type === "excel" ? "xlsx" : "pdf"}`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  },
 
   // ---- R-Index admin (campaigns + entries) -------------------------
   // These use indexRequest() (the R-Index-isolated token), NOT request()

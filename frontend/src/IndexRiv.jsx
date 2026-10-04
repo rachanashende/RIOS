@@ -1022,6 +1022,7 @@ function AdminEntriesView({ campaignId, onBack }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [exporting, setExporting] = useState(null);
   const [form, setForm] = useState({ respondentName: "", respondentEmail: "", company: "" });
 
   function load() {
@@ -1057,6 +1058,18 @@ function AdminEntriesView({ campaignId, onBack }) {
     }
   }
 
+  async function downloadReport(type) {
+    setExporting(type);
+    setError(null);
+    try {
+      await api.downloadIndexExport(type, campaignId);
+    } catch (e) {
+      setError(e.message || "Export failed — please try again.");
+    } finally {
+      setExporting(null);
+    }
+  }
+
   async function removeEntry(id) {
     try {
       await api.deleteIndexEntryAdmin(id);
@@ -1089,12 +1102,8 @@ function AdminEntriesView({ campaignId, onBack }) {
           )}
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <a href={api.indexExportUrl("excel", campaignId)} target="_blank" rel="noreferrer">
-            <GhostButton icon={FileSpreadsheet}>Excel</GhostButton>
-          </a>
-          <a href={api.indexExportUrl("pdf", campaignId)} target="_blank" rel="noreferrer">
-            <GhostButton icon={FileText}>PDF</GhostButton>
-          </a>
+          <GhostButton icon={FileSpreadsheet} onClick={() => downloadReport("excel")}>{exporting === "excel" ? "Preparing…" : "Excel"}</GhostButton>
+          <GhostButton icon={FileText} onClick={() => downloadReport("pdf")}>{exporting === "pdf" ? "Preparing…" : "PDF"}</GhostButton>
         </div>
       </div>
 
