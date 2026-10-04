@@ -576,7 +576,7 @@ function IdeasTeamPanel({ clients }) {
   const [selectedClientId, setSelectedClientId] = useState("");
   const [employees, setEmployees] = useState(null);
   const [jury, setJury] = useState(null);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "employee", company: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "junior_employee", company: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [savingSource, setSavingSource] = useState(false);
@@ -591,7 +591,7 @@ function IdeasTeamPanel({ clients }) {
 
   const refresh = useCallback(() => {
     api.getIdeasSettings().then((d) => { setSourceClient(d.sourceClient); setSelectedClientId(d.sourceClient?.id ? String(d.sourceClient.id) : ""); }).catch(() => {});
-    api.listIdeasUsers("employee").then((d) => setEmployees(d.users)).catch(() => setEmployees([]));
+    api.listIdeasUsers("junior_employee").then((d) => setEmployees(d.users)).catch(() => setEmployees([]));
     api.listIdeasUsers("jury").then((d) => setJury(d.users)).catch(() => setJury([]));
   }, []);
   useEffect(() => { refresh(); }, [refresh]);
@@ -726,7 +726,7 @@ function IdeasTeamPanel({ clients }) {
           <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 14 }}><Gavel size={15} /> New employee / jury login</div>
           <form onSubmit={createUser}>
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-              <button type="button" onClick={() => setForm({ ...form, role: "employee" })} style={{ flex: 1, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 12.5, padding: "9px 0", borderRadius: 8, cursor: "pointer", border: `1px solid ${BRAND.line}`, background: form.role === "employee" ? BRAND.ink : "#fff", color: form.role === "employee" ? "#fff" : BRAND.ink }}>Employee</button>
+              <button type="button" onClick={() => setForm({ ...form, role: "junior_employee" })} style={{ flex: 1, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 12.5, padding: "9px 0", borderRadius: 8, cursor: "pointer", border: `1px solid ${BRAND.line}`, background: form.role === "junior_employee" ? BRAND.ink : "#fff", color: form.role === "junior_employee" ? "#fff" : BRAND.ink }}>Employee</button>
               <button type="button" onClick={() => setForm({ ...form, role: "jury" })} style={{ flex: 1, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 12.5, padding: "9px 0", borderRadius: 8, cursor: "pointer", border: `1px solid ${BRAND.line}`, background: form.role === "jury" ? BRAND.ink : "#fff", color: form.role === "jury" ? "#fff" : BRAND.ink }}>Jury</button>
             </div>
             <input placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required style={{ ...inputStyle, marginTop: 0 }} />
