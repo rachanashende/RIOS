@@ -38,11 +38,21 @@ export const CRITERIA = [
   { key: "gtmStrategy", label: "GTM Strategy", question: "Clarity and credibility of the go-to-market plan." },
 ];
 
+// SC1: one currency convention (US$) used everywhere. The old formatter mixed a "$" sign
+// with Indian units ("$5.3Cr" is really US$53 million), so figures could be misread ~80x.
 function fmtMoney(n) {
-  if (!n) return "$0";
-  if (n >= 1e7) return "$" + (n / 1e7).toFixed(1) + "Cr";
-  if (n >= 1e5) return "$" + (n / 1e5).toFixed(1) + "L";
-  return "$" + Math.round(n).toLocaleString();
+  if (!n) return "US$0";
+  const trim = (x) => String(Number(x.toFixed(1)));
+  if (n >= 1e9) return "US$" + trim(n / 1e9) + "B";
+  if (n >= 1e6) return "US$" + trim(n / 1e6) + "M";
+  if (n >= 1e3) return "US$" + Math.round(n / 1e3).toLocaleString() + "K";
+  return "US$" + Math.round(n).toLocaleString();
+}
+
+// A single estimate is shown once ("~US$52.5M"), not as a fake range ("X – X").
+function fmtMoneyRange(low, high) {
+  const a = fmtMoney(low), b = fmtMoney(high);
+  return a === b ? "~" + a : a + " – " + b;
 }
 
 function uid(prefix) {
@@ -210,7 +220,7 @@ function OpportunityCard({ opp, ideaCount, onOpen }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
         <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{opp.module} · {opp.submodule}</div>
         {opp.hasDollar ? (
-          <Pill tone="coral">{fmtMoney(opp.revLow + opp.costLow)} – {fmtMoney(opp.revHigh + opp.costHigh)}</Pill>
+          <Pill tone="coral">{fmtMoneyRange(opp.revLow + opp.costLow, opp.revHigh + opp.costHigh)}</Pill>
         ) : (
           <Pill tone="coral">AI weight ×{opp.weight}</Pill>
         )}

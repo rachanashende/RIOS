@@ -5,6 +5,17 @@ import pool from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { QUESTIONS, computeScores } from "../lib/scoring.js";
 
+// SC1: same US$ convention as the on-screen scorecard
+function fmtUSD(n) {
+  if (!n) return "US$0";
+  const trim = (x) => String(Number(x.toFixed(1)));
+  if (n >= 1e9) return "US$" + trim(n / 1e9) + "B";
+  if (n >= 1e6) return "US$" + trim(n / 1e6) + "M";
+  if (n >= 1e3) return "US$" + Math.round(n / 1e3).toLocaleString() + "K";
+  return "US$" + Math.round(n).toLocaleString();
+}
+
+
 const router = Router();
 
 // Admins may export any client's scorecard via ?userId=; everyone else gets their own.
@@ -155,7 +166,7 @@ router.get("/pdf", requireAuth, async (req, res, next) => {
   scores.opportunities.forEach((o, i) => {
     doc.fillColor(coral).text(`${i + 1}. `, { continued: true });
     doc.fillColor(ink).text(`${o.q}`, { width: 480 });
-    doc.fillColor(gray).text(`   ${o.module} · Maturity ${o.maturity}/4 · Est. benefit ~$${Math.round(o.midpoint).toLocaleString()}`);
+    doc.fillColor(gray).text(`   ${o.module} · Maturity ${o.maturity}/4 · Est. benefit ~${fmtUSD(o.midpoint)}`);
     if (showEvidence && o.evidence) doc.fillColor(gray).fontSize(8.5).text(`   Evidence: ${o.evidence}`, { italics: true });
     doc.fontSize(9.5);
     doc.moveDown(0.4);

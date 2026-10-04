@@ -10,7 +10,7 @@ import {
   Compass, AlertTriangle, Gavel,
 } from "lucide-react";
 import { api, getToken, getStoredUser, setSession, clearSession, setIdeasSession, setRiseSession, setIndexSession } from "./api.js";
-import { computeScores, tierFor, fmtMoney, computeCategoryScores } from "./scoring.js";
+import { computeScores, tierFor, fmtMoneyRange, computeCategoryScores } from "./scoring.js";
 import { BRAND } from "./brand.js";
 import IdeasRivApp from "./IdeasRiv.jsx";
 
@@ -1046,7 +1046,7 @@ function DashboardView({ questions, modules, responses, setView, user, viewingCl
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}><TrendingUp size={17} color={BRAND.coral} /><div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 17, color: BRAND.ink }}>Top 5 Innovation Opportunities</div></div>
           {scores.opportunities.length === 0 ? <EmptyCard text="No ranked opportunities yet — score more questions with revenue/cost data attached." /> : scores.opportunities.map((o, i) => (
-            <OpportunityCard key={o.id} rank={i + 1} q={o} tag={fmtMoney(o.revLow + o.costLow) + " – " + fmtMoney(o.revHigh + o.costHigh)} />
+            <OpportunityCard key={o.id} rank={i + 1} q={o} tag={fmtMoneyRange(o.revLow + o.costLow, o.revHigh + o.costHigh)} />
           ))}
         </div>
         <div>
