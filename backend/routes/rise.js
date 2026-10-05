@@ -128,8 +128,11 @@ router.get("/applications/:id", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const { rows } = await pool.query("SELECT * FROM rise_applications WHERE id = $1", [id]);
-    const application = rows[0];
-    if (!application) return res.status(404).json({ error: "Application not found." });
+    const found = rows[0];
+    if (!found) return res.status(404).json({ error: "Application not found." });
+    // ST10: founder contact details are for RIV admin only (see admin application
+    // screen). Jurors score on the merits, so email and phone are not sent to them.
+    const { email, phone, ...application } = found;
 
     const { rows: myScoreRows } = await pool.query(
       "SELECT * FROM rise_scores WHERE application_id = $1 AND jury_user_id = $2",

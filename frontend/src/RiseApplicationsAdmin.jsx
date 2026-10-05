@@ -68,7 +68,7 @@ function ApplicationDetail({ id, onBack }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0 24px", border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 18, background: "#fff", marginBottom: 20 }}>
         <Field label="Founder">{a.founder_name}</Field>
-        <Field label="Email">{a.email}</Field>
+        <Field label="Email">{a.email ? <a href={`mailto:${a.email}`} style={{ color: BRAND.blue }}>{a.email}</a> : null}</Field>
         <Field label="Phone">{a.phone}</Field>
         <Field label="Website">{a.website}</Field>
         <Field label="Sector">{a.sector}</Field>
