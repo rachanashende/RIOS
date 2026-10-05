@@ -496,7 +496,7 @@ function RiseTeamPanel() {
     setError(""); showOppNotice(""); setBusy(true);
     try {
       await api.createRiseOpportunity(oppForm);
-      showOppNotice(`Opportunity "${oppForm.title}" added. It stays closed to applicants until you click Open.`);
+      showOppNotice(`Opportunity "${oppForm.title}" added. It is Closed to applicants until you click \"Open this call\".`);
       setOppForm({ title: "", description: "" });
       refresh();
     } catch (err) { setError(err.message); } finally { setBusy(false); }
@@ -538,14 +538,17 @@ function RiseTeamPanel() {
                   <button onClick={() => setViewingOpp(o)} title="View applications" style={{ display: "block", textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, color: BRAND.ink }}>{o.title}</button>
                   <button onClick={() => setViewingOpp(o)} title="View applications" style={{ display: "block", textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, color: BRAND.coralDark, textDecoration: "underline" }}>{o.application_count} application{o.application_count !== 1 ? "s" : ""} — view</button>
                 </div>
-                {o.is_open ? (
-                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 700, color: "#1B7A5A", background: "#E7F5EF", padding: "4px 10px", borderRadius: 999 }}>Open</span>
-                    <button onClick={() => closeOpportunity(o.id)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "6px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff" }}>Close</button>
+                <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  {/* Status (a badge, not clickable) and action (a button with a verb) use different words. */}
+                  <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 999, color: o.is_open ? "#1B7A5A" : "#6B6561", background: o.is_open ? "#E7F5EF" : "#EFEAE4" }}>
+                    {o.is_open ? "Open for applications" : "Closed"}
                   </span>
-                ) : (
-                  <button onClick={() => openOpportunity(o.id)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "6px 10px", borderRadius: 8, border: "none", cursor: "pointer", background: BRAND.ink, color: "#fff" }}>Open</button>
-                )}
+                  {o.is_open ? (
+                    <button onClick={() => closeOpportunity(o.id)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "6px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink }}>Close this call</button>
+                  ) : (
+                    <button onClick={() => openOpportunity(o.id)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "6px 10px", borderRadius: 8, border: "none", cursor: "pointer", background: BRAND.ink, color: "#fff" }}>Open this call</button>
+                  )}
+                </span>
               </div>
             ))}
           </div>
