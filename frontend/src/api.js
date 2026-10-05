@@ -160,6 +160,7 @@ export const api = {
   // Called only from the main site's admin panel, so these correctly use
   // the main site's (admin) token, not Rise.RIV's own.
   listRiseOpportunities: () => request("/admin/rise/opportunities"),
+  updateRiseOpportunity: (id, payload) => request(`/admin/rise/opportunities/${id}`, { method: "PUT", body: payload }),
   createRiseOpportunity: (payload) => request("/admin/rise/opportunities", { method: "POST", body: payload }),
   openRiseOpportunity: (id) => request(`/admin/rise/opportunities/${id}/open`, { method: "PUT" }),
   closeRiseOpportunity: (id) => request(`/admin/rise/opportunities/${id}/close`, { method: "PUT" }),

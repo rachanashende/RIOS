@@ -61,6 +61,11 @@ export async function initRiseSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    -- ST6: optional public-page content, written by the RIV admin per call.
+    ALTER TABLE rise_opportunities ADD COLUMN IF NOT EXISTS benefits TEXT;
+    ALTER TABLE rise_opportunities ADD COLUMN IF NOT EXISTS eligibility TEXT;
+    ALTER TABLE rise_opportunities ADD COLUMN IF NOT EXISTS deadline DATE;
+
     -- One row per startup submission. Deliberately has NO user_id / login —
     -- per spec, applicants never get an account, so there is nothing for
     -- them to authenticate with and no way for them to list or query other
