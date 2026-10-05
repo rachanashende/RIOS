@@ -50,6 +50,8 @@ export async function initSchema() {
   await pool.query("ALTER TABLE responses ADD COLUMN IF NOT EXISTS not_applicable BOOLEAN NOT NULL DEFAULT false");
   // A7: the client submits the audit; once set, answers are locked until an admin reopens it
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS audit_submitted_at TIMESTAMPTZ");
+  // O17: logins created by an admin start with a temporary password the person must change on first login
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false");
   // O15: single-use, expiring password-reset links (only a hash of the token is stored)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS password_resets (

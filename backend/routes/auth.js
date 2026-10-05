@@ -22,7 +22,26 @@ router.post("/login", async (req, res, next) => {
     res.json({
       token,
       user: { id: user.id, email: user.email, name: user.name, role: user.role, company: user.company },
+      mustChangePassword: !!user.must_change_password,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ---- O17: signed-in user sets their own password (clears the temporary-password flag) ---- */
+router.post("/change-password", requireAuth, async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: "Current and new password are required." });
+    if (String(newPassword).length < 8) return res.status(400).json({ error: "New password must be at least 8 characters." });
+    if (newPassword === currentPassword) return res.status(400).json({ error: "Choose a password different from the temporary one." });
+    const { rows } = await pool.query("SELECT id, password_hash FROM users WHERE id = $1", [req.user.id]);
+    if (!rows[0] || !bcrypt.compareSync(String(currentPassword), rows[0].password_hash)) {
+      return res.status(401).json({ error: "Current password is incorrect." });
+    }
+    await pool.query("UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2", [bcrypt.hashSync(String(newPassword), 10), req.user.id]);
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }
@@ -76,7 +95,7 @@ router.post("/reset", async (req, res, next) => {
     );
     if (!rows[0]) return res.status(400).json({ error: "This reset link is invalid or has expired. Please request a new one." });
 
-    await pool.query("UPDATE users SET password_hash = $1 WHERE id = $2", [bcrypt.hashSync(String(password), 10), rows[0].user_id]);
+    await pool.query("UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2", [bcrypt.hashSync(String(password), 10), rows[0].user_id]);
     await pool.query("UPDATE password_resets SET used_at = now() WHERE user_id = $1 AND used_at IS NULL", [rows[0].user_id]);
     res.json({ ok: true });
   } catch (err) {

@@ -79,6 +79,7 @@ router.post("/users", async (req, res, next) => {
     if (!email || !password || !name || !["junior_employee", "jury"].includes(role)) {
       return res.status(400).json({ error: "Name, email, temporary password, and role ('junior_employee' or 'jury') are required." });
     }
+    if (String(password).length < 8) return res.status(400).json({ error: "The temporary password must be at least 8 characters." });
     // I1: every employee/jury login belongs to one client
     if (!clientId) return res.status(400).json({ error: "Choose which client this person belongs to." });
     const { rows: clientRows } = await pool.query("SELECT id, name, company FROM users WHERE id = $1 AND role = 'client'", [clientId]);
@@ -90,7 +91,7 @@ router.post("/users", async (req, res, next) => {
 
     const password_hash = bcrypt.hashSync(password, 10);
     const { rows } = await pool.query(
-      "INSERT INTO users (email, password_hash, name, role, company, expertise, client_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+      "INSERT INTO users (email, password_hash, name, role, company, expertise, client_id, must_change_password) VALUES ($1, $2, $3, $4, $5, $6, $7, true) RETURNING id",
       [normalizedEmail, password_hash, name, role, (company || "").trim() || clientRows[0].company || null, (expertise || "").trim() || null, clientRows[0].id]
     );
 

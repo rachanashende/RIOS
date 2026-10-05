@@ -161,6 +161,7 @@ router.post("/jury", async (req, res, next) => {
     if (!email || !password || !name) {
       return res.status(400).json({ error: "Name, email, and a temporary password are required." });
     }
+    if (String(password).length < 8) return res.status(400).json({ error: "The temporary password must be at least 8 characters." });
     const normalizedEmail = String(email).toLowerCase().trim();
 
     const { rows: existing } = await pool.query("SELECT id FROM users WHERE email = $1", [normalizedEmail]);
@@ -168,7 +169,7 @@ router.post("/jury", async (req, res, next) => {
 
     const password_hash = bcrypt.hashSync(password, 10);
     const { rows } = await pool.query(
-      "INSERT INTO users (email, password_hash, name, role, company) VALUES ($1,$2,$3,'rise_jury',$4) RETURNING id",
+      "INSERT INTO users (email, password_hash, name, role, company, must_change_password) VALUES ($1,$2,$3,'rise_jury',$4,true) RETURNING id",
       [normalizedEmail, password_hash, String(name).trim(), company || null]
     );
     res.status(201).json({ id: rows[0].id, email: normalizedEmail, name, role: "rise_jury", company: company || null });

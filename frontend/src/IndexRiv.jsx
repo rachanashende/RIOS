@@ -5,7 +5,7 @@ import {
   FileSpreadsheet, FileText, TrendingUp, Star,
 } from "lucide-react";
 import {
-  api, getStoredIndexUser, setIndexSession, clearIndexSession, clearAllSessions,
+  api, divertIfTemporaryPassword, getStoredIndexUser, setIndexSession, clearIndexSession, clearAllSessions,
 } from "./api.js";
 import { BRAND } from "./brand.js";
 
@@ -482,6 +482,7 @@ function LoginView({ onAuthed, setView }) {
       if (user.role !== "index_respondent" && user.role !== "admin") {
         throw new Error("This login isn't set up for R-Index.");
       }
+      if (divertIfTemporaryPassword(token, user)) return;
       onAuthed(token, user);
     } catch (e) {
       setError(e.message || "Couldn't log in.");
