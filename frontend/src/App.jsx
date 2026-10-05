@@ -423,6 +423,18 @@ function AdminView({ setView, setSelectedClient }) {
     refresh();
   }
   function viewClient(c) { setSelectedClient(c); setView("dashboard"); }
+  // A9: add another login that shares this retailer's audit
+  const [addingTo, setAddingTo] = useState(null);
+  const [memberForm, setMemberForm] = useState({ name: "", email: "", password: "" });
+  async function addMember(e, c) {
+    e.preventDefault();
+    setError(""); showNotice(""); setBusy(true);
+    try {
+      await api.createClient({ ...memberForm, ownerId: c.id });
+      showNotice(`Added a login for ${memberForm.name} on ${c.company || c.name}. They share the same audit.`);
+      setMemberForm({ name: "", email: "", password: "" }); setAddingTo(null); refresh();
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
   async function reopenClient(c) {
     if (!confirm(`Reopen ${c.company || c.name}'s audit? They will be able to edit their answers again and will need to resubmit.`)) return;
     try { await api.reopenAudit(c.id); refresh(); } catch (err) { setError(err.message); }
@@ -449,10 +461,24 @@ function AdminView({ setView, setSelectedClient }) {
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: BRAND.coralDark, marginTop: 4, fontWeight: 600 }}>{c.answered} / 165 scored{c.audit_submitted_at ? <span style={{ marginLeft: 8, color: "#2E9E6B" }}>· Submitted {fmtDateTime(c.audit_submitted_at)}</span> : <span style={{ marginLeft: 8, color: "#9B958F", fontWeight: 500 }}>· In progress</span>}</div>
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={() => setAddingTo(addingTo === c.id ? null : c.id)} title="Add another login that shares this retailer's audit" style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "8px 12px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink }}>Add team login</button>
                     {c.audit_submitted_at && <button onClick={() => reopenClient(c)} title="Unlock this audit so the client can edit it again" style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "8px 12px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink }}>Reopen audit</button>}
                     <button onClick={() => viewClient(c)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "8px 12px", borderRadius: 8, border: "none", cursor: "pointer", background: BRAND.ink, color: "#fff" }}>View scorecard</button>
                     <button onClick={() => removeClient(c.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "8px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={14} /></button>
                   </div>
+                  {(c.members || []).length > 0 && (
+                    <div style={{ flexBasis: "100%", fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#7A746F" }}>
+                      Also signed in as: {c.members.map((m) => `${m.name} (${m.email})`).join(", ")}. All logins share one audit.
+                    </div>
+                  )}
+                  {addingTo === c.id && (
+                    <form onSubmit={(e) => addMember(e, c)} style={{ flexBasis: "100%", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <input placeholder="Name" value={memberForm.name} onChange={(e) => setMemberForm({ ...memberForm, name: e.target.value })} required style={{ ...inputStyle, marginTop: 0, flex: 1, minWidth: 140 }} />
+                      <input placeholder="Email" type="email" value={memberForm.email} onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })} required style={{ ...inputStyle, marginTop: 0, flex: 1, minWidth: 180 }} />
+                      <input placeholder="Temporary password" value={memberForm.password} onChange={(e) => setMemberForm({ ...memberForm, password: e.target.value })} required style={{ ...inputStyle, marginTop: 0, flex: 1, minWidth: 140 }} />
+                      <button type="submit" disabled={busy} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "8px 14px", borderRadius: 8, border: "none", cursor: "pointer", background: BRAND.coral, color: "#fff" }}>Add login</button>
+                    </form>
+                  )}
                 </div>
               ))}
             </div>

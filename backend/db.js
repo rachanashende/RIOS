@@ -50,6 +50,8 @@ export async function initSchema() {
   await pool.query("ALTER TABLE responses ADD COLUMN IF NOT EXISTS not_applicable BOOLEAN NOT NULL DEFAULT false");
   // A7: the client submits the audit; once set, answers are locked until an admin reopens it
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS audit_submitted_at TIMESTAMPTZ");
+  // A9: extra logins for the same retailer share the primary client's audit (audit_owner_id = that client)
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS audit_owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE");
 
   // ------------------------------------------------------------------
   // Ideas.RIV additions

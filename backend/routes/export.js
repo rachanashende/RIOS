@@ -36,6 +36,12 @@ async function resolveTargetUser(req) {
     );
     return rows[0] || null;
   }
+  // A9: extra logins for a retailer export the primary client's (shared) scorecard
+  const { rows } = await pool.query(
+    "SELECT o.id, o.email, o.name, o.company, o.role FROM users u JOIN users o ON o.id = COALESCE(u.audit_owner_id, u.id) WHERE u.id = $1",
+    [req.user.id]
+  );
+  if (rows[0]) return rows[0];
   return { id: req.user.id, email: req.user.email, name: req.user.name, company: req.user.company, role: req.user.role };
 }
 
