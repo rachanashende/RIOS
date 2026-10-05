@@ -989,8 +989,9 @@ function OpportunityCard({ rank, q, tag, muted }) {
         <div style={{ display: "flex", gap: 10 }}>
           <div style={{ width: 22, height: 22, borderRadius: "50%", background: muted ? "#EFEAE4" : BRAND.coral, color: muted ? BRAND.ink : "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 11, flexShrink: 0 }}>{rank}</div>
           <div>
-            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{q.module} · {q.submodule}</div>
-            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13.5, fontWeight: 500, color: BRAND.ink, marginTop: 3, lineHeight: 1.4 }}>{q.q}</div>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{q.module}</div>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 15, fontWeight: 600, color: BRAND.ink, marginTop: 3, lineHeight: 1.35 }}>{q.submodule}</div>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#7A746F", marginTop: 4, lineHeight: 1.45 }}>Audit question: {q.q}</div>
           </div>
         </div>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 700, color: muted ? "#8a8480" : BRAND.coralDark, background: muted ? "#EFEAE4" : "#FCEEE1", padding: "4px 9px", borderRadius: 999, whiteSpace: "nowrap", height: "fit-content" }}>{tag}</div>
