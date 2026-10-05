@@ -54,10 +54,11 @@ router.post("/apply", async (req, res, next) => {
       return res.status(400).json({ error: "Applications aren't open right now." });
     }
 
-    await pool.query(
+    const { rows: insertedRows } = await pool.query(
       `INSERT INTO rise_applications
          (opportunity_id, startup_name, founder_name, email, phone, website, sector, stage, pitch, extra)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING id, created_at`,
       [
         opportunityId,
         String(startupName).trim(),
@@ -72,7 +73,14 @@ router.post("/apply", async (req, res, next) => {
       ]
     );
 
-    res.status(201).json({ ok: true, message: "Thanks for filling your details. We will get back to you." });
+    // ST8: give the founder something to keep -- a reference number they can quote.
+    const appId = insertedRows[0].id;
+    res.status(201).json({
+      ok: true,
+      reference: `RISE-${String(appId).padStart(5, "0")}`,
+      submittedAt: insertedRows[0].created_at,
+      message: "Thanks for filling in your details. We will get back to you.",
+    });
   } catch (err) {
     next(err);
   }
