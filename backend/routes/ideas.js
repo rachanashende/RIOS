@@ -315,9 +315,20 @@ router.get("/leaderboard", requireRole("admin", "jury"), async (req, res, next) 
       JOIN idea_ratings r ON r.idea_id = i.id
       WHERE i.source_client_id = $1
       GROUP BY i.id, u.name
-      ORDER BY avg_score DESC
+      ORDER BY ROUND(AVG(r.score)::numeric, 1) DESC, COUNT(r.id) DESC, i.created_at ASC, i.id ASC
     `, [clientId]);
-    const ranked = rows.map(enrich).map((row, i) => ({ ...row, published: i < 3 }));
+    // Tie rule (I15): ideas are compared on the average as displayed (1 decimal).
+    // Equal averages share the same rank ("tied") and are all published together
+    // if that rank is in the top 3; within a tie the list is ordered by more jury
+    // ratings first, then earlier submission, so the order is stable and explainable.
+    const enriched = rows.map(enrich);
+    let rank = 0, prevScore = null;
+    const ranked = enriched.map((row, i) => {
+      const score = Math.round(Number(row.avg_score) * 10) / 10;
+      if (score !== prevScore) { rank = i + 1; prevScore = score; }
+      return { ...row, rank, published: rank <= 3 };
+    });
+    for (const row of ranked) row.tied = ranked.filter((o) => o.rank === row.rank).length > 1;
     res.json({ leaderboard: ranked });
   } catch (err) {
     next(err);
