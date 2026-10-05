@@ -427,7 +427,8 @@ function JuryDashboardView({ setView, setActiveApplicationId }) {
       <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink }}>Rate startups</div>
       {dashboard && (
         <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginTop: 4 }}>
-          You've scored {dashboard.scored} of {dashboard.total} applications.
+          You've scored {dashboard.scored} of {dashboard.total} applications{dashboard.closed ? " in open calls" : ""}.
+          {dashboard.closed ? ` ${dashboard.closed} in closed calls ${dashboard.closed === 1 ? "is" : "are"} listed below but not counted.` : ""}
         </div>
       )}
       <ErrorBanner text={error} />

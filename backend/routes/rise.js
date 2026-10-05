@@ -111,7 +111,7 @@ router.get("/applications", async (req, res, next) => {
        FROM rise_applications a
        LEFT JOIN rise_opportunities o ON o.id = a.opportunity_id
        LEFT JOIN rise_scores s ON s.application_id = a.id AND s.jury_user_id = $1
-       ORDER BY o.created_at DESC NULLS LAST, a.created_at DESC`,
+       ORDER BY (o.is_open IS NOT FALSE) DESC, o.created_at DESC NULLS LAST, a.opportunity_id, a.created_at DESC`,
       [req.user.id]
     );
     res.json({
@@ -185,12 +185,18 @@ router.post("/applications/:id/score", async (req, res, next) => {
 // GET /api/rise/dashboard — the logged-in juror's own progress summary.
 router.get("/dashboard", async (req, res, next) => {
   try {
-    const { rows: totalRows } = await pool.query("SELECT COUNT(*)::int AS total FROM rise_applications");
-    const { rows: scoredRows } = await pool.query(
-      "SELECT COUNT(*)::int AS scored FROM rise_scores WHERE jury_user_id = $1",
+    // O7: progress counts only applications to calls that are still open; closed calls are listed but not counted.
+    const { rows } = await pool.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE o.is_open IS NOT FALSE)::int AS total,
+         COUNT(*) FILTER (WHERE o.is_open IS NOT FALSE AND s.id IS NOT NULL)::int AS scored,
+         COUNT(*) FILTER (WHERE o.is_open = FALSE)::int AS closed
+       FROM rise_applications a
+       LEFT JOIN rise_opportunities o ON o.id = a.opportunity_id
+       LEFT JOIN rise_scores s ON s.application_id = a.id AND s.jury_user_id = $1`,
       [req.user.id]
     );
-    res.json({ total: totalRows[0].total, scored: scoredRows[0].scored });
+    res.json({ total: rows[0].total, scored: rows[0].scored, closed: rows[0].closed });
   } catch (err) {
     next(err);
   }
