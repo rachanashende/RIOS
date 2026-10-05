@@ -72,10 +72,25 @@ router.post("/signup", async (req, res, next) => {
     // interview-capture sheet) before this person ever signed up, link
     // those existing rows to the new account now, so their history and
     // dashboard aren't orphaned from the account they just created.
-    await pool.query(
-      "UPDATE index_entries SET user_id = $1 WHERE user_id IS NULL AND lower(respondent_email) = $2",
-      [user.id, normalizedEmail]
-    );
+    // O11: link at most ONE keyed-in entry per campaign (the most recently updated). Linking every
+    // match could put two entries for the same person in one campaign on the same account, which
+    // the one-entry-per-respondent-per-campaign rule rejects and turned sign-up into a server error.
+    // Linking is best-effort: it must never make a sign-up that already created the account fail.
+    try {
+      await pool.query(
+        `UPDATE index_entries e SET user_id = $1
+         FROM (
+           SELECT DISTINCT ON (campaign_id) id FROM index_entries
+           WHERE user_id IS NULL AND lower(respondent_email) = $2
+           ORDER BY campaign_id, updated_at DESC, id DESC
+         ) pick
+         WHERE e.id = pick.id
+           AND NOT EXISTS (SELECT 1 FROM index_entries x WHERE x.campaign_id = e.campaign_id AND x.user_id = $1)`,
+        [user.id, normalizedEmail]
+      );
+    } catch (linkErr) {
+      console.error("Index sign-up: could not link keyed-in entries:", linkErr.message);
+    }
 
     const token = signToken(user);
     res.status(201).json({
