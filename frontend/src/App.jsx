@@ -827,7 +827,11 @@ function IdeasTeamPanel({ clients }) {
   async function assignClient(userId, clientId) {
     if (!clientId) return;
     setError("");
-    try { await api.assignIdeasUserClient(userId, Number(clientId)); refresh(); } catch (err) { setError(err.message); }
+    try {
+      const r = await api.assignIdeasUserClient(userId, Number(clientId));
+      if (r?.ideasLeftBehind) showNotice(`Moved. ${r.ideasLeftBehind} idea${r.ideasLeftBehind === 1 ? "" : "s"} this person submitted earlier stay with the previous client's Ideathon, with their ratings.`);
+      refresh();
+    } catch (err) { setError(err.message); }
   }
   async function removeUser(id) {
     if (!confirm("Remove this login?")) return;
