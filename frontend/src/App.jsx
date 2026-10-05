@@ -423,6 +423,10 @@ function AdminView({ setView, setSelectedClient }) {
     refresh();
   }
   function viewClient(c) { setSelectedClient(c); setView("dashboard"); }
+  async function reopenClient(c) {
+    if (!confirm(`Reopen ${c.company || c.name}'s audit? They will be able to edit their answers again and will need to resubmit.`)) return;
+    try { await api.reopenAudit(c.id); refresh(); } catch (err) { setError(err.message); }
+  }
 
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto", padding: "40px 24px 90px" }}>
@@ -442,9 +446,10 @@ function AdminView({ setView, setSelectedClient }) {
                   <div>
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14.5, color: BRAND.ink }}>{c.company || c.name}</div>
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#9B958F", marginTop: 2 }}>{c.name} · {c.email}</div>
-                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: BRAND.coralDark, marginTop: 4, fontWeight: 600 }}>{c.answered} / 165 scored</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: BRAND.coralDark, marginTop: 4, fontWeight: 600 }}>{c.answered} / 165 scored{c.audit_submitted_at ? <span style={{ marginLeft: 8, color: "#2E9E6B" }}>· Submitted {fmtDateTime(c.audit_submitted_at)}</span> : <span style={{ marginLeft: 8, color: "#9B958F", fontWeight: 500 }}>· In progress</span>}</div>
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
+                    {c.audit_submitted_at && <button onClick={() => reopenClient(c)} title="Unlock this audit so the client can edit it again" style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "8px 12px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink }}>Reopen audit</button>}
                     <button onClick={() => viewClient(c)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "8px 12px", borderRadius: 8, border: "none", cursor: "pointer", background: BRAND.ink, color: "#fff" }}>View scorecard</button>
                     <button onClick={() => removeClient(c.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "8px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={14} /></button>
                   </div>
@@ -837,7 +842,8 @@ function SaveIndicator({ status, onRetry }) {
   return <span style={{ ...base, color: "#2E9E6B" }}>Saved ✓</span>;
 }
 
-function AssessmentView({ questions, modules, responses, setResponses, moduleIdx, setModuleIdx, saveStatus, onRetrySave }) {
+function AssessmentView({ questions, modules, responses, setResponses, moduleIdx, setModuleIdx, saveStatus, onRetrySave, submittedAt, onSubmit }) {
+  const locked = !!submittedAt;
   const module = modules[moduleIdx];
   const qs = useMemo(() => questions.filter((q) => q.module === module), [questions, module]);
   const totalAnswered = Object.values(responses).filter(isAnswered).length;
@@ -846,10 +852,10 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
   // via Previous/Next or clicking a module directly in the sidebar list.
   useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [moduleIdx]);
 
-  function setMaturity(id, val) { setResponses((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), maturity: val, na: false } })); }
+  function setMaturity(id, val) { if (locked) return; setResponses((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), maturity: val, na: false } })); }
   // A6: toggle "Not applicable" -- the question is then left out of the score
-  function toggleNA(id) { setResponses((prev) => { const cur = prev[id] || {}; return { ...prev, [id]: cur.na ? { ...cur, na: false } : { ...cur, maturity: null, na: true } }; }); }
-  function setEvidence(id, val) { setResponses((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), evidence: val } })); }
+  function toggleNA(id) { if (locked) return; setResponses((prev) => { const cur = prev[id] || {}; return { ...prev, [id]: cur.na ? { ...cur, na: false } : { ...cur, maturity: null, na: true } }; }); }
+  function setEvidence(id, val) { if (locked) return; setResponses((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), evidence: val } })); }
   function randomFillModule() {
     setResponses((prev) => { const next = { ...prev }; qs.forEach((q) => { next[q.id] = { ...(next[q.id] || {}), maturity: Math.floor(Math.random() * 5) }; }); return next; });
   }
@@ -900,7 +906,7 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
             {DEMO_TOOLS_ENABLED && (
               <button onClick={randomFillAll} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, padding: "9px 0", borderRadius: 9, cursor: "pointer", background: BRAND.ink, color: "#fff", border: "none" }}><Shuffle size={13} /> Quick-fill all 165 (demo)</button>
             )}
-            <button onClick={resetAll} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, padding: "9px 0", borderRadius: 9, cursor: "pointer", background: "#fff", color: "#8a8480", border: `1px solid ${BRAND.line}` }}><RotateCcw size={13} /> Reset scorecard</button>
+            {!locked && <button onClick={resetAll} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, padding: "9px 0", borderRadius: 9, cursor: "pointer", background: "#fff", color: "#8a8480", border: `1px solid ${BRAND.line}` }}><RotateCcw size={13} /> Reset scorecard</button>}
           </div>
         </div>
       </div>
@@ -917,10 +923,16 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
         </div>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
           <span>{moduleAnswered} of {qs.length} scored in this module</span>
+          {locked ? <span style={{ color: "#2E9E6B", fontWeight: 600 }}>Submitted</span> : null}
           <SaveIndicator status={saveStatus} onRetry={onRetrySave} />
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {locked && (
+          <div style={{ border: "1px solid #BFE3D0", background: "#EEF8F2", borderRadius: 12, padding: "12px 16px", marginBottom: 16, fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#1F6B49", lineHeight: 1.5 }}>
+            You submitted this audit on {fmtDateTime(submittedAt)}. Your answers are locked. Contact RIV if you need to change something.
+          </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, ...(locked ? { opacity: 0.85 } : {}) }}>
           {qs.map((q) => {
             const r = responses[q.id];
             return (
@@ -935,7 +947,7 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
                   {MATURITY_LABELS.map((ml) => {
                     const active = r && !r.na && r.maturity === ml.v;
                     return (
-                      <button key={ml.v} onClick={() => setMaturity(q.id, ml.v)} title={ml.desc} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "9px 4px", borderRadius: 9, cursor: "pointer", border: `1.5px solid ${active ? BRAND.coral : BRAND.line}`, background: active ? BRAND.coral : "#fff", transition: "all .12s" }}>
+                      <button key={ml.v} disabled={locked} onClick={() => setMaturity(q.id, ml.v)} title={ml.desc} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "9px 4px", borderRadius: 9, cursor: locked ? "default" : "pointer", border: `1.5px solid ${active ? BRAND.coral : BRAND.line}`, background: active ? BRAND.coral : "#fff", transition: "all .12s" }}>
                         <span style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 13, color: active ? "#fff" : BRAND.ink }}>{ml.v}</span>
                         <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 9.5, fontWeight: 600, color: active ? "#fff" : "#9B958F", textAlign: "center", lineHeight: 1.2 }}>{ml.label}</span>
                       </button>
@@ -943,10 +955,10 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
                   })}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
-                  <button onClick={() => toggleNA(q.id)} title="This doesn't apply to your business. The question is left out of your score instead of counting as 0." style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "6px 12px", borderRadius: 8, cursor: "pointer", border: `1.5px solid ${r && r.na ? BRAND.ink : BRAND.line}`, background: r && r.na ? BRAND.ink : "#fff", color: r && r.na ? "#fff" : "#7A746F" }}>{r && r.na ? "✓ Not applicable" : "Not applicable"}</button>
+                  <button disabled={locked} onClick={() => toggleNA(q.id)} title="This doesn't apply to your business. The question is left out of your score instead of counting as 0." style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "6px 12px", borderRadius: 8, cursor: "pointer", border: `1.5px solid ${r && r.na ? BRAND.ink : BRAND.line}`, background: r && r.na ? BRAND.ink : "#fff", color: r && r.na ? "#fff" : "#7A746F" }}>{r && r.na ? "✓ Not applicable" : "Not applicable"}</button>
                   {r && r.na && <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>Left out of your score. A short reason below helps RIV review it.</span>}
                 </div>
-                <input value={(r && r.evidence) || ""} onChange={(e) => setEvidence(q.id, e.target.value)} placeholder="Evidence / source note (kept with your scorecard)" style={{ width: "100%", marginTop: 12, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: "9px 11px", boxSizing: "border-box", background: BRAND.cream, color: BRAND.ink }} />
+                <input readOnly={locked} value={(r && r.evidence) || ""} onChange={(e) => setEvidence(q.id, e.target.value)} placeholder="Evidence / source note (kept with your scorecard)" style={{ width: "100%", marginTop: 12, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: "9px 11px", boxSizing: "border-box", background: BRAND.cream, color: BRAND.ink }} />
               </div>
             );
           })}
@@ -960,6 +972,14 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
             <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F", alignSelf: "center" }}>Last module — head to My Scorecard when ready</div>
           )}
         </div>
+        {!locked && (
+          <div style={{ marginTop: 28, border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: 20, background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#7A746F", lineHeight: 1.5, maxWidth: 560 }}>
+              <strong style={{ color: BRAND.ink }}>Finished?</strong> Submit your audit to send it to RIV for review. Once submitted your answers are locked; RIV can reopen it if something needs to change.
+            </div>
+            <button onClick={onSubmit} style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 9, padding: "11px 20px", cursor: "pointer" }}>Submit audit</button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1252,12 +1272,12 @@ export default function RiosApp() {
 
   // Load the right responses set whenever identity/target changes
   useEffect(() => {
-    if (!user) { setResponses({}); return; }
+    if (!user) { setResponses({}); setSubmittedAt(null); return; }
     skipNextSave.current = true;
     if (user.role === "admin" && viewingClient) {
       api.getClientResponses(viewingClient.id).then((d) => setResponses(d.responses || {})).catch(() => setResponses({}));
     } else if (user.role === "client") {
-      api.getResponses().then((d) => setResponses(d.responses || {})).catch(() => setResponses({}));
+      api.getResponses().then((d) => { setResponses(d.responses || {}); setSubmittedAt(d.submittedAt || null); }).catch(() => setResponses({}));
     }
   }, [user, viewingClient]);
 
@@ -1266,8 +1286,20 @@ export default function RiosApp() {
   // can be sent immediately (flushPendingSave) when the client logs out or the page is being closed,
   // instead of being lost with the 0.7 s debounce timer.
   const pendingSave = useRef(null);
+  // A7: once the client has submitted, answers are locked and nothing more is saved
+  const [submittedAt, setSubmittedAt] = useState(null);
+  async function submitAudit() {
+    const n = Object.values(responses).filter(isAnswered).length;
+    const msg = `Submit your audit to RIV?\n\nYou have scored ${n} of ${questions.length} questions. After you submit, your answers are locked until RIV reopens the audit.`;
+    if (!confirm(msg)) return;
+    try {
+      await flushPendingSave();
+      const d = await api.submitAudit();
+      setSubmittedAt(d.submittedAt);
+    } catch (err) { alert(err.message || "Could not submit. Please try again."); }
+  }
   useEffect(() => {
-    if (!user || user.role !== "client") return;
+    if (!user || user.role !== "client" || submittedAt) return;
     if (skipNextSave.current) { skipNextSave.current = false; return; }
     if (saveTimer.current) clearTimeout(saveTimer.current);
     pendingSave.current = responses;
@@ -1286,7 +1318,7 @@ export default function RiosApp() {
         });
     }, 700);
     return () => clearTimeout(saveTimer.current);
-  }, [responses, user, retryTick]);
+  }, [responses, user, retryTick, submittedAt]);
 
   // Send any unsaved answers right now. `keepalive` lets the request finish even while the page closes.
   const flushPendingSave = useCallback((keepalive) => {
@@ -1417,7 +1449,7 @@ export default function RiosApp() {
       {view === "rise-riv" && <ErrorBoundary><RiseRivApp /></ErrorBoundary>}
       {view === "r-index" && <ErrorBoundary><IndexRivApp /></ErrorBoundary>}
       {view === "assess" && user?.role === "client" && ready && (
-        <AssessmentView questions={questions} modules={modules} responses={responses} setResponses={setResponses} moduleIdx={moduleIdx} setModuleIdx={setModuleIdx} saveStatus={saveStatus} onRetrySave={() => setRetryTick((n) => n + 1)} />
+        <AssessmentView questions={questions} modules={modules} responses={responses} setResponses={setResponses} moduleIdx={moduleIdx} setModuleIdx={setModuleIdx} saveStatus={saveStatus} onRetrySave={() => setRetryTick((n) => n + 1)} submittedAt={submittedAt} onSubmit={submitAudit} />
       )}
       {view === "admin" && user?.role === "admin" && <AdminView setView={goToView} setSelectedClient={setViewingClient} />}
       {view === "dashboard" && user && ready && (

@@ -10,7 +10,7 @@ router.use(requireAuth, requireAdmin);
 router.get("/clients", async (req, res, next) => {
   try {
     const { rows: clients } = await pool.query(
-      "SELECT id, email, name, company, created_at FROM users WHERE role = 'client' ORDER BY created_at DESC"
+      "SELECT id, email, name, company, created_at, audit_submitted_at FROM users WHERE role = 'client' ORDER BY created_at DESC"
     );
     const withProgress = await Promise.all(
       clients.map(async (c) => {
@@ -22,6 +22,20 @@ router.get("/clients", async (req, res, next) => {
       })
     );
     res.json({ clients: withProgress });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// A7: reopen a submitted audit so the client can edit it again
+router.post("/clients/:id/reopen", async (req, res, next) => {
+  try {
+    const r = await pool.query(
+      "UPDATE users SET audit_submitted_at = NULL WHERE id = $1 AND role = 'client' RETURNING id",
+      [req.params.id]
+    );
+    if (!r.rowCount) return res.status(404).json({ error: "Client not found." });
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }
