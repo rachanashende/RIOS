@@ -36,7 +36,7 @@ export function computeScores(questions, modules, responses) {
   const moduleScores = modules.map((m) => {
     const d = perModule[m];
     const score = d.max > 0 ? (d.achieved / d.max) * 100 : 0;
-    return { module: m, score, tier: tierFor(score), answered: d.answered, total: d.total };
+    return { module: m, score, tier: tierFor(score), answered: d.answered, total: d.total, achieved: d.achieved, max: d.max };
   });
 
   const overallScore = maxAll > 0 ? (achievedAll / maxAll) * 100 : 0;
@@ -94,14 +94,18 @@ export const CATEGORY_GROUPS = [
   },
 ];
 
-/** Simple unweighted average of member module scores — a presentational
- * rollup for an exec-level glance, not a new official scoring formula. */
+/** SC5: a pillar's score uses the SAME formula as the overall score -- achieved points over
+ * maximum points across all of its questions (each weighted) -- so the pillars always
+ * reconcile with the overall figure. (It used to be a plain average of module scores, which
+ * ignored question weights and gave numbers that did not add up to the overall score.) */
 export function computeCategoryScores(moduleScores) {
   const byModule = Object.fromEntries(moduleScores.map((m) => [m.module, m]));
   return CATEGORY_GROUPS.map((cat) => {
     const members = cat.modules.map((m) => byModule[m]).filter(Boolean);
-    const score = members.length ? members.reduce((s, m) => s + m.score, 0) / members.length : 0;
-    return { name: cat.name, score, tier: tierFor(score), moduleCount: members.length };
+    const achieved = members.reduce((s, m) => s + (m.achieved || 0), 0);
+    const max = members.reduce((s, m) => s + (m.max || 0), 0);
+    const score = max > 0 ? (achieved / max) * 100 : 0;
+    return { name: cat.name, score, tier: tierFor(score), moduleCount: members.length, achieved, max };
   });
 }
 
