@@ -47,6 +47,12 @@ const OUTER_VIEW_TO_PATH = {
   "ideas-riv": "/opportunities", "rise-riv": "/rate-startup", "r-index": "/rindex",
 };
 function pathToOuterView(pathname) {
+  // O15: links from the reset-password email / "Forgot password?" open the matching screen
+  if (typeof window !== "undefined") {
+    const action = new URLSearchParams(window.location.search).get("action");
+    if (action === "reset-password") return "reset";
+    if (action === "forgot-password") return "forgot";
+  }
   const path = pathname.replace(/\/+$/, "") || "/";
   return OUTER_PATH_TO_VIEW[path] || "home";
 }
@@ -315,7 +321,7 @@ function LoginView({ onLogin, setView }) {
     <div style={{ maxWidth: 420, margin: "70px auto", padding: "0 24px" }}>
       <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 32, background: "#fff" }}>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 22, color: BRAND.ink, marginBottom: 4 }}>Log in</div>
-        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>New client? <a onClick={() => setView?.("signup")} style={{ color: BRAND.coral, cursor: "pointer", fontWeight: 600 }}>Sign up</a> instead — employee and jury accounts are issued by an RIV admin.</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}><a onClick={() => setView?.("forgot")} style={{ color: BRAND.coral, cursor: "pointer", fontWeight: 600 }}>Forgot password?</a> · New client? <a onClick={() => setView?.("signup")} style={{ color: BRAND.coral, cursor: "pointer", fontWeight: 600 }}>Sign up</a> instead — employee and jury accounts are issued by an RIV admin.</div>
         <form onSubmit={submit}>
           <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink }}>Email</label>
           <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required autoFocus style={inputStyle} />
@@ -328,6 +334,69 @@ function LoginView({ onLogin, setView }) {
             border: "none", borderRadius: 9, padding: "12px 0", cursor: loading ? "default" : "pointer", opacity: loading ? 0.7 : 1,
           }}>{loading && <Loader2 size={14} className="rios-spin" />} Log in</button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- O15: Forgot / reset password ---------------- */
+function ForgotResetView({ mode, setView }) {
+  const token = new URLSearchParams(window.location.search).get("token") || "";
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+  function toLogin() { window.history.pushState(null, "", "/"); setView("login"); }
+  async function submit(e) {
+    e.preventDefault(); setError(""); setMsg("");
+    if (mode === "reset") {
+      if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+      if (password !== confirm) { setError("The two passwords don't match."); return; }
+    }
+    setLoading(true);
+    try {
+      if (mode === "forgot") { const d = await api.forgotPassword(email); setMsg(d.message); setDone(true); }
+      else { await api.resetPassword(token, password); setDone(true); }
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
+  }
+  const label = { fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink };
+  return (
+    <div style={{ maxWidth: 420, margin: "0 auto", padding: "60px 24px" }}>
+      <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 32, background: "#fff" }}>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 22, color: BRAND.ink, marginBottom: 6 }}>{mode === "forgot" ? "Forgot your password?" : "Choose a new password"}</div>
+        {done ? (
+          <>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13.5, color: "#1B7A5A", background: "#E7F5EF", borderRadius: 8, padding: "10px 12px", margin: "14px 0", lineHeight: 1.5 }}>
+              {mode === "forgot" ? msg : "Your password has been changed. You can log in with it now."}
+            </div>
+            <a onClick={toLogin} style={{ color: BRAND.coral, cursor: "pointer", fontWeight: 600, fontFamily: "'Poppins',sans-serif", fontSize: 13.5 }}>Back to log in</a>
+          </>
+        ) : (
+          <form onSubmit={submit}>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 20 }}>
+              {mode === "forgot" ? "Enter your email and we'll send you a link to set a new one." : "At least 8 characters."}
+            </div>
+            {mode === "forgot" ? (
+              <>
+                <label style={label}>Email</label>
+                <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required autoFocus style={inputStyle} />
+              </>
+            ) : (
+              <>
+                <label style={label}>New password</label>
+                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required autoFocus style={inputStyle} />
+                <label style={{ ...label, marginTop: 14, display: "block" }}>Confirm new password</label>
+                <input value={confirm} onChange={(e) => setConfirm(e.target.value)} type="password" required style={inputStyle} />
+              </>
+            )}
+            {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: BRAND.coralDark, marginTop: 12 }}>{error}</div>}
+            <button type="submit" disabled={loading} style={{ width: "100%", marginTop: 20, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 9, padding: "12px 0", cursor: loading ? "default" : "pointer", opacity: loading ? 0.7 : 1 }}>{mode === "forgot" ? "Send reset link" : "Set new password"}</button>
+            <div style={{ marginTop: 14, textAlign: "center" }}><a onClick={toLogin} style={{ color: "#9B958F", cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontSize: 12.5 }}>Back to log in</a></div>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -1533,6 +1602,7 @@ export default function RiosApp() {
       )}
       {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip /></>)}
       {view === "login" && <LoginView onLogin={handleLogin} setView={goToView} />}
+      {(view === "forgot" || view === "reset") && <ForgotResetView mode={view} setView={goToView} />}
       {view === "signup" && <SignupView onSignup={handleSignup} setView={goToView} />}
       {view === "ideas-riv" && <ErrorBoundary><IdeasRivApp /></ErrorBoundary>}
       {view === "rise-riv" && <ErrorBoundary><RiseRivApp /></ErrorBoundary>}

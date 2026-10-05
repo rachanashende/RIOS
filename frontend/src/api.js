@@ -114,6 +114,8 @@ function indexRequest(path, opts) { return requestWithToken(path, opts, getIndex
 
 export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
+  forgotPassword: (email) => request("/auth/forgot", { method: "POST", body: { email } }),
+  resetPassword: (token, password) => request("/auth/reset", { method: "POST", body: { token, password } }),
   signup: (payload) => request("/auth/signup", { method: "POST", body: payload }),
   me: () => request("/auth/me"),
 

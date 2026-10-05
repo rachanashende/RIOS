@@ -50,6 +50,17 @@ export async function initSchema() {
   await pool.query("ALTER TABLE responses ADD COLUMN IF NOT EXISTS not_applicable BOOLEAN NOT NULL DEFAULT false");
   // A7: the client submits the audit; once set, answers are locked until an admin reopens it
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS audit_submitted_at TIMESTAMPTZ");
+  // O15: single-use, expiring password-reset links (only a hash of the token is stored)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
   // A9: extra logins for the same retailer share the primary client's audit (audit_owner_id = that client)
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS audit_owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE");
 
