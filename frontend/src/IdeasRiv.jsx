@@ -225,7 +225,8 @@ function OpportunityCard({ opp, ideaCount, onOpen, mine }) {
           <Pill tone="coral">AI weight ×{opp.weight}</Pill>
         )}
       </div>
-      <div style={{ fontFamily: SERIF, fontStyle: "italic", fontSize: 14.5, color: BRAND.ink, lineHeight: 1.5 }}>&ldquo;{opp.q}&rdquo;</div>
+      <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 16, color: BRAND.ink, lineHeight: 1.35 }}>{opp.submodule}</div>
+      <div style={{ fontFamily: SERIF, fontStyle: "italic", fontSize: 13.5, color: "#7A746F", lineHeight: 1.5 }}>&ldquo;{opp.q}&rdquo;</div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4, paddingTop: 12, borderTop: `1px solid ${BRAND.line}` }}>
         <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F" }}>{mine ? `You've submitted ${ideaCount} idea${ideaCount !== 1 ? "s" : ""}` : `${ideaCount} idea${ideaCount !== 1 ? "s" : ""} submitted`}</div>
         <button onClick={onOpen} style={{ display: "flex", alignItems: "center", gap: 4, fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coralDark, background: "none", border: "none", cursor: "pointer" }}>
@@ -351,8 +352,9 @@ function SubmitIdeasView({ opp, ideas, onIdeasChanged, setView }) {
         <ChevronLeft size={14} /> All opportunities
       </button>
 
-      <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{opp.module} · {opp.submodule}</div>
-      <div style={{ fontFamily: SERIF, fontStyle: "italic", fontSize: 20, color: BRAND.ink, marginTop: 6, lineHeight: 1.45 }}>&ldquo;{opp.q}&rdquo;</div>
+      <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{opp.module}</div>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 24, color: BRAND.ink, marginTop: 4, lineHeight: 1.3 }}>{opp.submodule}</div>
+      <div style={{ fontFamily: SERIF, fontStyle: "italic", fontSize: 16, color: "#7A746F", marginTop: 6, lineHeight: 1.5 }}>&ldquo;{opp.q}&rdquo;</div>
 
       {justSubmitted && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 20, padding: "12px 16px", borderRadius: 12, background: "#E7F5EF", border: "1px solid #C7E8D8" }}>
