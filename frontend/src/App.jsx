@@ -973,13 +973,30 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
                   {MATURITY_LABELS.map((ml) => {
                     const active = r && !r.na && r.maturity === ml.v;
                     return (
-                      <button key={ml.v} disabled={locked} onClick={() => setMaturity(q.id, ml.v)} title={ml.desc} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "9px 4px", borderRadius: 9, cursor: locked ? "default" : "pointer", border: `1.5px solid ${active ? BRAND.coral : BRAND.line}`, background: active ? BRAND.coral : "#fff", transition: "all .12s" }}>
+                      <button key={ml.v} disabled={locked} onClick={() => setMaturity(q.id, ml.v)} title={(q.levels && q.levels[ml.v]) || ml.desc} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "9px 4px", borderRadius: 9, cursor: locked ? "default" : "pointer", border: `1.5px solid ${active ? BRAND.coral : BRAND.line}`, background: active ? BRAND.coral : "#fff", transition: "all .12s" }}>
                         <span style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 13, color: active ? "#fff" : BRAND.ink }}>{ml.v}</span>
                         <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 9.5, fontWeight: 600, color: active ? "#fff" : "#9B958F", textAlign: "center", lineHeight: 1.2 }}>{ml.label}</span>
                       </button>
                     );
                   })}
                 </div>
+                {q.levels && (
+                  <div style={{ marginTop: 10 }}>
+                    {r && !r.na && r.maturity != null && (
+                      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: BRAND.ink, background: "#FCEEE1", borderRadius: 8, padding: "8px 11px", lineHeight: 1.45 }}>
+                        <strong>{r.maturity} · {MATURITY_LABELS[r.maturity].label}:</strong> {q.levels[r.maturity]}
+                      </div>
+                    )}
+                    <details style={{ marginTop: 8 }}>
+                      <summary style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, color: "#7A746F", cursor: "pointer" }}>What does each score mean for this question?</summary>
+                      <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                        {MATURITY_LABELS.map((ml) => (
+                          <div key={ml.v} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#5B5550", lineHeight: 1.4 }}><strong style={{ color: BRAND.ink }}>{ml.v} · {ml.label}:</strong> {q.levels[ml.v]}</div>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
+                )}
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
                   <button disabled={locked} onClick={() => toggleNA(q.id)} title="This doesn't apply to your business. The question is left out of your score instead of counting as 0." style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "6px 12px", borderRadius: 8, cursor: "pointer", border: `1.5px solid ${r && r.na ? BRAND.ink : BRAND.line}`, background: r && r.na ? BRAND.ink : "#fff", color: r && r.na ? "#fff" : "#7A746F" }}>{r && r.na ? "✓ Not applicable" : "Not applicable"}</button>
                   {r && r.na && <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>Left out of your score. A short reason below helps RIV review it.</span>}
