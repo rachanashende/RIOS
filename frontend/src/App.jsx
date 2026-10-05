@@ -52,6 +52,7 @@ function pathToOuterView(pathname) {
     const action = new URLSearchParams(window.location.search).get("action");
     if (action === "reset-password") return "reset";
     if (action === "forgot-password") return "forgot";
+    if (action === "change-password") return "change-password";
   }
   const path = pathname.replace(/\/+$/, "") || "/";
   return OUTER_PATH_TO_VIEW[path] || "home";
@@ -402,6 +403,43 @@ function ForgotResetView({ mode, setView }) {
   );
 }
 
+/* ---------------- O17: set your own password (shown after a login with an admin-issued temporary password) ---------------- */
+function ChangePasswordView({ user, onDone, onLogout }) {
+  const [current, setCurrent] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  async function submit(e) {
+    e.preventDefault(); setError("");
+    if (password.length < 8) { setError("New password must be at least 8 characters."); return; }
+    if (password !== confirm) { setError("The two passwords don't match."); return; }
+    setLoading(true);
+    try { await api.changePassword(current, password); onDone(); }
+    catch (err) { setError(err.message); } finally { setLoading(false); }
+  }
+  const label = { fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: BRAND.ink };
+  return (
+    <div style={{ maxWidth: 420, margin: "0 auto", padding: "60px 24px" }}>
+      <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 32, background: "#fff" }}>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 22, color: BRAND.ink, marginBottom: 6 }}>Set your own password</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 20 }}>You signed in with a temporary password{user?.email ? ` (${user.email})` : ""}. Choose a new one (at least 8 characters) to continue.</div>
+        <form onSubmit={submit}>
+          <label style={label}>Temporary password</label>
+          <input value={current} onChange={(e) => setCurrent(e.target.value)} type="password" required autoFocus style={inputStyle} />
+          <label style={{ ...label, marginTop: 14, display: "block" }}>New password</label>
+          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required minLength={8} style={inputStyle} />
+          <label style={{ ...label, marginTop: 14, display: "block" }}>Confirm new password</label>
+          <input value={confirm} onChange={(e) => setConfirm(e.target.value)} type="password" required style={inputStyle} />
+          {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: BRAND.coralDark, marginTop: 12 }}>{error}</div>}
+          <button type="submit" disabled={loading} style={{ width: "100%", marginTop: 20, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 9, padding: "12px 0", cursor: loading ? "default" : "pointer", opacity: loading ? 0.7 : 1 }}>Save and continue</button>
+          <div style={{ marginTop: 14, textAlign: "center" }}><a onClick={onLogout} style={{ color: "#9B958F", cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontSize: 12.5 }}>Log out</a></div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Sign up (new clients only — employee/jury/admin stay admin-issued) ---------------- */
 function SignupView({ onSignup, setView }) {
   const [form, setForm] = useState({ name: "", email: "", company: "", password: "" });
@@ -550,7 +588,7 @@ function AdminView({ setView, setSelectedClient }) {
                     <form onSubmit={(e) => addMember(e, c)} style={{ flexBasis: "100%", display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <input placeholder="Name" value={memberForm.name} onChange={(e) => setMemberForm({ ...memberForm, name: e.target.value })} required style={{ ...inputStyle, marginTop: 0, flex: 1, minWidth: 140 }} />
                       <input placeholder="Email" type="email" value={memberForm.email} onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })} required style={{ ...inputStyle, marginTop: 0, flex: 1, minWidth: 180 }} />
-                      <input placeholder="Temporary password" value={memberForm.password} onChange={(e) => setMemberForm({ ...memberForm, password: e.target.value })} required style={{ ...inputStyle, marginTop: 0, flex: 1, minWidth: 140 }} />
+                      <input placeholder="Temporary password (min. 8 characters)" minLength={8} value={memberForm.password} onChange={(e) => setMemberForm({ ...memberForm, password: e.target.value })} required style={{ ...inputStyle, marginTop: 0, flex: 1, minWidth: 140 }} />
                       <button type="submit" disabled={busy} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "8px 14px", borderRadius: 8, border: "none", cursor: "pointer", background: BRAND.coral, color: "#fff" }}>Add login</button>
                     </form>
                   )}
@@ -566,7 +604,7 @@ function AdminView({ setView, setSelectedClient }) {
             <input placeholder="Contact name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required style={{ ...inputStyle, marginTop: 0 }} />
             <input placeholder="Company" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} style={{ ...inputStyle, marginTop: 10 }} />
             <input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
-            <input placeholder="Temporary password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
+            <input placeholder="Temporary password (min. 8 characters)" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: BRAND.coralDark, marginTop: 10 }}>{error}</div>}
             <Notice text={notice} />
             <button type="submit" disabled={busy} style={{ width: "100%", marginTop: 14, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>Create login</button>
@@ -721,7 +759,7 @@ function RiseTeamPanel() {
             <input placeholder="Name" value={juryForm.name} onChange={(e) => setJuryForm({ ...juryForm, name: e.target.value })} required style={{ ...inputStyle, marginTop: 0 }} />
             <input placeholder="Company / affiliation (optional)" value={juryForm.company} onChange={(e) => setJuryForm({ ...juryForm, company: e.target.value })} style={{ ...inputStyle, marginTop: 10 }} />
             <input placeholder="Email" type="email" value={juryForm.email} onChange={(e) => setJuryForm({ ...juryForm, email: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
-            <input placeholder="Temporary password" value={juryForm.password} onChange={(e) => setJuryForm({ ...juryForm, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
+            <input placeholder="Temporary password (min. 8 characters)" minLength={8} value={juryForm.password} onChange={(e) => setJuryForm({ ...juryForm, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: BRAND.coralDark, marginTop: 10 }}>{error}</div>}
             <Notice text={juryNotice} />
             <button type="submit" disabled={busy} style={{ width: "100%", marginTop: 14, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>Create login</button>
@@ -910,7 +948,7 @@ function IdeasTeamPanel({ clients }) {
             <input placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required style={{ ...inputStyle, marginTop: 0 }} />
             <input placeholder="Company (optional)" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} style={{ ...inputStyle, marginTop: 10 }} />
             <input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
-            <input placeholder="Temporary password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
+            <input placeholder="Temporary password (min. 8 characters)" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: BRAND.coralDark, marginTop: 10 }}>{error}</div>}
             <Notice text={notice} />
             <button type="submit" disabled={busy} style={{ width: "100%", marginTop: 14, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>Create login</button>
@@ -1504,10 +1542,20 @@ export default function RiosApp() {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
+  // O17: a still-temporary password keeps the person on the set-your-password screen wherever they navigate
+  useEffect(() => {
+    if (user && user.mustChangePassword && view !== "change-password") setView("change-password");
+  }, [user, view]);
+
   function handleLogin(token, loggedInUser) {
     clearAllSessions(); // O5: start clean so no leftover module session from an earlier login survives
     setSession(token, loggedInUser);
     setUser(loggedInUser);
+    if (loggedInUser.mustChangePassword) { // O17: temporary password -> must set their own first
+      window.history.pushState(null, "", "/?action=change-password");
+      setView("change-password");
+      return;
+    }
     let path, v;
     if (loggedInUser.role === "admin") {
       path = "/admin"; v = "admin";
@@ -1603,6 +1651,9 @@ export default function RiosApp() {
       {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip /></>)}
       {view === "login" && <LoginView onLogin={handleLogin} setView={goToView} />}
       {(view === "forgot" || view === "reset") && <ForgotResetView mode={view} setView={goToView} />}
+      {view === "change-password" && (user && user.mustChangePassword
+        ? <ChangePasswordView user={user} onLogout={handleLogout} onDone={() => handleLogin(getToken(), { ...user, mustChangePassword: false })} />
+        : <LoginView onLogin={handleLogin} setView={goToView} />)}
       {view === "signup" && <SignupView onSignup={handleSignup} setView={goToView} />}
       {view === "ideas-riv" && <ErrorBoundary><IdeasRivApp /></ErrorBoundary>}
       {view === "rise-riv" && <ErrorBoundary><RiseRivApp /></ErrorBoundary>}

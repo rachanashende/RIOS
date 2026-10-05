@@ -5,7 +5,7 @@ import {
   ChevronLeft, Loader2, Compass, Trophy,
   ClipboardList, Star, AlertCircle,
 } from "lucide-react";
-import { api, getStoredIdeasUser, setIdeasSession, clearIdeasSession, clearAllSessions } from "./api.js";
+import { api, divertIfTemporaryPassword, getStoredIdeasUser, setIdeasSession, clearIdeasSession, clearAllSessions } from "./api.js";
 import { BRAND } from "./brand.js";
 
 // Ideathon's own tabs, each with a real URL. IdeasRivMain owns this
@@ -972,6 +972,7 @@ function IdeasLoginView({ onAuthed }) {
       if (!["junior_employee", "jury", "admin"].includes(user.role)) {
         throw new Error("This login isn't set up for Ideathon.");
       }
+      if (divertIfTemporaryPassword(token, user)) return;
       onAuthed(token, user);
     } catch (e) {
       setError(e.message || "Couldn't log in.");

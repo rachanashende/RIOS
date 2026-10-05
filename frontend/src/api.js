@@ -112,8 +112,23 @@ function riseRequest(path, opts) { return requestWithToken(path, opts, getRiseTo
 // R-Index calls (index_respondent) attach R-Index's own token instead.
 function indexRequest(path, opts) { return requestWithToken(path, opts, getIndexToken()); }
 
+// O17: the login reply says whether the password is a temporary one; keep that on the user object.
+async function loginRequest(email, password) {
+  const d = await request("/auth/login", { method: "POST", body: { email, password } });
+  return { ...d, user: { ...d.user, mustChangePassword: !!d.mustChangePassword } };
+}
+// O17: a module login that finds a temporary password sends the person to the set-your-password screen.
+export function divertIfTemporaryPassword(token, user) {
+  if (!user || !user.mustChangePassword) return false;
+  clearAllSessions();
+  setSession(token, user);
+  window.location.assign("/?action=change-password");
+  return true;
+}
+
 export const api = {
-  login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
+  login: (email, password) => loginRequest(email, password),
+  changePassword: (currentPassword, newPassword) => request("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
   forgotPassword: (email) => request("/auth/forgot", { method: "POST", body: { email } }),
   resetPassword: (token, password) => request("/auth/reset", { method: "POST", body: { token, password } }),
   signup: (payload) => request("/auth/signup", { method: "POST", body: payload }),
@@ -134,7 +149,7 @@ export const api = {
   exportUrl: (type, userId) => `${API_BASE}/api/export/${type}${userId ? `?userId=${userId}` : ""}`,
 
   // ---- Ideas.RIV (employee/jury) — uses its own isolated token ------
-  ideasLogin: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }), // same endpoint, token just isn't attached to anything yet here
+  ideasLogin: (email, password) => loginRequest(email, password), // same endpoint, token just isn't attached to anything yet here
   getOpportunities: () => ideasRequest("/ideas/opportunities"),
   getIdeas: (questionId) => ideasRequest(`/ideas${questionId ? `?questionId=${questionId}` : ""}`),
   getIdeaRatings: (ideaId) => ideasRequest(`/ideas/${ideaId}/ratings`),
@@ -162,7 +177,7 @@ export const api = {
   getRiseOpportunity: () => request("/rise/opportunity"), // public, no token needed either way
   getRiseCriteria: () => request("/rise/criteria"),
   submitRiseApplication: (payload) => request("/rise/apply", { method: "POST", body: payload }),
-  riseJuryLogin: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }), // same endpoint, token just isn't attached to anything yet here
+  riseJuryLogin: (email, password) => loginRequest(email, password), // same endpoint, token just isn't attached to anything yet here
   getRiseApplications: () => riseRequest("/rise/applications"),
   getRiseApplication: (id) => riseRequest(`/rise/applications/${id}`),
   submitRiseScore: (id, payload) => riseRequest(`/rise/applications/${id}/score`, { method: "POST", body: payload }),
@@ -186,7 +201,7 @@ export const api = {
   getIndexCampaigns: () => request("/index/campaigns"), // public, no token needed either way
   getIndexQuestions: () => request("/index/questions"), // public
   indexSignup: (payload) => request("/index/signup", { method: "POST", body: payload }),
-  indexLogin: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }), // same shared endpoint, token just isn't attached to anything yet here
+  indexLogin: (email, password) => loginRequest(email, password), // same shared endpoint, token just isn't attached to anything yet here
   getMyIndexEntries: () => indexRequest("/index/my-entries"),
   submitIndexEntry: (payload) => indexRequest("/index/entries", { method: "POST", body: payload }),
   getIndexEntry: (id) => indexRequest(`/index/entries/${id}`),

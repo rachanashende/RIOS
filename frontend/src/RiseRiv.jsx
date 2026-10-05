@@ -4,7 +4,7 @@ import {
   Loader2, ClipboardList, Star, AlertCircle, Gavel, Building2, UserCircle2,
 } from "lucide-react";
 import {
-  api, getStoredRiseUser, setRiseSession, clearRiseSession, clearAllSessions,
+  api, divertIfTemporaryPassword, getStoredRiseUser, setRiseSession, clearRiseSession, clearAllSessions,
 } from "./api.js";
 import { BRAND } from "./brand.js";
 
@@ -376,6 +376,7 @@ function JuryLoginView({ onAuthed }) {
       if (user.role !== "rise_jury" && user.role !== "admin") {
         throw new Error("This login isn't set up for the Startup jury.");
       }
+      if (divertIfTemporaryPassword(token, user)) return;
       onAuthed(token, user);
     } catch (e) {
       setError(e.message || "Couldn't log in.");
