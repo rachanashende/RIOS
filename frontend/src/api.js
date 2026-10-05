@@ -143,6 +143,7 @@ export const api = {
 
   listClients: () => request("/admin/clients"),
   createClient: (payload) => request("/admin/clients", { method: "POST", body: payload }),
+  adminResetPassword: (id, password) => request(`/admin/users/${id}/password`, { method: "PUT", body: { password } }),
   deleteClient: (id) => request(`/admin/clients/${id}`, { method: "DELETE" }),
   getClientResponses: (id) => request(`/admin/clients/${id}/responses`),
 

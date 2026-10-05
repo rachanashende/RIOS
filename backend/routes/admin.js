@@ -2,9 +2,28 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import pool from "../db.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { clearLoginLock } from "./auth.js";
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
+
+// S1: set a new temporary password for any non-admin login (client, team login, employee, jury, Startup jury,
+// R-Index respondent). The person must choose their own at next log-in (O17), and any login lock is lifted.
+router.put("/users/:id/password", async (req, res, next) => {
+  try {
+    const { password } = req.body || {};
+    if (!password || String(password).length < 8) return res.status(400).json({ error: "The temporary password must be at least 8 characters." });
+    const { rows } = await pool.query(
+      "UPDATE users SET password_hash = $1, must_change_password = true WHERE id = $2 AND role <> 'admin' RETURNING email",
+      [bcrypt.hashSync(String(password), 10), req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: "That login wasn't found (admin accounts can't be reset here)." });
+    clearLoginLock(rows[0].email);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // List all client accounts with completion progress
 router.get("/clients", async (req, res, next) => {

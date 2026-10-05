@@ -7,7 +7,7 @@ import {
   ChevronRight, ChevronLeft, Shuffle, RotateCcw, ArrowRight, LogOut, UserPlus,
   CheckCircle2, Circle, Sparkles, TrendingUp, Users, Target, Trash2, Download,
   LayoutDashboard, Menu, X, Award, Eye, EyeOff, FileSpreadsheet, FileText, Loader2,
-  Compass, AlertTriangle, Gavel,
+  Compass, AlertTriangle, Gavel, KeyRound,
 } from "lucide-react";
 import { api, getToken, getStoredUser, setSession, setIdeasSession, setRiseSession, setIndexSession, clearAllSessions } from "./api.js";
 import { computeScores, tierFor, fmtMoneyRange, computeCategoryScores, isAnswered } from "./scoring.js";
@@ -509,6 +509,16 @@ function Notice({ text }) {
   return <div role="status" style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 500, color: "#1B7A5A", background: "#E7F5EF", border: "1px solid #BFE3D2", borderRadius: 8, padding: "9px 12px", marginTop: 10, lineHeight: 1.45 }}>{text}</div>;
 }
 
+/* S1: admin sets a new temporary password for a login (they must change it at next log-in) */
+async function adminResetPassword(u, showMsg, showErr) {
+  const pw = window.prompt(`New temporary password for ${u.name || u.email} (at least 8 characters).\nThey will be asked to choose their own when they next log in.`);
+  if (pw === null) return;
+  if (pw.length < 8) { showErr("The temporary password must be at least 8 characters."); return; }
+  try { await api.adminResetPassword(u.id, pw); showErr(""); showMsg(`Password reset for ${u.name || u.email}. Share the new temporary password with them.`); }
+  catch (err) { showErr(err.message); }
+}
+const resetBtnStyle = (pad) => ({ display: "flex", alignItems: "center", padding: pad, borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink });
+
 /* ---------------- Admin: Manage Clients ---------------- */
 function AdminView({ setView, setSelectedClient }) {
   const [clients, setClients] = useState(null);
@@ -577,11 +587,14 @@ function AdminView({ setView, setSelectedClient }) {
                     <button onClick={() => setAddingTo(addingTo === c.id ? null : c.id)} title="Add another login that shares this retailer's audit" style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "8px 12px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink }}>Add team login</button>
                     {c.audit_submitted_at && <button onClick={() => reopenClient(c)} title="Unlock this audit so the client can edit it again" style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "8px 12px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink }}>Reopen audit</button>}
                     <button onClick={() => viewClient(c)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "8px 12px", borderRadius: 8, border: "none", cursor: "pointer", background: BRAND.ink, color: "#fff" }}>View scorecard</button>
+                    <button onClick={() => adminResetPassword(c, showNotice, setError)} title="Reset password" style={resetBtnStyle("8px 10px")}><KeyRound size={14} /></button>
                     <button onClick={() => removeClient(c.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "8px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={14} /></button>
                   </div>
                   {(c.members || []).length > 0 && (
                     <div style={{ flexBasis: "100%", fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#7A746F" }}>
-                      Also signed in as: {c.members.map((m) => `${m.name} (${m.email})`).join(", ")}. All logins share one audit.
+                      Also signed in as: {c.members.map((m, i) => (
+                        <span key={m.id}>{i > 0 && ", "}{m.name} ({m.email}) <a onClick={() => adminResetPassword(m, showNotice, setError)} style={{ color: BRAND.coral, cursor: "pointer", fontWeight: 600 }}>reset password</a></span>
+                      ))}. All logins share one audit.
                     </div>
                   )}
                   {addingTo === c.id && (
@@ -746,6 +759,7 @@ function RiseTeamPanel() {
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email}{u.company ? ` · ${u.company}` : ""}</div>
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: BRAND.coralDark, marginTop: 2, fontWeight: 600 }}>{u.scored_count} scored</div>
                   </div>
+                  <button onClick={() => adminResetPassword(u, showJuryNotice, setError)} title="Reset password" style={resetBtnStyle("8px 10px")}><KeyRound size={14} /></button>
                   <button onClick={() => removeJury(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "8px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={14} /></button>
                 </div>
               ))}
@@ -891,6 +905,7 @@ function IdeasTeamPanel({ clients }) {
                       <button onClick={() => toggleEmployeeIdeas(u.id)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "7px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: expandedEmployeeId === u.id ? BRAND.ink : "#fff", color: expandedEmployeeId === u.id ? "#fff" : BRAND.ink }}>
                         {expandedEmployeeId === u.id ? "Hide" : "View submissions"}
                       </button>
+                      <button onClick={() => adminResetPassword(u, showNotice, setError)} title="Reset password" style={resetBtnStyle("7px 9px")}><KeyRound size={13} /></button>
                       <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
                     </div>
                   </div>
@@ -934,7 +949,8 @@ function IdeasTeamPanel({ clients }) {
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email} {u.company ? `· ${u.company}` : ""}</div>
                     <ClientTag user={u} clients={clients} onAssign={assignClient} />
                   </div>
-                  <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
+                  <button onClick={() => adminResetPassword(u, showNotice, setError)} title="Reset password" style={resetBtnStyle("7px 9px")}><KeyRound size={13} /></button>
+                      <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
                 </div>
               ))}
             </div>

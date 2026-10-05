@@ -7,6 +7,7 @@ import { sendPasswordResetEmail } from "../lib/email.js";
 
 const router = Router();
 
+
 /* ---- O23: login throttle ------------------------------------------------
    5 wrong passwords for one email within 15 minutes lock that email for 15 minutes; 30 wrong
    passwords from one IP within 15 minutes lock that IP. A correct login or a completed password
@@ -27,6 +28,8 @@ function lockedFor(key, max) {
 }
 function noteFail(key) { failsByKey.set(key, [...recentFails(key), Date.now()]); }
 setInterval(() => { for (const k of [...failsByKey.keys()]) recentFails(k); }, 10 * 60 * 1000).unref();
+
+export function clearLoginLock(email) { failsByKey.delete("e:" + String(email).toLowerCase().trim()); }
 
 router.post("/login", async (req, res, next) => {
   try {
