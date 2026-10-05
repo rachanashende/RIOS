@@ -478,7 +478,9 @@ function AdminView({ setView, setSelectedClient }) {
 function RiseTeamPanel() {
   const [opportunities, setOpportunities] = useState(null);
   const [jury, setJury] = useState(null);
-  const [oppForm, setOppForm] = useState({ title: "", description: "" });
+  const EMPTY_OPP = { title: "", description: "", benefits: "", eligibility: "", deadline: "" };
+  const [oppForm, setOppForm] = useState(EMPTY_OPP);
+  const [editingOppId, setEditingOppId] = useState(null); // ST6: editing the public-page content of an existing call
   const [viewingOpp, setViewingOpp] = useState(null); // O3/ST3: opportunity whose applications are open
   const [oppNotice, showOppNotice] = useNotice();
   const [juryNotice, showJuryNotice] = useNotice();
@@ -496,11 +498,22 @@ function RiseTeamPanel() {
     e.preventDefault();
     setError(""); showOppNotice(""); setBusy(true);
     try {
-      await api.createRiseOpportunity(oppForm);
-      showOppNotice(`Opportunity "${oppForm.title}" added. It is Closed to applicants until you click \"Open this call\".`);
-      setOppForm({ title: "", description: "" });
+      if (editingOppId) {
+        await api.updateRiseOpportunity(editingOppId, oppForm);
+        showOppNotice(`Opportunity "${oppForm.title}" updated. The public /startup page now shows the new text.`);
+        setEditingOppId(null);
+      } else {
+        await api.createRiseOpportunity(oppForm);
+        showOppNotice(`Opportunity "${oppForm.title}" added. It is Closed to applicants until you click \"Open this call\".`);
+      }
+      setOppForm(EMPTY_OPP);
       refresh();
     } catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
+  function startEditOpp(o) {
+    setEditingOppId(o.id);
+    setOppForm({ title: o.title || "", description: o.description || "", benefits: o.benefits || "", eligibility: o.eligibility || "", deadline: o.deadline || "" });
+    showOppNotice("");
   }
   async function openOpportunity(id) { await api.openRiseOpportunity(id); refresh(); }
   async function closeOpportunity(id) { await api.closeRiseOpportunity(id); refresh(); }
@@ -538,6 +551,7 @@ function RiseTeamPanel() {
                 <div>
                   <button onClick={() => setViewingOpp(o)} title="View applications" style={{ display: "block", textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, color: BRAND.ink }}>{o.title}</button>
                   <button onClick={() => setViewingOpp(o)} title="View applications" style={{ display: "block", textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, color: BRAND.coralDark, textDecoration: "underline" }}>{o.application_count} application{o.application_count !== 1 ? "s" : ""} — view</button>
+                  <button onClick={() => startEditOpp(o)} title="Edit the text shown on the public page" style={{ display: "block", textAlign: "left", background: "none", border: "none", padding: 0, marginTop: 2, cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, color: "#7A746F", textDecoration: "underline" }}>Edit public page text</button>
                 </div>
                 <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                   {/* Status (a badge, not clickable) and action (a button with a verb) use different words. */}
@@ -555,9 +569,17 @@ function RiseTeamPanel() {
           </div>
         )}
         <form onSubmit={createOpportunity} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {editingOppId && <div style={{ flexBasis: "100%", fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, color: BRAND.coralDark }}>Editing an existing call — the public /startup page shows this text.</div>}
           <input placeholder="Opportunity title" value={oppForm.title} onChange={(e) => setOppForm({ ...oppForm, title: e.target.value })} required style={{ ...inputStyle, marginTop: 0, flex: "1 1 200px" }} />
           <input placeholder="Description (optional)" value={oppForm.description} onChange={(e) => setOppForm({ ...oppForm, description: e.target.value })} style={{ ...inputStyle, marginTop: 0, flex: "2 1 260px" }} />
-          <button type="submit" disabled={busy} style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "0 16px", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>Add</button>
+          <textarea placeholder="What the programme offers (optional) — shown on the public page" value={oppForm.benefits} onChange={(e) => setOppForm({ ...oppForm, benefits: e.target.value })} rows={2} style={{ ...inputStyle, marginTop: 0, flex: "1 1 100%", resize: "vertical" }} />
+          <textarea placeholder="Who can apply / eligibility (optional)" value={oppForm.eligibility} onChange={(e) => setOppForm({ ...oppForm, eligibility: e.target.value })} rows={2} style={{ ...inputStyle, marginTop: 0, flex: "1 1 100%", resize: "vertical" }} />
+          <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#7A746F", display: "flex", alignItems: "center", gap: 8 }}>
+            Application deadline (optional)
+            <input type="date" value={oppForm.deadline} onChange={(e) => setOppForm({ ...oppForm, deadline: e.target.value })} style={{ ...inputStyle, marginTop: 0, width: "auto" }} />
+          </label>
+          <button type="submit" disabled={busy} style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>{editingOppId ? "Save changes" : "Add"}</button>
+          {editingOppId && <button type="button" onClick={() => { setEditingOppId(null); setOppForm(EMPTY_OPP); }} style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: "#fff", color: BRAND.ink, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: "8px 16px", cursor: "pointer" }}>Cancel</button>}
         </form>
         <Notice text={oppNotice} />
       </div>

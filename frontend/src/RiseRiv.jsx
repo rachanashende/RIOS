@@ -174,19 +174,48 @@ function RiseNavBar({ view, setView, session, onLogout }) {
    LANDING — public opportunity page
    ========================================================================= */
 function LandingView({ opportunity, loading, setView }) {
+  const [criteria, setCriteria] = useState([]);
+  useEffect(() => { api.getRiseCriteria().then((d) => setCriteria(d.criteria || [])).catch(() => {}); }, []);
   if (loading) return <Spinner label="Loading opportunity…" />;
+
+  const section = (title, children) => (
+    <div style={{ textAlign: "left", marginTop: 26 }}>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink, marginBottom: 8 }}>{title}</div>
+      {children}
+    </div>
+  );
+  const body = { fontFamily: FONT, fontSize: 14, color: "#5F5954", lineHeight: 1.7, whiteSpace: "pre-wrap" };
+
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto", padding: "56px 24px 100px", textAlign: "center" }}>
-      <div style={{ width: 54, height: 54, borderRadius: 16, background: "#FCEEE1", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px" }}>
-        <Rocket size={26} color={BRAND.coralDark} />
-      </div>
+    <div style={{ maxWidth: 720, margin: "0 auto", padding: "48px 24px 100px", textAlign: "center" }}>
+      <img src="/riv-logo-full.png" alt="Retail Innovation Ventures" style={{ height: 38, margin: "0 auto 26px", display: "block" }} />
       {opportunity ? (
         <>
           <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 27, color: BRAND.ink }}>{opportunity.title}</div>
-          {opportunity.description && (
-            <div style={{ fontFamily: FONT, fontSize: 14.5, color: "#7A746F", marginTop: 12, lineHeight: 1.65 }}>{opportunity.description}</div>
+          {opportunity.deadline && (
+            <div style={{ display: "inline-block", marginTop: 12, fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coralDark, background: "#FCEEE1", borderRadius: 999, padding: "5px 14px" }}>
+              Apply by {new Date(opportunity.deadline + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}
+            </div>
           )}
-          <PrimaryButton onClick={() => setView("apply")} icon={ArrowRight} style={{ margin: "28px auto 0" }}>
+          {opportunity.description && (
+            <div style={{ ...body, marginTop: 16, textAlign: "center" }}>{opportunity.description}</div>
+          )}
+          {opportunity.benefits && section("What the programme offers", <div style={body}>{opportunity.benefits}</div>)}
+          {opportunity.eligibility && section("Who can apply", <div style={body}>{opportunity.eligibility}</div>)}
+          {criteria.length > 0 && section("How applications are judged",
+            <>
+              <div style={{ ...body, marginBottom: 10 }}>A jury scores each shortlisted startup from 1 to 5 on these five criteria:</div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {criteria.map((c) => (
+                  <div key={c.key} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: "10px 14px", background: "#fff" }}>
+                    <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13.5, color: BRAND.ink }}>{c.label}</div>
+                    {c.description && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A746F", marginTop: 2, lineHeight: 1.5 }}>{c.description}</div>}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          <PrimaryButton onClick={() => setView("apply")} icon={ArrowRight} style={{ margin: "32px auto 0" }}>
             Apply now
           </PrimaryButton>
         </>

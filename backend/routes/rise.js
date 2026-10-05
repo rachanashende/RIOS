@@ -19,7 +19,7 @@ function enrichScore(row) {
 router.get("/opportunity", async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, title, description, created_at FROM rise_opportunities WHERE is_open = true ORDER BY created_at DESC LIMIT 1"
+      "SELECT id, title, description, benefits, eligibility, to_char(deadline, 'YYYY-MM-DD') AS deadline, created_at FROM rise_opportunities WHERE is_open = true ORDER BY created_at DESC LIMIT 1"
     );
     res.json({ opportunity: rows[0] || null });
   } catch (err) {

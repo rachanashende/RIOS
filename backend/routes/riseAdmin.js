@@ -7,11 +7,15 @@ import { CRITERIA } from "../lib/riseScoring.js";
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
+// Blank strings become NULL so empty optional fields don't render as empty sections.
+const clean = (v) => (v == null || String(v).trim() === "" ? null : String(v).trim());
+
 // GET /api/admin/rise/opportunities
 router.get("/opportunities", async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT o.*, (SELECT COUNT(*)::int FROM rise_applications a WHERE a.opportunity_id = o.id) AS application_count
+      `SELECT o.*, to_char(o.deadline, 'YYYY-MM-DD') AS deadline,
+              (SELECT COUNT(*)::int FROM rise_applications a WHERE a.opportunity_id = o.id) AS application_count
        FROM rise_opportunities o ORDER BY o.created_at DESC`
     );
     res.json({ opportunities: rows });
@@ -25,13 +29,34 @@ router.get("/opportunities", async (req, res, next) => {
 // before it goes live.
 router.post("/opportunities", async (req, res, next) => {
   try {
-    const { title, description } = req.body || {};
+    const { title, description, benefits, eligibility, deadline } = req.body || {};
     if (!title) return res.status(400).json({ error: "Title is required." });
     const { rows } = await pool.query(
-      "INSERT INTO rise_opportunities (title, description, is_open) VALUES ($1,$2,false) RETURNING *",
-      [String(title).trim(), description || null]
+      `INSERT INTO rise_opportunities (title, description, benefits, eligibility, deadline, is_open)
+       VALUES ($1,$2,$3,$4,$5,false) RETURNING *, to_char(deadline, 'YYYY-MM-DD') AS deadline`,
+      [String(title).trim(), clean(description), clean(benefits), clean(eligibility), clean(deadline)]
     );
     res.status(201).json({ opportunity: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/admin/rise/opportunities/:id -- edit the public-page content of a call
+// (ST6). Title is required; the other fields are optional and can be cleared.
+router.put("/opportunities/:id", async (req, res, next) => {
+  try {
+    const { title, description, benefits, eligibility, deadline } = req.body || {};
+    if (!title || !String(title).trim()) return res.status(400).json({ error: "Title is required." });
+    const { rows } = await pool.query(
+      `UPDATE rise_opportunities
+       SET title = $1, description = $2, benefits = $3, eligibility = $4, deadline = $5
+       WHERE id = $6
+       RETURNING *, to_char(deadline, 'YYYY-MM-DD') AS deadline`,
+      [String(title).trim(), clean(description), clean(benefits), clean(eligibility), clean(deadline), Number(req.params.id)]
+    );
+    if (!rows[0]) return res.status(404).json({ error: "Opportunity not found." });
+    res.json({ opportunity: rows[0] });
   } catch (err) {
     next(err);
   }
