@@ -676,7 +676,7 @@ export function LeaderboardView({ leaderboard, loading, error, onOpenIdea }) {
         <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 20, color: BRAND.ink }}>Leaderboard</div>
       </div>
       <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 26 }}>
-        Ranked by average jury star rating (scores themselves are shown to admins only, so ratings stay blind). The top 3 ranks are published below. Ideas with the same average share a rank (marked "Tied"); within a tie, the idea with more jury ratings is listed first, then the earlier submission.
+        Ranked by average jury star rating (scores themselves are shown to admins only, so ratings stay blind). The top 3 ranks are published below. An idea needs at least two jury ratings before it is ranked or published; until then it is listed as "Awaiting more ratings". Ideas with the same average share a rank (marked "Tied"); within a tie, the idea with more jury ratings is listed first, then the earlier submission.
       </div>
 
       {loading && <Spinner label="Loading leaderboard…" />}
@@ -693,7 +693,7 @@ export function LeaderboardView({ leaderboard, loading, error, onOpenIdea }) {
               width: 30, height: 30, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
               fontFamily: FONT, fontWeight: 700, fontSize: 13,
               background: r.published ? BRAND.coral : "#EFEAE4", color: r.published ? "#fff" : BRAND.ink,
-            }}>{r.rank ?? i + 1}</div>
+            }}>{r.awaiting ? "–" : (r.rank ?? i + 1)}</div>
             <div>
               <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{r.question?.module} · {r.question?.submodule}</div>
               <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14.5, color: BRAND.ink, marginTop: 2 }}>{r.title}</div>
@@ -701,6 +701,7 @@ export function LeaderboardView({ leaderboard, loading, error, onOpenIdea }) {
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {r.awaiting && <Pill tone="coral">Awaiting more ratings{r.rating_count != null && r.min_ratings ? ` (${r.rating_count} of ${r.min_ratings})` : ""}</Pill>}
             {r.tied && <Pill tone="blue">Tied</Pill>}
             {r.published && <Pill tone="green">Published</Pill>}
             {r.avg_score != null && (

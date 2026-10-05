@@ -370,6 +370,10 @@ router.post("/:id/ratings", requireRole("jury", "admin"), async (req, res, next)
  * Ranked (rated) ideas for one client, best first. Shared by the leaderboard
  * and by "My submissions" (so an employee's status matches what is published).
  */
+// O8: an idea needs at least this many jury ratings before it is ranked or published
+// (default 2, so one juror's score alone can never publish an idea). Set IDEAS_MIN_RATINGS to change it.
+const MIN_RATINGS = Math.max(1, Number(process.env.IDEAS_MIN_RATINGS) || 2);
+
 async function rankClientIdeas(clientId) {
   const { rows } = await pool.query(`
     SELECT i.id, i.question_id, i.title, i.description, i.created_at,
@@ -387,7 +391,11 @@ async function rankClientIdeas(clientId) {
   // Equal averages share the same rank ("tied") and are all published together
   // if that rank is in the top 3; within a tie the list is ordered by more jury
   // ratings first, then earlier submission, so the order is stable and explainable.
-  const enriched = rows.map(enrich);
+  const enrichedAll = rows.map(enrich);
+  const enriched = enrichedAll.filter((r) => r.rating_count >= MIN_RATINGS);
+  const awaiting = enrichedAll
+    .filter((r) => r.rating_count < MIN_RATINGS)
+    .map((row) => ({ ...row, rank: null, published: false, tied: false, awaiting: true, min_ratings: MIN_RATINGS }));
   let rank = 0, prevScore = null;
   const ranked = enriched.map((row, i) => {
     const score = Math.round(Number(row.avg_score) * 10) / 10;
@@ -395,7 +403,7 @@ async function rankClientIdeas(clientId) {
     return { ...row, rank, published: rank <= 3 };
   });
   for (const row of ranked) row.tied = ranked.filter((o) => o.rank === row.rank).length > 1;
-  return ranked;
+  return [...ranked, ...awaiting];
 }
 
 /**
