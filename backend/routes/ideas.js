@@ -116,6 +116,12 @@ router.get("/", requireRole("junior_employee", "jury", "admin"), async (req, res
       LEFT JOIN idea_ratings r ON r.idea_id = i.id
       WHERE i.source_client_id = $1
     `;
+    // I9: employees only ever see their own ideas (no copying a colleague's idea
+    // before judging). Jury and admin see every idea for the client.
+    if (req.user.role === "junior_employee") {
+      params.push(req.user.id);
+      sql += ` AND i.submitted_by = $${params.length}`;
+    }
     if (questionId) {
       params.push(Number(questionId));
       sql += ` AND i.question_id = $${params.length}`;

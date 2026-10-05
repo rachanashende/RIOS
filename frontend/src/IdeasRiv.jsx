@@ -214,7 +214,7 @@ function IdeasNavBar({ view, setView, session, onLogout }) {
 /* =========================================================================
    OPPORTUNITY CARD (landing grid)
    ========================================================================= */
-function OpportunityCard({ opp, ideaCount, onOpen }) {
+function OpportunityCard({ opp, ideaCount, onOpen, mine }) {
   return (
     <Card style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
@@ -227,7 +227,7 @@ function OpportunityCard({ opp, ideaCount, onOpen }) {
       </div>
       <div style={{ fontFamily: SERIF, fontStyle: "italic", fontSize: 14.5, color: BRAND.ink, lineHeight: 1.5 }}>&ldquo;{opp.q}&rdquo;</div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4, paddingTop: 12, borderTop: `1px solid ${BRAND.line}` }}>
-        <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F" }}>{ideaCount} idea{ideaCount !== 1 ? "s" : ""} submitted</div>
+        <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F" }}>{mine ? `You've submitted ${ideaCount} idea${ideaCount !== 1 ? "s" : ""}` : `${ideaCount} idea${ideaCount !== 1 ? "s" : ""} submitted`}</div>
         <button onClick={onOpen} style={{ display: "flex", alignItems: "center", gap: 4, fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coralDark, background: "none", border: "none", cursor: "pointer" }}>
           View &amp; submit <ChevronRight size={14} />
         </button>
@@ -280,6 +280,7 @@ function LandingView({ session, setView, opportunities, ideas, loading, error, s
                 key={opp.id}
                 opp={opp}
                 ideaCount={ideas.filter((i) => i.question_id === opp.id).length}
+                mine={session.role === "junior_employee"}
                 onOpen={() => {
                   setActiveOpp(opp.id);
                   if (session.role === "junior_employee") setView("submit");
@@ -408,12 +409,12 @@ function SubmitIdeasView({ opp, ideas, onIdeasChanged, setView }) {
 
       {existing.length > 0 && (
         <div style={{ marginTop: 34 }}>
-          <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15, color: BRAND.ink, marginBottom: 12 }}>Already submitted for this opportunity ({existing.length})</div>
+          <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15, color: BRAND.ink, marginBottom: 12 }}>Your ideas for this opportunity ({existing.length})</div>
           {existing.map((idea) => (
             <Card key={idea.id} style={{ padding: 14, marginBottom: 10 }}>
               <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 13.5, color: BRAND.ink }}>{idea.title}</div>
               {idea.description && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A746F", marginTop: 4, lineHeight: 1.5 }}>{idea.description}</div>}
-              <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", marginTop: 8 }}>Submitted by {idea.submitted_by_name || "you"}</div>
+              <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", marginTop: 8 }}>Submitted by you</div>
             </Card>
           ))}
         </div>
