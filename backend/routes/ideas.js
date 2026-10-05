@@ -154,13 +154,26 @@ router.get("/mine", requireRole("junior_employee", "admin"), async (req, res, ne
   try {
     const { rows } = await pool.query(
       `SELECT id, question_id, title, description, created_at,
-              EXISTS (SELECT 1 FROM idea_ratings r WHERE r.idea_id = ideas.id) AS locked
+              EXISTS (SELECT 1 FROM idea_ratings r WHERE r.idea_id = ideas.id) AS locked,
+              source_client_id
        FROM ideas
        WHERE submitted_by = $1
        ORDER BY created_at DESC`,
       [req.user.id]
     );
-    res.json({ ideas: rows.map((row) => ({ ...row, question: questionById(row.question_id) })) });
+    // I11: give the employee an outcome status -- never any scores.
+    //   Submitted -> Under review (a juror has started rating) -> Published (top-3 rank)
+    const publishedIds = new Set();
+    for (const cid of new Set(rows.map((r) => r.source_client_id).filter(Boolean))) {
+      (await rankClientIdeas(cid)).filter((r) => r.published).forEach((r) => publishedIds.add(r.id));
+    }
+    res.json({
+      ideas: rows.map(({ source_client_id, ...row }) => ({
+        ...row,
+        status: publishedIds.has(row.id) ? "published" : row.locked ? "under_review" : "submitted",
+        question: questionById(row.question_id),
+      })),
+    });
   } catch (err) {
     next(err);
   }
@@ -354,6 +367,38 @@ router.post("/:id/ratings", requireRole("jury", "admin"), async (req, res, next)
 });
 
 /**
+ * Ranked (rated) ideas for one client, best first. Shared by the leaderboard
+ * and by "My submissions" (so an employee's status matches what is published).
+ */
+async function rankClientIdeas(clientId) {
+  const { rows } = await pool.query(`
+    SELECT i.id, i.question_id, i.title, i.description, i.created_at,
+           u.name AS submitted_by_name,
+           COUNT(r.id)::int AS rating_count,
+           AVG(r.score) AS avg_score
+    FROM ideas i
+    JOIN users u ON u.id = i.submitted_by
+    JOIN idea_ratings r ON r.idea_id = i.id
+    WHERE i.source_client_id = $1
+    GROUP BY i.id, u.name
+    ORDER BY ROUND(AVG(r.score)::numeric, 1) DESC, COUNT(r.id) DESC, i.created_at ASC, i.id ASC
+  `, [clientId]);
+  // Tie rule (I15): ideas are compared on the average as displayed (1 decimal).
+  // Equal averages share the same rank ("tied") and are all published together
+  // if that rank is in the top 3; within a tie the list is ordered by more jury
+  // ratings first, then earlier submission, so the order is stable and explainable.
+  const enriched = rows.map(enrich);
+  let rank = 0, prevScore = null;
+  const ranked = enriched.map((row, i) => {
+    const score = Math.round(Number(row.avg_score) * 10) / 10;
+    if (score !== prevScore) { rank = i + 1; prevScore = score; }
+    return { ...row, rank, published: rank <= 3 };
+  });
+  for (const row of ranked) row.tied = ranked.filter((o) => o.rank === row.rank).length > 1;
+  return ranked;
+}
+
+/**
  * GET /api/ideas/leaderboard
  * Ideas ranked by average jury score. Originally admin-only (see git log)
  * to protect blind scoring -- a juror seeing the aggregate could infer how
@@ -365,30 +410,7 @@ router.get("/leaderboard", requireRole("admin", "jury"), async (req, res, next) 
   try {
     const clientId = await resolveClientId(req);
     if (!clientId) return res.json({ leaderboard: [] });
-    const { rows } = await pool.query(`
-      SELECT i.id, i.question_id, i.title, i.description, i.created_at,
-             u.name AS submitted_by_name,
-             COUNT(r.id)::int AS rating_count,
-             AVG(r.score) AS avg_score
-      FROM ideas i
-      JOIN users u ON u.id = i.submitted_by
-      JOIN idea_ratings r ON r.idea_id = i.id
-      WHERE i.source_client_id = $1
-      GROUP BY i.id, u.name
-      ORDER BY ROUND(AVG(r.score)::numeric, 1) DESC, COUNT(r.id) DESC, i.created_at ASC, i.id ASC
-    `, [clientId]);
-    // Tie rule (I15): ideas are compared on the average as displayed (1 decimal).
-    // Equal averages share the same rank ("tied") and are all published together
-    // if that rank is in the top 3; within a tie the list is ordered by more jury
-    // ratings first, then earlier submission, so the order is stable and explainable.
-    const enriched = rows.map(enrich);
-    let rank = 0, prevScore = null;
-    const ranked = enriched.map((row, i) => {
-      const score = Math.round(Number(row.avg_score) * 10) / 10;
-      if (score !== prevScore) { rank = i + 1; prevScore = score; }
-      return { ...row, rank, published: rank <= 3 };
-    });
-    for (const row of ranked) row.tied = ranked.filter((o) => o.rank === row.rank).length > 1;
+    const ranked = await rankClientIdeas(clientId);
     // I16: blind scoring. Jurors get rank / published / tied only -- never the
     // average or the rating count, which would let them back out another
     // juror's score (e.g. avg minus their own rating). Admin sees everything.
