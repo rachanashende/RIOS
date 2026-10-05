@@ -48,6 +48,8 @@ export async function initSchema() {
   // A6: a client can mark a question "Not applicable" (e.g. a store-only retailer and marketplace
   // questions). Such a question is left out of the score instead of counting as 0.
   await pool.query("ALTER TABLE responses ADD COLUMN IF NOT EXISTS not_applicable BOOLEAN NOT NULL DEFAULT false");
+  // A7: the client submits the audit; once set, answers are locked until an admin reopens it
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS audit_submitted_at TIMESTAMPTZ");
 
   // ------------------------------------------------------------------
   // Ideas.RIV additions

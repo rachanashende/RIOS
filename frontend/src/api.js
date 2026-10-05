@@ -113,6 +113,8 @@ export const api = {
   getQuestions: () => request("/questions"),
   getResponses: () => request("/responses"),
   saveResponses: (responses, opts = {}) => request("/responses", { method: "PUT", body: { responses }, keepalive: !!opts.keepalive }),
+  submitAudit: () => request("/responses/submit", { method: "POST" }),
+  reopenAudit: (id) => request(`/admin/clients/${id}/reopen`, { method: "POST" }),
   clearResponses: () => request("/responses", { method: "DELETE" }),
 
   listClients: () => request("/admin/clients"),
