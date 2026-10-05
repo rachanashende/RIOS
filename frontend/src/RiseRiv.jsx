@@ -207,6 +207,7 @@ function ApplyView({ onDone }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(false);
+  const [receipt, setReceipt] = useState(null);
 
   function set(key) { return (e) => setForm((f) => ({ ...f, [key]: e.target.value })); }
 
@@ -219,7 +220,8 @@ function ApplyView({ onDone }) {
     setSubmitting(true);
     setError(null);
     try {
-      await api.submitRiseApplication(form);
+      const res = await api.submitRiseApplication(form);
+      setReceipt({ reference: res && res.reference, submittedAt: (res && res.submittedAt) || new Date().toISOString(), summary: { ...form } });
       setDone(true);
     } catch (e) {
       setError(e.message || "Couldn't submit your application — please try again.");
@@ -229,16 +231,54 @@ function ApplyView({ onDone }) {
   }
 
   if (done) {
+    const sm = (receipt && receipt.summary) || form;
+    const rows = [
+      ["Startup", sm.startupName], ["Founder", sm.founderName], ["Email", sm.email], ["Phone", sm.phone],
+      ["Website", sm.website], ["Sector", sm.sector], ["Stage", sm.stage],
+    ].filter(([, v]) => v && String(v).trim());
     return (
-      <div style={{ maxWidth: 520, margin: "0 auto", padding: "80px 24px", textAlign: "center" }}>
-        <CheckCircle2 size={44} color={BRAND.coral} style={{ marginBottom: 16 }} />
-        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: BRAND.ink }}>
-          Thanks for filling your details.
+      <div style={{ maxWidth: 560, margin: "0 auto", padding: "64px 24px 90px" }}>
+        <div style={{ textAlign: "center" }}>
+          <CheckCircle2 size={44} color={BRAND.coral} style={{ marginBottom: 16 }} />
+          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 21, color: BRAND.ink }}>
+            Thanks, your application has been received.
+          </div>
+          {receipt && receipt.reference && (
+            <div style={{ display: "inline-block", marginTop: 14, fontFamily: FONT, fontWeight: 700, fontSize: 15, letterSpacing: "0.04em", color: BRAND.coralDark, background: "#FCEEE1", borderRadius: 999, padding: "6px 16px" }}>
+              Reference: {receipt.reference}
+            </div>
+          )}
+          <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginTop: 8 }}>
+            Submitted {new Date(receipt ? receipt.submittedAt : Date.now()).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}. Please keep this reference — quote it if you write to us.
+          </div>
         </div>
-        <div style={{ fontFamily: FONT, fontSize: 14, color: "#7A746F", marginTop: 8 }}>
-          We will get back to you.
+
+        <Card style={{ padding: 20, marginTop: 26 }}>
+          <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13.5, color: BRAND.ink, marginBottom: 10 }}>What you submitted</div>
+          {rows.map(([k, v]) => (
+            <div key={k} style={{ display: "flex", gap: 12, fontFamily: FONT, fontSize: 13, padding: "6px 0", borderTop: `1px solid ${BRAND.line}` }}>
+              <div style={{ width: 90, color: "#9B958F", flexShrink: 0 }}>{k}</div>
+              <div style={{ color: BRAND.ink, wordBreak: "break-word" }}>{v}</div>
+            </div>
+          ))}
+          {sm.pitch && String(sm.pitch).trim() && (
+            <div style={{ fontFamily: FONT, fontSize: 13, padding: "8px 0 0", borderTop: `1px solid ${BRAND.line}` }}>
+              <div style={{ color: "#9B958F", marginBottom: 4 }}>Pitch</div>
+              <div style={{ color: BRAND.ink, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{sm.pitch}</div>
+            </div>
+          )}
+        </Card>
+
+        <Card style={{ padding: 20, marginTop: 14 }}>
+          <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13.5, color: BRAND.ink, marginBottom: 6 }}>What happens next</div>
+          <div style={{ fontFamily: FONT, fontSize: 13, color: "#7A746F", lineHeight: 1.6 }}>
+            The RIV team reviews every application and a jury scores the shortlist. We will contact you at {sm.email || "the email you gave"} about the outcome. Note: this page is your confirmation — we do not send a confirmation email yet, so please save or screenshot it.
+          </div>
+        </Card>
+
+        <div style={{ textAlign: "center" }}>
+          <GhostButton onClick={onDone} style={{ margin: "26px auto 0" }}>Back to Startup</GhostButton>
         </div>
-        <GhostButton onClick={onDone} style={{ margin: "26px auto 0" }}>Back to Startup</GhostButton>
       </div>
     );
   }
