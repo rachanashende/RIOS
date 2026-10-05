@@ -391,6 +391,7 @@ function JuryLoginView({ onAuthed }) {
         <form onSubmit={submit}>
           <Field label="Email" required><input type="email" style={inputStyle} value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
           <Field label="Password" required><input type="password" style={inputStyle} value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+          <div style={{ textAlign: "right", marginTop: -6, marginBottom: 6 }}><a href="/?action=forgot-password" style={{ fontFamily: FONT, fontSize: 11.5, color: BRAND.coral, fontWeight: 600, textDecoration: "none" }}>Forgot password?</a></div>
           <ErrorBanner text={error} />
           <PrimaryButton type="submit" disabled={submitting} icon={submitting ? Loader2 : ArrowRight} style={{ width: "100%" }}>
             {submitting ? "Logging in…" : "Log in"}

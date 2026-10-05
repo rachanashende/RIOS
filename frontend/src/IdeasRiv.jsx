@@ -994,6 +994,7 @@ function IdeasLoginView({ onAuthed }) {
             <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required autoFocus style={{ width: "100%", marginTop: 6, fontFamily: FONT, fontSize: 13.5, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: "10px 12px", boxSizing: "border-box", background: BRAND.cream, color: BRAND.ink }} />
             <label style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: BRAND.ink, marginTop: 14, display: "block" }}>Password</label>
             <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required style={{ width: "100%", marginTop: 6, fontFamily: FONT, fontSize: 13.5, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: "10px 12px", boxSizing: "border-box", background: BRAND.cream, color: BRAND.ink }} />
+            <div style={{ textAlign: "right", marginTop: 8 }}><a href="/?action=forgot-password" style={{ fontFamily: FONT, fontSize: 11.5, color: BRAND.coral, fontWeight: 600, textDecoration: "none" }}>Forgot password?</a></div>
             {error && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#D33639", marginTop: 12 }}>{error}</div>}
             <button type="submit" disabled={submitting} style={{
               width: "100%", marginTop: 20, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,

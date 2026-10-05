@@ -1,6 +1,5 @@
-import { Resend } from "resend";
-
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+// Sends through Resend's HTTP API directly (no extra npm package needed on the server).
+const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 
 // Until a custom domain is verified in Resend, this default only actually
 // delivers to the email address of the Resend account itself — fine for
@@ -29,13 +28,19 @@ function brandWrapper(bodyHtml) {
 }
 
 async function send({ to, subject, html }) {
-  if (!resend) {
+  if (!RESEND_API_KEY) {
     console.warn(`[email] RESEND_API_KEY not set — skipping send. Would have sent "${subject}" to ${to}`);
     return { skipped: true };
   }
   try {
-    const result = await resend.emails.send({ from: FROM, to, subject, html });
-    return result;
+    const resp = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: FROM, to, subject, html }),
+    });
+    const body = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(body.message || `Resend responded ${resp.status}`);
+    return body;
   } catch (err) {
     console.error("[email] Send failed:", err);
     throw err;

@@ -151,10 +151,9 @@ emails/month) — sign up, create an API key, add it to `backend/.env` as
 `RESEND_API_KEY`. Without it set, the backend logs a warning and skips
 sending instead of crashing, so the rest of the app still works.
 
-- **Verification** — every new client account gets a verification email
-  automatically when an admin creates it. The link expires in 48 hours.
-  Logged-in clients with an unverified email see a banner with a "Resend
-  verification email" button.
+- **Verification** — *not built yet.* The email template exists in
+  `backend/lib/email.js`, but accounts are not sent a verification email
+  and there is no verification banner. Planned as a follow-up.
 - **Password reset** — "Forgot password?" on the login screen. The
   response is identical whether or not the email exists, so this can't be
   used to check which emails have accounts. Reset links expire in 1 hour.
@@ -196,8 +195,8 @@ data model in the PRD:
   `responses`/`users` tables as defense-in-depth.
 - `JWT_SECRET` in `.env.example` is a placeholder — generate a real random
   string before this touches anything beyond your own machine.
-- Passwords are hashed with bcrypt, but there's no password-reset flow,
-  rate limiting, or HTTPS — all expected before any real deployment.
+- Passwords are hashed with bcrypt, but password reset is built (see above) but there is
+  no general rate limiting or HTTPS — all expected before any real deployment.
 
 ## About RIV
 
