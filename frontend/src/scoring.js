@@ -105,7 +105,9 @@ export function computeCategoryScores(moduleScores) {
     const achieved = members.reduce((s, m) => s + (m.achieved || 0), 0);
     const max = members.reduce((s, m) => s + (m.max || 0), 0);
     const score = max > 0 ? (achieved / max) * 100 : 0;
-    return { name: cat.name, score, tier: tierFor(score), moduleCount: members.length, achieved, max };
+    const answered = members.reduce((a, m) => a + (m.answered || 0), 0);
+    const total = members.reduce((a, m) => a + (m.total || 0), 0);
+    return { name: cat.name, score, tier: tierFor(score), moduleCount: members.length, achieved, max, answered, total };
   });
 }
 

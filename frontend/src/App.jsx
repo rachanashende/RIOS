@@ -1099,12 +1099,25 @@ function DashboardView({ questions, modules, responses, setView, user, viewingCl
           </div>
         </div>
         {categoryScores.length > 0 && (() => {
-          const weakest = [...categoryScores].sort((a, b) => a.score - b.score)[0];
+          // SC6: only name an exposure when there is something to compare. Pillars with no answers
+          // are "not started", not "weakest"; equal scores are reported as a tie; a partial audit is
+          // labelled as such.
+          const started = categoryScores.filter((c) => c.answered > 0);
+          if (started.length === 0) return null;
+          const lowest = Math.min(...started.map((c) => Math.round(c.score)));
+          const weakest = started.filter((c) => Math.round(c.score) === lowest);
+          const answeredAll = categoryScores.reduce((a, c) => a + c.answered, 0);
+          const totalAll = categoryScores.reduce((a, c) => a + c.total, 0);
+          const notStarted = categoryScores.filter((c) => c.answered === 0);
+          const names = weakest.length === 1 ? weakest[0].name : weakest.slice(0, -1).map((c) => c.name).join(", ") + " and " + weakest[weakest.length - 1].name;
+          const partial = answeredAll < totalAll;
           return (
-            <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 14, padding: "12px 16px", borderRadius: 12, background: "#FBEAEA", border: "1px solid #F3C6C6" }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 14, padding: "12px 16px", borderRadius: 12, background: partial ? "#FBF1DF" : "#FBEAEA", border: `1px solid ${partial ? "#EBD3A5" : "#F3C6C6"}` }}>
               <AlertTriangle size={16} color={BRAND.coralDark} style={{ flexShrink: 0, marginTop: 1 }} />
               <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: BRAND.ink, lineHeight: 1.6 }}>
-                <strong>{weakest.name}</strong> is the biggest exposure right now ({weakest.score.toFixed(0)}/100) — the Top 5 Opportunities and Priority Gaps below are the fastest way in.
+                {partial && <div style={{ fontWeight: 600, marginBottom: 2 }}>Partial audit — {answeredAll} of {totalAll} questions answered, so this is provisional.</div>}
+                <strong>{names}</strong> {weakest.length > 1 ? "are tied as" : "is"} the biggest exposure among the areas you have started ({lowest}/100{weakest.length > 1 ? " each" : ""}) — the Top 5 Opportunities and Priority Gaps below are the fastest way in.
+                {notStarted.length > 0 && <span style={{ color: "#7A746F" }}> Not started yet: {notStarted.map((c) => c.name).join(", ")}.</span>}
               </div>
             </div>
           );
