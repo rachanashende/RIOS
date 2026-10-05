@@ -1253,15 +1253,23 @@ export default function RiosApp() {
   }, [user, viewingClient]);
 
   // Autosave (client's own responses only — admin viewing a client is read-only)
+  // A4: the latest answers that have not been confirmed saved yet are kept in `pendingSave`, so they
+  // can be sent immediately (flushPendingSave) when the client logs out or the page is being closed,
+  // instead of being lost with the 0.7 s debounce timer.
+  const pendingSave = useRef(null);
   useEffect(() => {
     if (!user || user.role !== "client") return;
     if (skipNextSave.current) { skipNextSave.current = false; return; }
     if (saveTimer.current) clearTimeout(saveTimer.current);
+    pendingSave.current = responses;
     setSaveStatus({ state: "saving", message: "" });
     saveTimer.current = setTimeout(() => {
       const seq = ++saveSeq.current;
       api.saveResponses(responses)
-        .then(() => { if (seq === saveSeq.current) setSaveStatus({ state: "saved", message: "" }); })
+        .then(() => {
+          if (pendingSave.current === responses) pendingSave.current = null;
+          if (seq === saveSeq.current) setSaveStatus({ state: "saved", message: "" });
+        })
         .catch((err) => {
           if (seq !== saveSeq.current) return;
           const expired = /401|403|token|expired|unauthor|not logged/i.test((err && err.message) || "");
@@ -1270,6 +1278,28 @@ export default function RiosApp() {
     }, 700);
     return () => clearTimeout(saveTimer.current);
   }, [responses, user, retryTick]);
+
+  // Send any unsaved answers right now. `keepalive` lets the request finish even while the page closes.
+  const flushPendingSave = useCallback((keepalive) => {
+    const pending = pendingSave.current;
+    if (!pending) return Promise.resolve();
+    clearTimeout(saveTimer.current);
+    return api.saveResponses(pending, { keepalive: !!keepalive })
+      .then(() => { if (pendingSave.current === pending) pendingSave.current = null; })
+      .catch(() => {});
+  }, []);
+
+  // A4: closing the tab / navigating away / switching apps on mobile -> save what is pending first.
+  useEffect(() => {
+    const onHide = () => { if (document.visibilityState === "hidden") flushPendingSave(true); };
+    const onPageHide = () => flushPendingSave(true);
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, [flushPendingSave]);
 
   // Keep the URL in sync with the outer view on browser back/forward.
   // Ideathon/Startup handle their own back/forward internally once
@@ -1318,7 +1348,10 @@ export default function RiosApp() {
     // reuse the same session + redirect logic as a normal login.
     handleLogin(token, loggedInUser);
   }
-  function handleLogout() {
+  async function handleLogout() {
+    // A4: save the last answer(s) before the session token is cleared.
+    await flushPendingSave(false);
+    pendingSave.current = null;
     clearSession(); setUser(null); setViewingClient(null); setResponses({});
     window.history.pushState(null, "", "/");
     setView("home");

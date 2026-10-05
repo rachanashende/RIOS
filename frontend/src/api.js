@@ -76,7 +76,7 @@ export function clearIndexSession() {
   localStorage.removeItem(INDEX_USER_KEY);
 }
 
-async function requestWithToken(path, { method = "GET", body, raw } = {}, token) {
+async function requestWithToken(path, { method = "GET", body, raw, keepalive } = {}, token) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -84,6 +84,7 @@ async function requestWithToken(path, { method = "GET", body, raw } = {}, token)
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
+    ...(keepalive ? { keepalive: true } : {}),
   });
 
   if (!res.ok) {
@@ -111,7 +112,7 @@ export const api = {
 
   getQuestions: () => request("/questions"),
   getResponses: () => request("/responses"),
-  saveResponses: (responses) => request("/responses", { method: "PUT", body: { responses } }),
+  saveResponses: (responses, opts = {}) => request("/responses", { method: "PUT", body: { responses }, keepalive: !!opts.keepalive }),
   clearResponses: () => request("/responses", { method: "DELETE" }),
 
   listClients: () => request("/admin/clients"),
