@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Menu, X, Award, Eye, EyeOff, FileSpreadsheet, FileText, Loader2,
   Compass, AlertTriangle, Gavel,
 } from "lucide-react";
-import { api, getToken, getStoredUser, setSession, clearSession, setIdeasSession, setRiseSession, setIndexSession, clearIdeasSession, clearRiseSession, clearIndexSession } from "./api.js";
+import { api, getToken, getStoredUser, setSession, setIdeasSession, setRiseSession, setIndexSession, clearAllSessions } from "./api.js";
 import { computeScores, tierFor, fmtMoneyRange, computeCategoryScores, isAnswered } from "./scoring.js";
 import { BRAND } from "./brand.js";
 import IdeasRivApp from "./IdeasRiv.jsx";
@@ -1436,6 +1436,7 @@ export default function RiosApp() {
   }, []);
 
   function handleLogin(token, loggedInUser) {
+    clearAllSessions(); // O5: start clean so no leftover module session from an earlier login survives
     setSession(token, loggedInUser);
     setUser(loggedInUser);
     let path, v;
@@ -1475,7 +1476,7 @@ export default function RiosApp() {
     // A4: save the last answer(s) before the session token is cleared.
     await flushPendingSave(false);
     pendingSave.current = null;
-    clearSession(); clearIdeasSession(); clearRiseSession(); clearIndexSession(); // a module session copy must not outlive the main login
+    clearAllSessions(); // a module session copy must not outlive the main login
     setUser(null); setViewingClient(null); setResponses({});
     window.history.pushState(null, "", "/");
     setView("home");

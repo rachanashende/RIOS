@@ -4,7 +4,7 @@ import {
   Loader2, ClipboardList, Star, AlertCircle, Gavel, Building2, UserCircle2,
 } from "lucide-react";
 import {
-  api, getStoredRiseUser, setRiseSession, clearRiseSession,
+  api, getStoredRiseUser, setRiseSession, clearRiseSession, clearAllSessions,
 } from "./api.js";
 import { BRAND } from "./brand.js";
 
@@ -650,7 +650,7 @@ export default function RiseRivApp() {
     setView("jury-dashboard");
   }
   function handleLogout() {
-    clearRiseSession();
+    clearRiseSession(); clearAllSessions();
     setSession(null);
     window.history.pushState(null, "", "/startup");
     setView("landing");

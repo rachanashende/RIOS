@@ -33,6 +33,13 @@ export function clearSession() {
   localStorage.removeItem(USER_KEY);
 }
 
+// O5: logging out anywhere ends every session this browser holds (main site and all three modules),
+// and a fresh login starts from a clean slate, so a leftover session can never show someone else's data.
+export function clearAllSessions() {
+  [TOKEN_KEY, USER_KEY, IDEAS_TOKEN_KEY, IDEAS_USER_KEY, RISE_TOKEN_KEY, RISE_USER_KEY, INDEX_TOKEN_KEY, INDEX_USER_KEY]
+    .forEach((k) => localStorage.removeItem(k));
+}
+
 // ---- Ideas.RIV session (employee/jury) — fully separate from the above
 export function getIdeasToken() { return localStorage.getItem(IDEAS_TOKEN_KEY); }
 export function getStoredIdeasUser() {
