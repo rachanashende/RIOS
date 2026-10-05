@@ -127,6 +127,8 @@ export const api = {
   getIdeas: (questionId) => ideasRequest(`/ideas${questionId ? `?questionId=${questionId}` : ""}`),
   getIdeaRatings: (ideaId) => ideasRequest(`/ideas/${ideaId}/ratings`),
   getMyIdeas: () => ideasRequest("/ideas/mine"),
+  updateIdea: (id, payload) => ideasRequest(`/ideas/${id}`, { method: "PUT", body: payload }),
+  deleteIdea: (id) => ideasRequest(`/ideas/${id}`, { method: "DELETE" }),
   submitIdeas: (ideas) => ideasRequest("/ideas", { method: "POST", body: { ideas } }),
   getMyRatingForIdea: (ideaId) => ideasRequest(`/ideas/${ideaId}/ratings/mine`),
   submitRating: (ideaId, criteria, comment) => ideasRequest(`/ideas/${ideaId}/ratings`, { method: "POST", body: { criteria, comment } }),

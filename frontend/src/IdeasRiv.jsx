@@ -425,20 +425,79 @@ function SubmitIdeasView({ opp, ideas, onIdeasChanged, setView }) {
 /* =========================================================================
    MY SUBMISSIONS (junior employee)
    ========================================================================= */
-function MyIdeasView({ myIdeas, loading, error }) {
+function MyIdeasView({ myIdeas, loading, error, onChanged }) {
+  const [editingId, setEditingId] = useState(null);
+  const [draft, setDraft] = useState({ title: "", description: "" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  function startEdit(idea) {
+    setEditingId(idea.id);
+    setDraft({ title: idea.title, description: idea.description || "" });
+    setMsg(null);
+  }
+  async function saveEdit(idea) {
+    if (!draft.title.trim()) { setMsg("An idea needs a title."); return; }
+    setBusy(true); setMsg(null);
+    try {
+      await api.updateIdea(idea.id, draft);
+      setEditingId(null);
+      onChanged && onChanged();
+    } catch (e) { setMsg(e.message || "Couldn't save."); onChanged && onChanged(); }
+    finally { setBusy(false); }
+  }
+  async function withdraw(idea) {
+    if (!window.confirm(`Withdraw "${idea.title}"? This removes it permanently.`)) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.deleteIdea(idea.id);
+      onChanged && onChanged();
+    } catch (e) { setMsg(e.message || "Couldn't withdraw."); onChanged && onChanged(); }
+    finally { setBusy(false); }
+  }
+  const smallBtn = { fontFamily: FONT, fontSize: 12, fontWeight: 600, padding: "6px 11px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink };
+  const field = { width: "100%", fontFamily: FONT, fontSize: 13, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: "9px 11px", boxSizing: "border-box", background: BRAND.cream, color: BRAND.ink };
+
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 100px" }}>
-      <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 20, color: BRAND.ink, marginBottom: 18 }}>My submissions</div>
+      <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 20, color: BRAND.ink, marginBottom: 6 }}>My submissions</div>
+      <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 18 }}>
+        You can edit or withdraw an idea until the jury starts rating it.
+      </div>
       {loading && <Spinner />}
       <ErrorBanner text={error} />
+      {msg && <ErrorBanner text={msg} />}
       {!loading && !error && myIdeas.length === 0 && (
         <EmptyState icon={Lightbulb} title="You haven't submitted any ideas yet" text="Pick an opportunity from the landing page to submit your first idea." />
       )}
       {!loading && myIdeas.map((idea) => (
         <Card key={idea.id} style={{ padding: 16, marginBottom: 10 }}>
           <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{idea.question?.module} · {idea.question?.submodule}</div>
-          <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14.5, color: BRAND.ink, marginTop: 3 }}>{idea.title}</div>
-          {idea.description && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A746F", marginTop: 4, lineHeight: 1.5 }}>{idea.description}</div>}
+          {editingId === idea.id ? (
+            <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
+              <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} style={field} placeholder="Idea title" />
+              <textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} rows={3} style={{ ...field, resize: "vertical" }} placeholder="Describe the idea" />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button disabled={busy} onClick={() => saveEdit(idea)} style={{ ...smallBtn, background: BRAND.ink, color: "#fff", border: "none" }}>Save changes</button>
+                <button disabled={busy} onClick={() => setEditingId(null)} style={smallBtn}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14.5, color: BRAND.ink, marginTop: 3 }}>{idea.title}</div>
+              {idea.description && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A746F", marginTop: 4, lineHeight: 1.5 }}>{idea.description}</div>}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
+                {idea.locked ? (
+                  <Pill tone="blue">Under jury review — locked</Pill>
+                ) : (
+                  <>
+                    <button disabled={busy} onClick={() => startEdit(idea)} style={smallBtn}>Edit</button>
+                    <button disabled={busy} onClick={() => withdraw(idea)} style={{ ...smallBtn, color: "#D33639" }}>Withdraw</button>
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </Card>
       ))}
     </div>
@@ -771,10 +830,11 @@ function IdeasRivMain({ session, onLogout }) {
   }, []);
 
   // My submissions (junior employee)
+  const [myIdeasTick, setMyIdeasTick] = useState(0);
   useEffect(() => {
     if (session.role !== "junior_employee" || view !== "my-ideas") return;
     api.getMyIdeas().then((d) => setMyIdeas(d.ideas || [])).catch((e) => setError(e.message));
-  }, [session, view]);
+  }, [session, view, myIdeasTick]);
 
   // Leaderboard — now shown to both admin and jury (blind-scoring
   // restriction explicitly reversed; see IdeasNavBar and the backend route).
@@ -838,7 +898,7 @@ function IdeasRivMain({ session, onLogout }) {
         )}
 
         {view === "my-ideas" && session.role === "junior_employee" && (
-          <MyIdeasView myIdeas={myIdeas} loading={false} error={error} />
+          <MyIdeasView myIdeas={myIdeas} loading={false} error={error} onChanged={() => { setMyIdeasTick((n) => n + 1); refreshIdeas(); }} />
         )}
 
         {view === "jury" && session.role === "jury" && (
