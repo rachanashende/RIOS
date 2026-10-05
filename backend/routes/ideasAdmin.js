@@ -112,7 +112,12 @@ router.put("/users/:id/client", async (req, res, next) => {
       [clientId, req.params.id]
     );
     if (!rowCount) return res.status(404).json({ error: "Employee or jury login not found." });
-    res.json({ ok: true });
+    // O19: ideas stay with the client they were submitted for (and keep their ratings); tell the admin how many.
+    const { rows: left } = await pool.query(
+      "SELECT COUNT(*)::int AS n FROM ideas WHERE submitted_by = $1 AND source_client_id IS DISTINCT FROM $2",
+      [req.params.id, clientId]
+    );
+    res.json({ ok: true, ideasLeftBehind: left[0].n });
   } catch (err) {
     next(err);
   }

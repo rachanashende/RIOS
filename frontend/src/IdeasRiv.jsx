@@ -522,10 +522,19 @@ function JuryListView({ opportunities, ideas, myRatings, loading, error, onOpenI
   const grouped = opportunities
     .map((opp) => ({ opp, ideas: ideas.filter((i) => i.question_id === opp.id) }))
     .filter((g) => g.ideas.length > 0);
+  // O19: ideas submitted against a question that has since dropped out of the Top 5 (the client
+  // updated their audit) used to vanish from this list while still counting on the leaderboard.
+  // Keep them here, under their original opportunity, so the jury can still rate them.
+  const currentIds = new Set(opportunities.map((o) => o.id));
+  const earlier = new Map();
+  ideas.filter((i) => !currentIds.has(i.question_id)).forEach((i) => {
+    if (!earlier.has(i.question_id)) earlier.set(i.question_id, { opp: i.question || { id: i.question_id, module: "Earlier opportunity", submodule: "" }, ideas: [], earlier: true });
+    earlier.get(i.question_id).ideas.push(i);
+  });
+  const allGroups = [...grouped, ...earlier.values()];
 
-  // Count only the ideas actually listed below (those under a current Top-5 opportunity),
-  // so the counter can always reach "N of N".
-  const visibleIdeas = grouped.flatMap((g) => g.ideas);
+  // Every listed idea counts, so the counter can always reach "N of N".
+  const visibleIdeas = allGroups.flatMap((g) => g.ideas);
   const totalIdeas = visibleIdeas.length;
   const ratedCount = visibleIdeas.filter((i) => myRatings[i.id]).length;
 
@@ -548,13 +557,13 @@ function JuryListView({ opportunities, ideas, myRatings, loading, error, onOpenI
 
       <ErrorBanner text={error} />
 
-      {grouped.length === 0 && !error && (
+      {allGroups.length === 0 && !error && (
         <EmptyState icon={ClipboardList} title="No ideas submitted yet" text="Once junior employees submit ideas against an opportunity, they'll show up here for the jury to rate." />
       )}
 
-      {grouped.map(({ opp, ideas: ideaList }) => (
+      {allGroups.map(({ opp, ideas: ideaList, earlier: isEarlier }) => (
         <div key={opp.id} style={{ marginBottom: 30 }}>
-          <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13.5, color: BRAND.ink, marginBottom: 10 }}>{opp.module} · {opp.submodule}</div>
+          <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13.5, color: BRAND.ink, marginBottom: 10 }}>{opp.module} · {opp.submodule}{isEarlier && <span style={{ marginLeft: 8 }}><Pill tone="blue">No longer in the current Top 5</Pill></span>}</div>
           {ideaList.map((idea) => {
             const myRating = myRatings[idea.id];
             return (
