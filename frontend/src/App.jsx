@@ -876,7 +876,25 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
 
   // Land at the top of the new module's questions, whether moduleIdx changed
   // via Previous/Next or clicking a module directly in the sidebar list.
-  useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [moduleIdx]);
+  // A15: "Jump to next unscored question" lands on that question; otherwise a module change lands at the top.
+  const [jumpTick, setJumpTick] = useState(0);
+  const scrollToQ = useRef(null);
+  useEffect(() => {
+    const id = scrollToQ.current;
+    scrollToQ.current = null;
+    const el = id != null ? document.getElementById(`q-${id}`) : null;
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    else window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [moduleIdx, jumpTick]);
+  function jumpToNextUnanswered() {
+    // Look from the current module onwards first, then wrap round to the start.
+    const order = [...questions.filter((q) => modules.indexOf(q.module) >= moduleIdx), ...questions.filter((q) => modules.indexOf(q.module) < moduleIdx)];
+    const next = order.find((q) => !isAnswered(responses[q.id]));
+    if (!next) return;
+    scrollToQ.current = next.id;
+    setModuleIdx(modules.indexOf(next.module));
+    setJumpTick((n) => n + 1);
+  }
 
   function setMaturity(id, val) { if (locked) return; setResponses((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), maturity: val, na: false } })); }
   // A6: toggle "Not applicable" -- the question is then left out of the score
@@ -914,7 +932,7 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
           <div style={{ height: 6, background: BRAND.line, borderRadius: 999, overflow: "hidden", marginBottom: 18 }}>
             <div style={{ height: "100%", width: `${(totalAnswered / questions.length) * 100}%`, background: BRAND.coral, transition: "width .3s" }} />
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 480, overflowY: "auto", paddingRight: 4 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: "calc(100vh - 340px)", minHeight: 320, overflowY: "auto", paddingRight: 4 }}>
             {modules.map((m, i) => {
               const modQs = questions.filter((q) => q.module === m);
               const ans = modQs.filter((q) => isAnswered(responses[q.id])).length;
@@ -929,6 +947,9 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
             })}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 20 }}>
+            {!locked && totalAnswered < questions.length && (
+              <button onClick={jumpToNextUnanswered} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, padding: "9px 0", borderRadius: 9, cursor: "pointer", background: BRAND.coral, color: "#fff", border: "none" }}>Jump to next unscored <ChevronRight size={13} /></button>
+            )}
             {DEMO_TOOLS_ENABLED && (
               <button onClick={randomFillAll} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, padding: "9px 0", borderRadius: 9, cursor: "pointer", background: BRAND.ink, color: "#fff", border: "none" }}><Shuffle size={13} /> Quick-fill all 165 (demo)</button>
             )}
@@ -962,7 +983,7 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
           {qs.map((q) => {
             const r = responses[q.id];
             return (
-              <div key={q.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: 20, background: "#fff" }}>
+              <div key={q.id} id={`q-${q.id}`} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: 20, background: "#fff", scrollMarginTop: 90 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 6 }}>
                   <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{q.submodule}</div>
                   <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 10.5, fontWeight: 700, color: BRAND.coral, background: "#FCEEE1", padding: "2px 8px", borderRadius: 999, flexShrink: 0 }}>AI weight ×{q.weight}</div>
@@ -1018,7 +1039,19 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
         {!locked && (
           <div style={{ marginTop: 28, border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: 20, background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
             <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#7A746F", lineHeight: 1.5, maxWidth: 560 }}>
-              <strong style={{ color: BRAND.ink }}>Finished?</strong> Submit your audit to send it to RIV for review. Once submitted your answers are locked; RIV can reopen it if something needs to change.
+              <strong style={{ color: BRAND.ink }}>Audit summary: {totalAnswered} of {questions.length} questions scored.</strong>{" "}
+              {totalAnswered === questions.length ? "Everything is scored." : "Modules with questions still to score:"}
+              {totalAnswered < questions.length && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "8px 0" }}>
+                  {modules.map((m, i) => {
+                    const mq = questions.filter((q) => q.module === m);
+                    const left = mq.filter((q) => !isAnswered(responses[q.id])).length;
+                    if (!left) return null;
+                    return <button key={m} onClick={() => setModuleIdx(i)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 999, cursor: "pointer", background: "#FCEEE1", color: BRAND.coralDark, border: "none" }}>{m} · {left} left</button>;
+                  })}
+                </div>
+              )}
+              <div><strong style={{ color: BRAND.ink }}>Finished?</strong> Submit your audit to send it to RIV for review. Once submitted your answers are locked; RIV can reopen it if something needs to change.</div>
             </div>
             <button onClick={onSubmit} style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 9, padding: "11px 20px", cursor: "pointer" }}>Submit audit</button>
           </div>
