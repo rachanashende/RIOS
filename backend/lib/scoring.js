@@ -24,11 +24,20 @@ export function tierFor(score) {
  */
 export function computeScores(responses) {
   const perModule = {};
-  MODULES.forEach((m) => (perModule[m] = { achieved: 0, max: 0, answered: 0, total: 0 }));
-  let achievedAll = 0, maxAll = 0, answeredAll = 0;
+  MODULES.forEach((m) => (perModule[m] = { achieved: 0, max: 0, answered: 0, total: 0, na: 0 }));
+  let achievedAll = 0, maxAll = 0, answeredAll = 0, naAll = 0;
 
   QUESTIONS.forEach((q) => {
     const r = responses[q.id];
+    // A6: a question marked "Not applicable" is left out of the score entirely (neither points
+    // earned nor points possible), and counts as answered for progress.
+    if (r && r.na) {
+      perModule[q.module].total += 1;
+      perModule[q.module].answered += 1;
+      perModule[q.module].na += 1;
+      answeredAll += 1; naAll += 1;
+      return;
+    }
     const maturity = r && r.maturity != null ? r.maturity : 0;
     const achieved = maturity * q.weight;
     const max = 4 * q.weight;
@@ -43,7 +52,7 @@ export function computeScores(responses) {
   const moduleScores = MODULES.map((m) => {
     const d = perModule[m];
     const score = d.max > 0 ? (d.achieved / d.max) * 100 : 0;
-    return { module: m, score, tier: tierFor(score), answered: d.answered, total: d.total };
+    return { module: m, score, tier: tierFor(score), answered: d.answered, total: d.total, na: d.na, achieved: d.achieved, max: d.max };
   });
 
   const overallScore = maxAll > 0 ? (achievedAll / maxAll) * 100 : 0;
@@ -75,5 +84,5 @@ export function computeScores(responses) {
     .sort((a, b) => b.severity - a.severity)
     .slice(0, 5);
 
-  return { moduleScores, overallScore, overallTier: tierFor(overallScore), answeredAll, totalAll: QUESTIONS.length, opportunities, priorityGaps };
+  return { moduleScores, overallScore, overallTier: tierFor(overallScore), answeredAll, naAll, totalAll: QUESTIONS.length, opportunities, priorityGaps };
 }

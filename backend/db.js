@@ -45,6 +45,10 @@ export async function initSchema() {
     );
   `);
 
+  // A6: a client can mark a question "Not applicable" (e.g. a store-only retailer and marketplace
+  // questions). Such a question is left out of the score instead of counting as 0.
+  await pool.query("ALTER TABLE responses ADD COLUMN IF NOT EXISTS not_applicable BOOLEAN NOT NULL DEFAULT false");
+
   // ------------------------------------------------------------------
   // Ideas.RIV additions
   // ------------------------------------------------------------------

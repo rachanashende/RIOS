@@ -41,11 +41,11 @@ async function resolveTargetUser(req) {
 
 async function loadResponses(userId) {
   const { rows } = await pool.query(
-    "SELECT question_id, maturity, evidence FROM responses WHERE user_id = $1",
+    "SELECT question_id, maturity, evidence, not_applicable FROM responses WHERE user_id = $1",
     [userId]
   );
   const responses = {};
-  rows.forEach((r) => { responses[r.question_id] = { maturity: r.maturity, evidence: r.evidence }; });
+  rows.forEach((r) => { responses[r.question_id] = { maturity: r.maturity, evidence: r.evidence, na: !!r.not_applicable }; });
   return responses;
 }
 
@@ -74,7 +74,7 @@ router.get("/excel", requireAuth, async (req, res, next) => {
   QUESTIONS.forEach((q) => {
     const r = responses[q.id];
     const maturity = r && r.maturity != null ? r.maturity : null;
-    const row = [q.id, q.module, q.submodule, q.q, q.weight, maturity, maturity != null ? maturity * q.weight : null];
+    const row = [q.id, q.module, q.submodule, q.q, q.weight, r && r.na ? "N/A" : maturity, maturity != null ? maturity * q.weight : null];
     if (showEvidence) row.push((r && r.evidence) || "");
     row.push(q.hasDollar ? `${Math.round(q.revLow)} – ${Math.round(q.revHigh)}` : "N/A");
     row.push(q.hasDollar ? `${Math.round(q.costLow)} – ${Math.round(q.costHigh)}` : "N/A");
@@ -99,6 +99,7 @@ router.get("/excel", requireAuth, async (req, res, next) => {
   os.addRow(["Overall Score (0-100)", Number(scores.overallScore.toFixed(1))]);
   os.addRow(["Overall Tier", scores.overallTier.name]);
   os.addRow(["Questions Answered", `${scores.answeredAll} / ${scores.totalAll}`]);
+  os.addRow(["Marked Not Applicable (excluded from score)", scores.naAll || 0]);
   os.addRow(["Account", target.company || target.name]);
   os.addRow(["Generated", new Date().toISOString()]);
   os.addRow([]);

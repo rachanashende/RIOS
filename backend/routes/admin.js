@@ -15,7 +15,7 @@ router.get("/clients", async (req, res, next) => {
     const withProgress = await Promise.all(
       clients.map(async (c) => {
         const { rows } = await pool.query(
-          "SELECT maturity FROM responses WHERE user_id = $1 AND maturity IS NOT NULL",
+          "SELECT maturity FROM responses WHERE user_id = $1 AND (maturity IS NOT NULL OR not_applicable)",
           [c.id]
         );
         return { ...c, answered: rows.length };
@@ -71,11 +71,11 @@ router.get("/clients/:id/responses", async (req, res, next) => {
     if (!client) return res.status(404).json({ error: "Client not found." });
 
     const { rows } = await pool.query(
-      "SELECT question_id, maturity, evidence, updated_at FROM responses WHERE user_id = $1",
+      "SELECT question_id, maturity, evidence, not_applicable, updated_at FROM responses WHERE user_id = $1",
       [req.params.id]
     );
     const responses = {};
-    rows.forEach((r) => { responses[r.question_id] = { maturity: r.maturity, evidence: r.evidence, updated_at: r.updated_at }; });
+    rows.forEach((r) => { responses[r.question_id] = { maturity: r.maturity, evidence: r.evidence, na: !!r.not_applicable, updated_at: r.updated_at }; });
     res.json({ client, responses });
   } catch (err) {
     next(err);

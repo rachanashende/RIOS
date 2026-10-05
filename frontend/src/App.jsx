@@ -10,7 +10,7 @@ import {
   Compass, AlertTriangle, Gavel,
 } from "lucide-react";
 import { api, getToken, getStoredUser, setSession, clearSession, setIdeasSession, setRiseSession, setIndexSession } from "./api.js";
-import { computeScores, tierFor, fmtMoneyRange, computeCategoryScores } from "./scoring.js";
+import { computeScores, tierFor, fmtMoneyRange, computeCategoryScores, isAnswered } from "./scoring.js";
 import { BRAND } from "./brand.js";
 import IdeasRivApp from "./IdeasRiv.jsx";
 import ErrorBoundary from "./ErrorBoundary.jsx";
@@ -840,13 +840,15 @@ function SaveIndicator({ status, onRetry }) {
 function AssessmentView({ questions, modules, responses, setResponses, moduleIdx, setModuleIdx, saveStatus, onRetrySave }) {
   const module = modules[moduleIdx];
   const qs = useMemo(() => questions.filter((q) => q.module === module), [questions, module]);
-  const totalAnswered = Object.values(responses).filter((r) => r && r.maturity != null).length;
+  const totalAnswered = Object.values(responses).filter(isAnswered).length;
 
   // Land at the top of the new module's questions, whether moduleIdx changed
   // via Previous/Next or clicking a module directly in the sidebar list.
   useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [moduleIdx]);
 
-  function setMaturity(id, val) { setResponses((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), maturity: val } })); }
+  function setMaturity(id, val) { setResponses((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), maturity: val, na: false } })); }
+  // A6: toggle "Not applicable" -- the question is then left out of the score
+  function toggleNA(id) { setResponses((prev) => { const cur = prev[id] || {}; return { ...prev, [id]: cur.na ? { ...cur, na: false } : { ...cur, maturity: null, na: true } }; }); }
   function setEvidence(id, val) { setResponses((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), evidence: val } })); }
   function randomFillModule() {
     setResponses((prev) => { const next = { ...prev }; qs.forEach((q) => { next[q.id] = { ...(next[q.id] || {}), maturity: Math.floor(Math.random() * 5) }; }); return next; });
@@ -869,7 +871,7 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
     }
   }
 
-  const moduleAnswered = qs.filter((q) => responses[q.id] && responses[q.id].maturity != null).length;
+  const moduleAnswered = qs.filter((q) => isAnswered(responses[q.id])).length;
 
   return (
     <div style={{ maxWidth: 1180, margin: "0 auto", padding: "36px 24px 90px", display: "flex", gap: 28 }}>
@@ -883,7 +885,7 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
           <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 480, overflowY: "auto", paddingRight: 4 }}>
             {modules.map((m, i) => {
               const modQs = questions.filter((q) => q.module === m);
-              const ans = modQs.filter((q) => responses[q.id] && responses[q.id].maturity != null).length;
+              const ans = modQs.filter((q) => isAnswered(responses[q.id])).length;
               const done = ans === modQs.length;
               return (
                 <button key={m} onClick={() => setModuleIdx(i)} style={{ display: "flex", alignItems: "center", gap: 8, textAlign: "left", border: "none", cursor: "pointer", background: i === moduleIdx ? "#fff" : "transparent", borderRadius: 8, padding: "8px 10px", boxShadow: i === moduleIdx ? `0 0 0 1px ${BRAND.line}` : "none" }}>
@@ -931,7 +933,7 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
                 <div style={{ fontFamily: "'Newsreader',Georgia,serif", fontStyle: "italic", fontSize: 13, color: "#8a8480", marginTop: 8, lineHeight: 1.5 }}>{q.aiAngle}</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6, marginTop: 16 }}>
                   {MATURITY_LABELS.map((ml) => {
-                    const active = r && r.maturity === ml.v;
+                    const active = r && !r.na && r.maturity === ml.v;
                     return (
                       <button key={ml.v} onClick={() => setMaturity(q.id, ml.v)} title={ml.desc} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "9px 4px", borderRadius: 9, cursor: "pointer", border: `1.5px solid ${active ? BRAND.coral : BRAND.line}`, background: active ? BRAND.coral : "#fff", transition: "all .12s" }}>
                         <span style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 13, color: active ? "#fff" : BRAND.ink }}>{ml.v}</span>
@@ -939,6 +941,10 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
                       </button>
                     );
                   })}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+                  <button onClick={() => toggleNA(q.id)} title="This doesn't apply to your business. The question is left out of your score instead of counting as 0." style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "6px 12px", borderRadius: 8, cursor: "pointer", border: `1.5px solid ${r && r.na ? BRAND.ink : BRAND.line}`, background: r && r.na ? BRAND.ink : "#fff", color: r && r.na ? "#fff" : "#7A746F" }}>{r && r.na ? "✓ Not applicable" : "Not applicable"}</button>
+                  {r && r.na && <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>Left out of your score. A short reason below helps RIV review it.</span>}
                 </div>
                 <input value={(r && r.evidence) || ""} onChange={(e) => setEvidence(q.id, e.target.value)} placeholder="Evidence / source note (kept with your scorecard)" style={{ width: "100%", marginTop: 12, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: "9px 11px", boxSizing: "border-box", background: BRAND.cream, color: BRAND.ink }} />
               </div>
@@ -1043,7 +1049,8 @@ function DashboardView({ questions, modules, responses, setView, user, viewingCl
     );
   }
 
-  const chartData = [...scores.moduleScores].sort((a, b) => a.score - b.score);
+  // A6: a module whose questions are all "Not applicable" has nothing to score, so it is left off the chart.
+  const chartData = [...scores.moduleScores].filter((d) => !(d.max === 0 && d.na > 0)).sort((a, b) => a.score - b.score);
 
   return (
     <div style={{ maxWidth: 1180, margin: "0 auto", padding: "36px 24px 90px" }}>
@@ -1053,6 +1060,7 @@ function DashboardView({ questions, modules, responses, setView, user, viewingCl
           {isAdminViewing && lastUpdated && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F", marginTop: 4 }}>Last updated {fmtDateTime(lastUpdated)} · {scores.answeredAll} of {scores.totalAll} questions answered</div>}
           <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginTop: 4 }}>
             {scores.answeredAll} of {scores.totalAll} questions scored
+            {scores.naAll > 0 && ` · ${scores.naAll} marked not applicable (left out of the score)`}
             {scores.answeredAll < scores.totalAll && " — unscored questions currently count as 0 toward the running total"}
           </div>
         </div>
@@ -1107,7 +1115,7 @@ function DashboardView({ questions, modules, responses, setView, user, viewingCl
           // SC6: only name an exposure when there is something to compare. Pillars with no answers
           // are "not started", not "weakest"; equal scores are reported as a tie; a partial audit is
           // labelled as such.
-          const started = categoryScores.filter((c) => c.answered > 0);
+          const started = categoryScores.filter((c) => c.answered > 0 && c.applicable);
           if (started.length === 0) return null;
           const lowest = Math.min(...started.map((c) => Math.round(c.score)));
           const weakest = started.filter((c) => Math.round(c.score) === lowest);
@@ -1172,8 +1180,9 @@ function fmtDateTime(iso) {
 function AdminEvidenceSection({ questions, modules, responses }) {
   const [evidenceOnly, setEvidenceOnly] = useState(false);
   const mono = "'Poppins',sans-serif";
-  const answeredCount = questions.filter((q) => responses[q.id] && responses[q.id].maturity != null).length;
-  const withEvidence = questions.filter((q) => responses[q.id] && responses[q.id].maturity != null && (responses[q.id].evidence || "").trim()).length;
+  const answeredCount = questions.filter((q) => isAnswered(responses[q.id])).length;
+  const naCount = questions.filter((q) => responses[q.id] && responses[q.id].na).length;
+  const withEvidence = questions.filter((q) => isAnswered(responses[q.id]) && (responses[q.id].evidence || "").trim()).length;
   return (
     <div style={{ marginTop: 40 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 6 }}>
@@ -1182,9 +1191,9 @@ function AdminEvidenceSection({ questions, modules, responses }) {
           <input type="checkbox" checked={evidenceOnly} onChange={(e) => setEvidenceOnly(e.target.checked)} /> Only questions with evidence
         </label>
       </div>
-      <div style={{ fontFamily: mono, fontSize: 12.5, color: "#9B958F", marginBottom: 14 }}>{answeredCount} answered · {withEvidence} with an evidence note. Read-only — this is what the client entered.</div>
+      <div style={{ fontFamily: mono, fontSize: 12.5, color: "#9B958F", marginBottom: 14 }}>{answeredCount} answered · {withEvidence} with an evidence note{naCount > 0 ? ` · ${naCount} marked not applicable` : ""}. Read-only — this is what the client entered.</div>
       {modules.map((m) => {
-        const rows = questions.filter((q) => q.module === m && responses[q.id] && responses[q.id].maturity != null && (!evidenceOnly || (responses[q.id].evidence || "").trim()));
+        const rows = questions.filter((q) => q.module === m && isAnswered(responses[q.id]) && (!evidenceOnly || (responses[q.id].evidence || "").trim()));
         if (rows.length === 0) return null;
         return (
           <details key={m} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, background: "#fff", marginBottom: 10, padding: "10px 16px" }}>
@@ -1196,7 +1205,7 @@ function AdminEvidenceSection({ questions, modules, responses }) {
                   <div key={q.id} style={{ borderTop: `1px solid ${BRAND.line}`, padding: "10px 0" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                       <div style={{ fontFamily: mono, fontSize: 13, color: BRAND.ink, lineHeight: 1.45 }}><strong>{q.submodule}</strong> — {q.q}</div>
-                      <div style={{ fontFamily: mono, fontWeight: 700, fontSize: 11.5, color: BRAND.coralDark, background: "#FCEEE1", borderRadius: 999, padding: "3px 10px", whiteSpace: "nowrap", height: "fit-content" }}>Maturity {r.maturity}/4</div>
+                      <div style={{ fontFamily: mono, fontWeight: 700, fontSize: 11.5, color: BRAND.coralDark, background: "#FCEEE1", borderRadius: 999, padding: "3px 10px", whiteSpace: "nowrap", height: "fit-content" }}>{r.na ? "Not applicable" : `Maturity ${r.maturity}/4`}</div>
                     </div>
                     <div style={{ fontFamily: mono, fontSize: 12.5, color: (r.evidence || "").trim() ? "#4A4642" : "#B7B2AE", marginTop: 4, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{(r.evidence || "").trim() || "No evidence note"}</div>
                     {r.updated_at && <div style={{ fontFamily: mono, fontSize: 11, color: "#B7B2AE", marginTop: 3 }}>Last changed {fmtDateTime(r.updated_at)}</div>}
