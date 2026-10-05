@@ -13,7 +13,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Leaders do not use AI in their own work and show no interest.",
+      "A few leaders try AI tools occasionally, with no regular habit.",
+      "Several leaders use AI for routine tasks like summaries and drafting.",
+      "Most leaders use AI daily in decisions and reviews, and share examples openly.",
+      "Leaders run their work through AI daily, model new uses, and lead by example."
+    ]
   },
   {
     "id": 2,
@@ -29,7 +36,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No money is set aside for AI, and none is planned.",
+      "AI spend happens case by case, funded from other teams' budgets.",
+      "A small AI budget exists but is part of the IT budget.",
+      "A named AI budget line with an owner is set and reviewed yearly.",
+      "AI budget is its own line, shifted continually toward initiatives with proven returns."
+    ]
   },
   {
     "id": 3,
@@ -45,7 +59,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "The board never discusses AI strategy or risk.",
+      "AI comes up at board meetings only when someone raises it.",
+      "The board reviews AI occasionally, usually once a year or after an incident.",
+      "The board reviews AI strategy and risk every quarter with a standard report.",
+      "The board gets live AI performance and risk dashboards and acts on them."
+    ]
   },
   {
     "id": 4,
@@ -61,7 +82,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Corporate strategy does not mention AI at all.",
+      "AI appears as scattered pilots with no link to strategy.",
+      "Strategy mentions AI, but pilots are only loosely tied to its goals.",
+      "AI is a named strategic pillar with owners, targets and funded programs.",
+      "AI drives strategy; results from AI programs feed back into strategic planning."
+    ]
   },
   {
     "id": 5,
@@ -77,7 +105,14 @@
     "revHigh": 25000000.0,
     "costLow": 7500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Stores run separate billing systems and sales are only combined later.",
+      "Some devices share data, but syncing is slow and often fails.",
+      "Most devices sync through scheduled updates, with occasional gaps or delays.",
+      "All devices update instantly and automatically, with alerts when sync breaks.",
+      "Synced transaction data feeds AI that flags fraud and suggests checkout upsells."
+    ]
   },
   {
     "id": 6,
@@ -93,7 +128,14 @@
     "revHigh": 20000000.0,
     "costLow": 10000000.0,
     "costHigh": 10000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Checkouts regularly slow or freeze at peak times, and nothing is done.",
+      "Slowdowns at peak are common and staff fix them case by case.",
+      "Checkout is usually fast at peak, though busy days still cause delays.",
+      "Peak load is tested and monitored, with automatic fixes keeping checkout fast.",
+      "AI predicts peak load and tunes the system, while spotting fraud and offering upsells."
+    ]
   },
   {
     "id": 7,
@@ -109,7 +151,14 @@
     "revHigh": 17500000.0,
     "costLow": 25000000.0,
     "costHigh": 25000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Billing only happens at fixed counters; no mobile checkout exists.",
+      "A few staff take payments on phones or tablets, in an informal way.",
+      "Mobile billing works in some stores or areas, with limited features.",
+      "Staff can bill anywhere on the floor in all stores with full features.",
+      "Mobile checkout uses AI to flag odd transactions and suggest add-ons while billing."
+    ]
   },
   {
     "id": 8,
@@ -125,7 +174,14 @@
     "revHigh": 12500000.0,
     "costLow": 22500000.0,
     "costHigh": 22500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Queues are not measured or managed; long waits are accepted.",
+      "Staff open extra lanes when they notice queues, with no set rule.",
+      "Queue targets exist and managers check them, but lanes are opened by hand.",
+      "Queue lengths are tracked automatically with alerts that prompt opening more lanes.",
+      "Cameras measure queues live and AI triggers lane and staffing changes in real time."
+    ]
   },
   {
     "id": 9,
@@ -141,7 +197,14 @@
     "revHigh": 30000000.0,
     "costLow": 25000000.0,
     "costHigh": 25000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Peak throughput is not tracked and no one plans for busy times.",
+      "Staff improvise at busy times; customers-per-hour is rarely checked.",
+      "Throughput is reported after the fact and used to adjust peak staffing manually.",
+      "Throughput is tracked live and lanes and staff adjust to set peak plans.",
+      "AI watches queues live and adjusts lanes and staffing to keep throughput high."
+    ]
   },
   {
     "id": 10,
@@ -157,7 +220,14 @@
     "revHigh": 22500000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Promotions are printed or set once and never change in store.",
+      "Staff change promotions occasionally, without using demand or customer data.",
+      "Screens show scheduled promotions, updated by hand from sales reports.",
+      "Promotions change automatically on rules such as stock, time or day.",
+      "AI picks content live using footfall, weather and stock, and learns what converts."
+    ]
   },
   {
     "id": 11,
@@ -173,7 +243,14 @@
     "revHigh": 10000000.0,
     "costLow": 12500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Out-of-stocks are found only when customers complain or staff happen to see.",
+      "Staff spot empty shelves on walks, with no regular check.",
+      "Scheduled shelf checks find gaps, usually hours or days after they appear.",
+      "Sensors or system alerts flag gaps soon after they appear on the shelf.",
+      "Cameras or sensors with AI detect empty shelves instantly and trigger restocking."
+    ]
   },
   {
     "id": 12,
@@ -189,7 +266,14 @@
     "revHigh": 37500000.0,
     "costLow": 25000000.0,
     "costHigh": 25000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Empty shelves are left until stock is next replenished; lost sales go unnoticed.",
+      "Staff refill shelves when they notice, with no tracking of lost sales.",
+      "Regular checks catch most gaps, and staff refill from the backroom by hand.",
+      "Alerts send restock tasks quickly, and lost sales from gaps are measured.",
+      "AI spots shelf gaps and layout errors early, auto-assigns fixes and learns from lost sales."
+    ]
   },
   {
     "id": 13,
@@ -205,7 +289,14 @@
     "revHigh": 37500000.0,
     "costLow": 12500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "There is no data on how customers move through the store.",
+      "Staff estimate busy areas by eye or use simple door counters.",
+      "Door counts are reviewed occasionally, and layout changes rely on judgment.",
+      "Counters track traffic by area, and layout and hours are reviewed regularly.",
+      "Cameras with AI map customer paths and predict traffic to tune layout and staffing."
+    ]
   },
   {
     "id": 14,
@@ -221,7 +312,14 @@
     "revHigh": 30000000.0,
     "costLow": 7500000.0,
     "costHigh": 7500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Schedules are fixed or set without reference to expected store traffic.",
+      "Managers build schedules from gut feel, often leaving shifts over or under covered.",
+      "Schedules use past sales patterns in spreadsheets and are adjusted by hand.",
+      "Software builds schedules from forecast demand, and managers make small edits.",
+      "AI forecasts footfall and builds schedules automatically, learning from each week's results."
+    ]
   },
   {
     "id": 15,
@@ -237,7 +335,14 @@
     "revHigh": 22500000.0,
     "costLow": 12500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Staff levels are not linked to service quality; shortages go unnoticed.",
+      "Managers cover gaps on the day, and service varies from shift to shift.",
+      "Schedules set minimum coverage for key areas, tracked through occasional reviews.",
+      "Coverage rules and service measures are built into scheduling and checked often.",
+      "AI links forecast traffic to service results and adjusts schedules to protect service."
+    ]
   },
   {
     "id": 16,
@@ -253,7 +358,14 @@
     "revHigh": 12500000.0,
     "costLow": 17500000.0,
     "costHigh": 17500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Associates have no tools to check stock or help customers on the floor.",
+      "Associates check stock by phoning the backroom or using a shared terminal.",
+      "Some stores have handhelds for stock lookup, with limited features or accuracy.",
+      "All associates have handhelds with live stock, pricing and customer information.",
+      "Associates ask an AI assistant in plain language for stock answers and customer advice."
+    ]
   },
   {
     "id": 17,
@@ -269,7 +381,14 @@
     "revHigh": 30000000.0,
     "costLow": 17500000.0,
     "costHigh": 17500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Losses are found only at stocktake, with no tracing of causes.",
+      "Losses are investigated after big incidents, using paper records or memory.",
+      "Regular stock counts reveal losses, and managers trace causes by hand.",
+      "Systems flag stock and sales mismatches daily and help trace causes quickly.",
+      "AI watches cameras and sales and stock data live to flag likely loss as it happens."
+    ]
   },
   {
     "id": 18,
@@ -285,7 +404,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Store managers have no digital decision support for daily operations.",
+      "Managers use basic reports or chat tools on their own, with no set approach.",
+      "Managers get dashboards and alerts, but still decide priorities and fixes themselves.",
+      "A manager tool recommends tasks and staffing based on rules and live data.",
+      "An AI copilot proposes and prioritizes decisions for managers, and improves from outcomes."
+    ]
   },
   {
     "id": 19,
@@ -301,7 +427,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No store offers walk-out checkout and none is planned.",
+      "Walk-out checkout is discussed or tested informally in a single location.",
+      "A pilot store offers walk-out checkout with staff stepping in often.",
+      "Walk-out checkout runs in several stores with few errors and little staff help.",
+      "AI-driven walk-out checkout runs at scale and keeps improving accuracy and coverage."
+    ]
   },
   {
     "id": 20,
@@ -317,7 +450,14 @@
     "revHigh": 35000000.0,
     "costLow": 15000000.0,
     "costHigh": 15000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Any storefront change needs developers and long waits.",
+      "Small text or banner edits are possible; other changes need a developer.",
+      "Marketing can change some content and layouts; bigger changes need developers.",
+      "Marketing owns most storefront changes using reusable blocks and templates.",
+      "AI personalizes pages and drafts content or layouts, which the team tests and refines."
+    ]
   },
   {
     "id": 21,
@@ -333,7 +473,14 @@
     "revHigh": 25000000.0,
     "costLow": 10000000.0,
     "costHigh": 10000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No experiments are run on the storefront.",
+      "Occasional one-off tests happen, with unreliable setup and unclear results.",
+      "Tests run with a testing tool, but each takes weeks to set up and read.",
+      "Teams run many tests regularly with a standard process and clear results.",
+      "AI generates variants, runs tests continuously and applies winning changes automatically."
+    ]
   },
   {
     "id": 22,
@@ -349,7 +496,14 @@
     "revHigh": 7500000.0,
     "costLow": 22500000.0,
     "costHigh": 22500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Commerce systems are separate and share data only by manual file transfers.",
+      "A few systems are linked through one-off connections that often break.",
+      "Core systems are connected, but some data is still shared manually.",
+      "Systems share data through standard connections, giving a single view of customers and orders.",
+      "Unified systems let teams add AI services like search and recommendations quickly."
+    ]
   },
   {
     "id": 23,
@@ -365,7 +519,14 @@
     "revHigh": 30000000.0,
     "costLow": 17500000.0,
     "costHigh": 17500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Launching a new channel takes many months and heavy custom work.",
+      "New channels take several months and rely on custom work each time.",
+      "New channels launch in a few months using partly reusable connections.",
+      "New channels launch in weeks by reusing ready connections and a common setup.",
+      "Reusable connections let new channels launch quickly with AI services plugged in."
+    ]
   },
   {
     "id": 24,
@@ -381,7 +542,14 @@
     "revHigh": 7500000.0,
     "costLow": 15000000.0,
     "costHigh": 15000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Product data differs widely between channels, with no single source.",
+      "Teams keep their own product data, and conflicts are fixed only when noticed.",
+      "A central product list exists, but channel updates are done by hand.",
+      "Product data is managed centrally and pushed to all channels automatically.",
+      "AI drafts and checks product data, keeping every channel complete and consistent."
+    ]
   },
   {
     "id": 25,
@@ -397,7 +565,14 @@
     "revHigh": 25000000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Product data is incomplete, and returns from wrong sizes or images are untracked.",
+      "Product data is checked only after customers complain or return items.",
+      "Key product details are filled in, and return reasons are reviewed occasionally.",
+      "Product data standards are enforced, and return reasons guide data fixes regularly.",
+      "AI finds data gaps behind returns and enriches sizes, descriptions and images automatically."
+    ]
   },
   {
     "id": 26,
@@ -413,7 +588,14 @@
     "revHigh": 35000000.0,
     "costLow": 15000000.0,
     "costHigh": 15000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Order status is known only by checking each channel separately.",
+      "Orders from different channels are combined manually, often a day later.",
+      "Most channels feed one order view, updated in batches during the day.",
+      "All channel orders appear in one view in real time, with delay alerts.",
+      "AI routes each order to the best fulfilment source using live order visibility."
+    ]
   },
   {
     "id": 27,
@@ -429,7 +611,14 @@
     "revHigh": 27500000.0,
     "costLow": 15000000.0,
     "costHigh": 15000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Products are listed on marketplaces by hand, one at a time.",
+      "Staff upload listings using spreadsheets, with no standard process.",
+      "Listings are uploaded in bulk with templates, but mapping and fixes are manual.",
+      "Listings are created and updated automatically from the product catalog.",
+      "AI maps the catalog to each marketplace and tunes listings for better results."
+    ]
   },
   {
     "id": 28,
@@ -445,7 +634,14 @@
     "revHigh": 30000000.0,
     "costLow": 5000000.0,
     "costHigh": 5000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Marketplace orders are copied into systems by hand, with frequent errors.",
+      "Orders are imported at set times, and mismatches are fixed manually.",
+      "Orders sync automatically for most marketplaces, with some regular errors.",
+      "Orders sync accurately in near real time, with error alerts and monitoring.",
+      "AI catches and corrects sync errors and mismatches, keeping marketplace orders accurate."
+    ]
   },
   {
     "id": 29,
@@ -461,7 +657,14 @@
     "revHigh": 10000000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Marketplace listings, prices and stock are never pushed; sellers update nothing",
+      "Staff edit marketplace listings by hand, so prices and stock lag by days",
+      "Scheduled uploads update marketplaces daily; some channels still need manual fixes",
+      "Changes sync to all marketplaces within minutes through automated integrations",
+      "AI maps catalogs and tunes listings per marketplace; updates flow in near real time"
+    ]
   },
   {
     "id": 30,
@@ -477,7 +680,14 @@
     "revHigh": 20000000.0,
     "costLow": 10000000.0,
     "costHigh": 10000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No catalog feeds are produced; products are not published to platforms",
+      "Feeds are built by hand in spreadsheets for each platform, taking days",
+      "Feed templates exist per platform, but data cleanup and uploads stay manual",
+      "One central catalog generates and publishes every platform feed automatically",
+      "AI enriches product data and catches feed errors before every publish"
+    ]
   },
   {
     "id": 31,
@@ -493,7 +703,14 @@
     "revHigh": 35000000.0,
     "costLow": 10000000.0,
     "costHigh": 10000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Catalog updates are not applied to platforms; mismatches go unnoticed",
+      "Updates are applied inconsistently; errors surface only when customers complain",
+      "Updates usually apply, but failures are found and fixed manually",
+      "Automated updates with error alerts keep platforms consistent with few failures",
+      "AI validates updates before syndication and self-corrects errors across platforms"
+    ]
   },
   {
     "id": 32,
@@ -509,7 +726,14 @@
     "revHigh": 10000000.0,
     "costLow": 12500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No tracking of goods inside warehouses; locations are known only by memory",
+      "Stock locations are tracked on paper or spreadsheets, often out of date",
+      "A system records goods by location, with periodic manual counts to correct it",
+      "Scanning gives live goods location in every warehouse, with few discrepancies",
+      "AI flags lost or misplaced goods and keeps live tracking accurate across sites"
+    ]
   },
   {
     "id": 33,
@@ -525,7 +749,14 @@
     "revHigh": 32500000.0,
     "costLow": 22500000.0,
     "costHigh": 22500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Picking accuracy is not measured; wrong items ship regularly",
+      "Pickers work from memory or paper lists; errors are fixed after complaints",
+      "Pick lists guide staff and errors are counted, but checks are manual",
+      "Scan-verified picking keeps errors low and is tracked against targets",
+      "Computer vision verifies each pick and AI learns from errors to cut them"
+    ]
   },
   {
     "id": 34,
@@ -541,7 +772,14 @@
     "revHigh": 22500000.0,
     "costLow": 5000000.0,
     "costHigh": 5000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Items are stored wherever space is free; no slotting logic exists",
+      "Fast sellers are placed sensibly by experienced staff, without rules or records",
+      "Slotting rules are set by hand and reviewed occasionally",
+      "Slotting follows sales data and is re-run regularly with system support",
+      "AI continuously re-slots SKUs based on demand and pick patterns"
+    ]
   },
   {
     "id": 35,
@@ -557,7 +795,14 @@
     "revHigh": 10000000.0,
     "costLow": 10000000.0,
     "costHigh": 10000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Received goods sit wherever convenient; no putaway process exists",
+      "Putaway depends on individual staff judgment and often takes days",
+      "Receiving has a defined process, but locations are chosen and recorded manually",
+      "The system directs putaway to set locations, with scanning and fast turnaround",
+      "AI picks optimal putaway locations in real time, shortening time to sellable stock"
+    ]
   },
   {
     "id": 36,
@@ -573,7 +818,14 @@
     "revHigh": 30000000.0,
     "costLow": 7500000.0,
     "costHigh": 7500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Store stock levels are unknown to others; stockouts and overstock are routine",
+      "Stores share stock by phone or email, so gaps are found late",
+      "Central stock reports updated daily help, but stockouts and overstock still occur",
+      "Near real-time stock across stores triggers transfers and cuts stockouts and overstock",
+      "AI optimises stock across locations in real time and flags anomalies and shrinkage"
+    ]
   },
   {
     "id": 37,
@@ -589,7 +841,14 @@
     "revHigh": 32500000.0,
     "costLow": 5000000.0,
     "costHigh": 5000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No consolidated stock view; each store or warehouse keeps its own counts",
+      "Stock figures come from manual counts and are often outdated or wrong",
+      "One system holds stock for most sites, updated in batches with some errors",
+      "Stock across all stores and warehouses is accurate and updated near real time",
+      "AI detects stock record errors and shrinkage and corrects the view automatically"
+    ]
   },
   {
     "id": 38,
@@ -605,7 +864,14 @@
     "revHigh": 17500000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No demand forecasts; buying and stocking are based on instinct",
+      "Forecasts are rough spreadsheet estimates; misses cause frequent lost sales or excess",
+      "Statistical forecasts exist at summary level, with manual adjustments and sizable errors",
+      "Forecasts by product and location are measured and drive reorders, with modest errors",
+      "Machine learning forecasts continuously retrain and replace fixed reorder points"
+    ]
   },
   {
     "id": 39,
@@ -621,7 +887,14 @@
     "revHigh": 12500000.0,
     "costLow": 25000000.0,
     "costHigh": 25000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Return costs are not tracked; returns are handled ad hoc",
+      "Return costs are known roughly, with no target or active control",
+      "Return costs are tracked and reviewed, with manual rules to limit abuse",
+      "Return rules and routing are automated, and costs are managed against targets",
+      "AI predicts return rates by SKU and flags fraud to keep costs down"
+    ]
   },
   {
     "id": 40,
@@ -637,7 +910,14 @@
     "revHigh": 30000000.0,
     "costLow": 7500000.0,
     "costHigh": 7500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Refunds and restocking have no process or timeline",
+      "Refunds and restocking happen when staff get to them, often taking weeks",
+      "A defined process exists, but refunds and restocking are approved manually",
+      "Refunds and restocking trigger automatically on return receipt, within set timelines",
+      "AI fast-tracks trusted returns and routes items to resale automatically, within hours"
+    ]
   },
   {
     "id": 41,
@@ -653,7 +933,14 @@
     "revHigh": 37500000.0,
     "costLow": 5000000.0,
     "costHigh": 5000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Drivers choose their own routes; late and failed deliveries are not tracked",
+      "Routes are planned by hand from local knowledge; failures are frequent",
+      "Route planning software helps, but dispatchers adjust routes and slots manually",
+      "Automated route planning with delivery windows keeps most deliveries on time",
+      "AI optimises routes live and predicts ETAs to prevent late and failed deliveries"
+    ]
   },
   {
     "id": 42,
@@ -669,7 +956,14 @@
     "revHigh": 37500000.0,
     "costLow": 12500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Neither you nor customers can see where a delivery is",
+      "Customers must call for updates; staff check with drivers by phone",
+      "Status updates arrive at set milestones, but without live location",
+      "Live tracking is visible to staff and customers through a tracking link",
+      "AI predicts ETAs and proactively alerts customers about delays in real time"
+    ]
   },
   {
     "id": 43,
@@ -685,7 +979,14 @@
     "revHigh": 35000000.0,
     "costLow": 10000000.0,
     "costHigh": 10000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Dark stores or micro-fulfilment sites are not in place or planned",
+      "A site can be launched only through heavy custom work, taking months",
+      "A repeatable launch process exists, but setup and daily running stay manual",
+      "Standard templates and integrated systems let you open a site in weeks",
+      "AI guides site selection, stocking and launch, with operations tuned automatically"
+    ]
   },
   {
     "id": 44,
@@ -701,7 +1002,14 @@
     "revHigh": 12500000.0,
     "costLow": 10000000.0,
     "costHigh": 10000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Dark store stock is not connected to main inventory systems",
+      "Dark store stock is updated manually, so it often differs from main records",
+      "Stock syncs in scheduled batches, with occasional mismatches fixed by hand",
+      "Dark stores sync with main inventory in near real time, with few mismatches",
+      "AI reconciles stock across sites and allocates inventory using hyperlocal demand"
+    ]
   },
   {
     "id": 45,
@@ -717,7 +1025,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Planning uses no demand forecasting beyond gut feel; no live signals are used",
+      "Teams glance at recent sales and weather and adjust plans by hand",
+      "Live sales data feeds reports, but forecasts still rely mostly on history",
+      "Live sales and some external signals adjust short-term forecasts regularly",
+      "Demand-sensing models ingest POS, weather and social signals and react continuously"
+    ]
   },
   {
     "id": 46,
@@ -733,7 +1048,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Quality and damage checks are not done on incoming or outgoing goods",
+      "Staff eyeball goods occasionally; findings are inconsistent and unrecorded",
+      "Manual inspection follows a checklist, with results recorded and some sampling",
+      "Cameras or scanners support inspection at key points, with human review",
+      "Computer vision inspects goods automatically and improves its detection over time"
+    ]
   },
   {
     "id": 47,
@@ -749,7 +1071,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No simulation or modelling of the supply chain or store network",
+      "Scenarios are tested in one-off spreadsheets after problems have happened",
+      "Static models test a few scenarios, built manually and refreshed rarely",
+      "A live model of the network is used for regular scenario planning",
+      "An AI-driven digital twin tests disruptions and demand shocks before they occur"
+    ]
   },
   {
     "id": 48,
@@ -765,7 +1094,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No robotics or automation in warehouses; all handling is manual",
+      "A robotics pilot is discussed or tested in a single area",
+      "Basic automation such as conveyors or sorters runs in some warehouses",
+      "Robots handle picking or sorting in key warehouses, integrated with the WMS",
+      "AI-guided robots coordinate across warehouses and keep improving their performance"
+    ]
   },
   {
     "id": 49,
@@ -781,7 +1117,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Every replenishment order is created and sent by hand",
+      "Staff raise orders from stock checks and chase suppliers manually",
+      "Reorder suggestions are generated, but each needs manual approval and confirmation",
+      "Routine orders go to suppliers automatically; only exceptions need approval",
+      "The loop closes with no human step; AI adjusts orders and confirms with suppliers"
+    ]
   },
   {
     "id": 50,
@@ -797,7 +1140,14 @@
     "revHigh": 20000000.0,
     "costLow": 10000000.0,
     "costHigh": 10000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Each payment provider runs separately with no shared connection",
+      "Providers are linked individually with manual reconciliation across them",
+      "Providers connect to a basic gateway, with gaps in routing and reporting",
+      "One unified gateway handles all providers with shared routing and reporting",
+      "AI fraud scoring runs across all payment flows and routes payments intelligently"
+    ]
   },
   {
     "id": 51,
@@ -813,7 +1163,14 @@
     "revHigh": 30000000.0,
     "costLow": 7500000.0,
     "costHigh": 7500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Payment failures are not tracked; customers report problems",
+      "Failures happen often and are fixed case by case after complaints",
+      "Failure rates are monitored, with manual retries and reviews of delays",
+      "Automated retries and failover keep transactions completing reliably",
+      "AI predicts and prevents failures and delays, improving success rates over time"
+    ]
   },
   {
     "id": 52,
@@ -829,7 +1186,14 @@
     "revHigh": 7500000.0,
     "costLow": 22500000.0,
     "costHigh": 22500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No loyalty programme exists or is planned",
+      "A basic points or stamp scheme exists, rarely updated or measured",
+      "The programme has tiers and offers refreshed manually, with limited repeat-purchase tracking",
+      "The programme is refreshed regularly and measured for repeat purchase impact",
+      "AI selects rewards and triggers offers when customers risk lapsing"
+    ]
   },
   {
     "id": 53,
@@ -845,7 +1209,14 @@
     "revHigh": 7500000.0,
     "costLow": 12500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Every member gets the same reward; nothing is tailored",
+      "Staff occasionally send special rewards to some customers by hand",
+      "Rewards are segmented by simple groups such as tier or spend",
+      "Rewards are personalised using purchase history and delivered automatically",
+      "AI picks each customer's best reward and keeps learning from responses"
+    ]
   },
   {
     "id": 54,
@@ -861,7 +1232,14 @@
     "revHigh": 35000000.0,
     "costLow": 15000000.0,
     "costHigh": 15000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Coupons are not used, or are created and tracked entirely by hand",
+      "Staff create codes manually and redemptions are checked after the fact",
+      "A promotion tool issues coupons, but setup and redemption checks are partly manual",
+      "Coupon creation, issuing and redemption run automatically with rules and limits",
+      "AI targets promotions and recommends discount depth that protects margin"
+    ]
   },
   {
     "id": 55,
@@ -877,7 +1255,14 @@
     "revHigh": 15000000.0,
     "costLow": 22500000.0,
     "costHigh": 22500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No promotion rules are defined; each platform does its own thing",
+      "Rules are set separately on each platform and often conflict",
+      "Core rules are shared, but channel differences are managed by hand",
+      "Promotion rules are managed centrally and applied consistently across channels",
+      "AI monitors rule consistency across channels and flags or fixes conflicts automatically"
+    ]
   },
   {
     "id": 56,
@@ -893,7 +1278,14 @@
     "revHigh": 7500000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "BNPL is not offered at checkout and not planned",
+      "BNPL is offered through a manual link or on a single channel",
+      "One BNPL provider is integrated at checkout, with manual reconciliation",
+      "Multiple BNPL providers are integrated smoothly at checkout with automated settlement",
+      "AI credit-risk scoring drives instant approvals and the best BNPL option shown"
+    ]
   },
   {
     "id": 57,
@@ -909,7 +1301,14 @@
     "revHigh": 25000000.0,
     "costLow": 25000000.0,
     "costHigh": 25000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No buy now pay later option at checkout",
+      "BNPL offered but clunky; many shoppers abandon during approval",
+      "BNPL integrated at checkout; approval steps still partly manual with noticeable drop-off",
+      "Streamlined BNPL checkout tracked for drop-off, with mostly automated approvals",
+      "AI credit-risk scoring approves BNPL instantly and tunes offers to cut abandonment"
+    ]
   },
   {
     "id": 58,
@@ -925,7 +1324,14 @@
     "revHigh": 22500000.0,
     "costLow": 17500000.0,
     "costHigh": 17500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Kiosks fixed only after breaking; no maintenance plan",
+      "Staff fix kiosk faults when noticed; downtime varies by store",
+      "Scheduled kiosk servicing with manual fault logs and uneven uptime",
+      "Remote monitoring flags kiosk faults automatically; uptime tracked and consistently high",
+      "AI predicts kiosk failures and auto-schedules repairs, keeping machines almost always available"
+    ]
   },
   {
     "id": 59,
@@ -941,7 +1347,14 @@
     "revHigh": 17500000.0,
     "costLow": 12500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Kiosks give no guidance; shoppers need staff for every problem",
+      "Basic on-screen prompts; staff often step in to help",
+      "Standard guided flows and help button; abandonment reviewed manually",
+      "Well-designed guided flows with attendant alerts and tracked completion rates",
+      "Conversational AI and camera assistance guide shoppers and prevent loss, lifting completion"
+    ]
   },
   {
     "id": 60,
@@ -957,7 +1370,14 @@
     "revHigh": 17500000.0,
     "costLow": 10000000.0,
     "costHigh": 10000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No product suggestions shown at checkout",
+      "Staff or fixed add-on suggestions at checkout, rarely measured",
+      "Rule-based checkout offers for some products, with limited impact tracking",
+      "Automated checkout offers based on basket contents, measured against order value",
+      "ML basket-affinity models serve real-time offers that keep lifting average order value"
+    ]
   },
   {
     "id": 61,
@@ -973,7 +1393,14 @@
     "revHigh": 37500000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Stores are not set up to fulfil any pickup orders",
+      "Some stores handle pickup informally; space and staff vary",
+      "Pickup process and space defined in most stores, run manually",
+      "Most stores have standard pickup procedures, systems and staffing, with readiness measured",
+      "AI forecasts pickup demand to set slot capacity and staffing in each store"
+    ]
   },
   {
     "id": 62,
@@ -989,7 +1416,14 @@
     "revHigh": 10000000.0,
     "costLow": 15000000.0,
     "costHigh": 15000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No click-and-collect pickup service is offered to customers",
+      "Pickup available but unreliable; customers often wait or find orders missing",
+      "Pickup works with order notifications, but handoffs and wait times are inconsistent",
+      "Automated ready-alerts, fast handoff and tracked pickup experience across stores",
+      "AI-planned slots and staffing deliver fast, reliable pickups that improve continuously"
+    ]
   },
   {
     "id": 63,
@@ -1005,7 +1439,14 @@
     "revHigh": 27500000.0,
     "costLow": 12500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Returns not recorded centrally; each store keeps its own",
+      "Some returns logged in spreadsheets or separate systems",
+      "Returns recorded in store and online systems, reconciled manually",
+      "Single system tracks all returns across stores and online in near real time",
+      "AI analyses return data across channels to flag fraud and guide restocking"
+    ]
   },
   {
     "id": 64,
@@ -1021,7 +1462,14 @@
     "revHigh": 7500000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Returned items are not routed back into stock",
+      "Returns restocked by hand when staff remember; delays common",
+      "Defined restock steps in stores; inventory updates manual and slow",
+      "Returns inspected and inventory updated automatically so items resell quickly",
+      "AI predicts best restock location and routes returns to resell fastest"
+    ]
   },
   {
     "id": 65,
@@ -1037,7 +1485,14 @@
     "revHigh": 37500000.0,
     "costLow": 15000000.0,
     "costHigh": 15000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Refunds issued without checking the original order",
+      "Staff check the original order by hand; mismatches frequent",
+      "Refunds usually looked up against the order, with occasional errors",
+      "System matches returns to the original order and refunds automatically and accurately",
+      "AI validates each return against the order and flags suspicious or mismatched refunds"
+    ]
   },
   {
     "id": 66,
@@ -1053,7 +1508,14 @@
     "revHigh": 22500000.0,
     "costLow": 12500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Store staff cannot see online-only products",
+      "Staff look up the website on personal phones or call head office",
+      "Staff can browse the online catalog through a basic tool with gaps",
+      "Staff tools show the full online catalog with live stock and pricing",
+      "AI recommends relevant catalog items to staff and customers during store visits"
+    ]
   },
   {
     "id": 67,
@@ -1069,7 +1531,14 @@
     "revHigh": 25000000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Staff cannot sell items that are not on the shelf",
+      "Staff sometimes help order off-shelf items informally, without a set process",
+      "Staff can place orders for off-shelf items through a manual process",
+      "Integrated tool lets staff order any catalog item for delivery or pickup",
+      "AI suggests the right off-shelf alternatives to staff, boosting sales beyond shelf stock"
+    ]
   },
   {
     "id": 68,
@@ -1085,7 +1554,14 @@
     "revHigh": 30000000.0,
     "costLow": 5000000.0,
     "costHigh": 5000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Cart and wishlist are lost when switching devices",
+      "Customers must log in and rebuild carts or wishlists manually",
+      "Carts and wishlists sync for logged-in customers, with occasional gaps",
+      "Carts and wishlists sync reliably across web, app and store",
+      "AI links devices to one customer and keeps personalised carts and lists continuous"
+    ]
   },
   {
     "id": 69,
@@ -1101,7 +1577,14 @@
     "revHigh": 25000000.0,
     "costLow": 25000000.0,
     "costHigh": 25000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Store browsing is never visible online",
+      "Customers can resume only by remembering or messaging items to themselves",
+      "Store-scanned items can be saved to an account, with manual steps",
+      "Store browsing automatically appears in the customer's online account or cart",
+      "AI links in-store behaviour to online sessions and prompts customers to resume purchase"
+    ]
   },
   {
     "id": 70,
@@ -1117,7 +1600,14 @@
     "revHigh": 37500000.0,
     "costLow": 5000000.0,
     "costHigh": 5000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Customer and product data is lost between devices and visits",
+      "Some history kept per channel but not carried over",
+      "Customer and product history retained in separate systems with partial sharing",
+      "Customer and product history retained and shared consistently across devices and visits",
+      "AI keeps a persistent profile across devices and visits that improves each interaction"
+    ]
   },
   {
     "id": 71,
@@ -1133,7 +1623,14 @@
     "revHigh": 20000000.0,
     "costLow": 7500000.0,
     "costHigh": 7500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Customers must call or visit to find order status",
+      "Status checked per channel; updates are manual and inconsistent",
+      "Single tracking page covers most channels, with delayed updates",
+      "One portal shows live status for all channels and sends automatic updates",
+      "AI predicts delays and proactively alerts customers before they need to ask"
+    ]
   },
   {
     "id": 72,
@@ -1149,7 +1646,14 @@
     "revHigh": 32500000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Customer data sits in separate systems with no linking",
+      "Some data combined manually in occasional reports",
+      "Main sources combined into one profile, with manual matching and gaps",
+      "Automated pipelines unify most customer data into one current 360° profile",
+      "AI resolves identities across sources and continuously refines the unified customer model"
+    ]
   },
   {
     "id": 73,
@@ -1165,7 +1669,14 @@
     "revHigh": 15000000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Customer records updated only when someone remembers",
+      "Staff update records by hand; data often outdated",
+      "Some updates automated from sales systems; interactions and stages logged manually",
+      "Most record, interaction and lifecycle-stage updates happen automatically",
+      "AI keeps records current and moves customers between lifecycle stages automatically"
+    ]
   },
   {
     "id": 74,
@@ -1181,7 +1692,14 @@
     "revHigh": 32500000.0,
     "costLow": 12500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No customer follow-ups after purchase or contact",
+      "Staff follow up occasionally, depending on individual effort",
+      "Standard follow-up templates sent manually or on simple schedules",
+      "Automated follow-ups triggered by customer actions and lifecycle events",
+      "AI picks the next best action and timing for each customer's follow-up"
+    ]
   },
   {
     "id": 75,
@@ -1197,7 +1715,14 @@
     "revHigh": 15000000.0,
     "costLow": 15000000.0,
     "costHigh": 15000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No customer segments are defined or used anywhere",
+      "Segments built occasionally by hand and rarely updated",
+      "Fixed segments such as RFM refreshed on a manual schedule",
+      "Segments refresh automatically on a regular schedule as behaviour changes",
+      "ML segmentation updates in real time as customer behaviour shifts"
+    ]
   },
   {
     "id": 76,
@@ -1213,7 +1738,14 @@
     "revHigh": 17500000.0,
     "costLow": 25000000.0,
     "costHigh": 25000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No way of identifying customers likely to leave",
+      "Staff spot churn by gut feel or lapsed-customer lists",
+      "Basic lapsed-customer reports flag at-risk customers, reviewed manually",
+      "Churn-risk scores generated regularly and used for retention campaigns",
+      "Predictive models score churn risk continuously and trigger tailored retention actions"
+    ]
   },
   {
     "id": 77,
@@ -1229,7 +1761,14 @@
     "revHigh": 27500000.0,
     "costLow": 7500000.0,
     "costHigh": 7500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Customer feedback is not collected in any form",
+      "Feedback collected sporadically and read by a few people",
+      "Feedback gathered regularly and summarised manually, with limited follow-through",
+      "Feedback analysed systematically with tracked actions and replies to customers",
+      "NLP reads open-text feedback, sorts it automatically and closes the loop at scale"
+    ]
   },
   {
     "id": 78,
@@ -1245,7 +1784,14 @@
     "revHigh": 35000000.0,
     "costLow": 22500000.0,
     "costHigh": 22500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No way to sense customer emotion or intent",
+      "Staff judge mood anecdotally; nothing recorded",
+      "Surveys or manual review give delayed sentiment insight",
+      "Sentiment tools score customer messages and calls shortly after they happen",
+      "AI detects emotion and intent live from voice, text or video and adapts responses"
+    ]
   },
   {
     "id": 79,
@@ -1261,7 +1807,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No AI used in customer service",
+      "Basic chatbot answers simple FAQs; agents handle every issue",
+      "Bot handles routine requests and hands off multi-step issues to staff",
+      "AI resolves some multi-step issues with set workflows, escalating exceptions",
+      "AI agents resolve complex multi-step issues end to end and learn from outcomes"
+    ]
   },
   {
     "id": 80,
@@ -1277,7 +1830,14 @@
     "revHigh": 32500000.0,
     "costLow": 12500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Each campaign tool runs alone with no return measured",
+      "Tools used separately; marketing return estimated roughly by hand",
+      "Platforms partly connected; return on spend reported manually",
+      "Connected platforms share data and report return on marketing spend automatically",
+      "AI optimises campaign timing, channel mix and budget across connected platforms"
+    ]
   },
   {
     "id": 81,
@@ -1293,7 +1853,14 @@
     "revHigh": 32500000.0,
     "costLow": 7500000.0,
     "costHigh": 7500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Campaigns go out to everyone at the same time",
+      "Send times chosen by habit, such as weekday mornings",
+      "Send times set by segment using past results, adjusted manually",
+      "Automated send-time rules based on each customer's past engagement",
+      "AI predicts each customer's best moment and channel, learning from responses"
+    ]
   },
   {
     "id": 82,
@@ -1309,7 +1876,14 @@
     "revHigh": 35000000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Same campaign sent to all customers",
+      "Messages tailored occasionally by hand for a few groups",
+      "Campaigns tailored by segment using manual setup and review",
+      "Automated segment-level personalisation with regular testing and refinement",
+      "ML personalises and shifts traffic to winning variants for each customer segment"
+    ]
   },
   {
     "id": 83,
@@ -1325,7 +1899,14 @@
     "revHigh": 12500000.0,
     "costLow": 10000000.0,
     "costHigh": 10000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No testing or personalisation of campaigns",
+      "Occasional tests with unclear results and little follow-up",
+      "Regular A/B tests run manually; personalisation limited to simple rules",
+      "Systematic testing and personalisation with measured uplift in results",
+      "ML-driven testing and personalisation continuously find and apply winning experiences"
+    ]
   },
   {
     "id": 84,
@@ -1341,7 +1922,14 @@
     "revHigh": 7500000.0,
     "costLow": 7500000.0,
     "costHigh": 7500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No offers triggered by customer location",
+      "Staff hand out location-based offers occasionally, such as in-store flyers",
+      "Fixed geo-fence offers near stores, set up and sent manually",
+      "Automated proximity offers by store area, with redemption tracked",
+      "AI tailors proximity offers using location, weather and purchase history signals"
+    ]
   },
   {
     "id": 85,
@@ -1357,7 +1945,14 @@
     "revHigh": 35000000.0,
     "costLow": 17500000.0,
     "costHigh": 17500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No tracking of influencer or affiliate sales; payouts and results are unknown.",
+      "Influencer results tracked in spreadsheets or screenshots; codes used inconsistently, performance rarely reviewed.",
+      "Influencer and affiliate links tracked in one tool, but reporting and payouts are manual.",
+      "Automated tracking of codes and links with live performance dashboards and automatic payouts.",
+      "AI attribution credits influencer-driven conversions across touchpoints and keeps improving partner selection and spend."
+    ]
   },
   {
     "id": 86,
@@ -1373,7 +1968,14 @@
     "revHigh": 20000000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No retargeting; visitors who leave are not followed up.",
+      "Occasional retargeting ads on one platform, with the same message for everyone.",
+      "Retargeting runs on web and social with basic audience rules set manually.",
+      "Automated retargeting sequences triggered by browsing behavior, with tested timing and frequency caps.",
+      "ML picks the sequence, timing and creative per visitor, learning continuously from results."
+    ]
   },
   {
     "id": 87,
@@ -1389,7 +1991,14 @@
     "revHigh": 25000000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Product suggestions are not shown; customers browse without guidance.",
+      "Hand-picked 'featured' or best-seller lists shown to everyone regardless of context.",
+      "Rule-based suggestions like 'bought together', with little regard to context.",
+      "Recommendations adapt to context such as current basket, device, location and season.",
+      "AI recommends in real time using full context and keeps learning from every click and sale."
+    ]
   },
   {
     "id": 88,
@@ -1405,7 +2014,14 @@
     "revHigh": 35000000.0,
     "costLow": 12500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No personalised suggestions; every customer sees the same products.",
+      "Staff or marketers occasionally tailor offers for a few known customers.",
+      "Segment-level suggestions based on past purchases, set up and updated manually.",
+      "Individual recommendations from purchase and browsing history across web, app and email.",
+      "AI builds a one-to-one model per customer, updating in real time and improving continuously."
+    ]
   },
   {
     "id": 89,
@@ -1421,7 +2037,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Creative is made entirely by hand or agency; no generative AI used.",
+      "A few staff try AI tools for copy or images on their own, without guidelines.",
+      "Generative AI used regularly for drafts of copy or images, with manual editing and approval.",
+      "Standard workflow produces copy, images and video variants at scale with brand checks and approvals.",
+      "AI generates, tests and refines creative automatically, learning which versions drive results."
+    ]
   },
   {
     "id": 90,
@@ -1437,7 +2060,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No retail media network; no ads sold on own channels.",
+      "Sponsored placements sold manually to a few brands, priced and placed by hand.",
+      "Ad slots sold through a platform, with rules-based placement and manual bid management.",
+      "Automated auction and placement with reporting for advertisers, tuned by regular analysis.",
+      "AI optimizes placement, bidding and pricing in real time to maximize advertiser results and revenue."
+    ]
   },
   {
     "id": 91,
@@ -1453,7 +2083,14 @@
     "revHigh": 15000000.0,
     "costLow": 25000000.0,
     "costHigh": 25000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Sales data sits in separate systems; reports are assembled by hand, if at all.",
+      "Reports pulled from several sources and combined in spreadsheets, often arriving late.",
+      "Main sales sources feed a shared reporting tool, though some data still needs manual merging.",
+      "All key sales data flows automatically into one trusted source, so reports are always current.",
+      "Unified data lets AI write summaries and answer plain-language questions on sales instantly."
+    ]
   },
   {
     "id": 92,
@@ -1469,7 +2106,14 @@
     "revHigh": 25000000.0,
     "costLow": 12500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No dashboards; insights are rare and take weeks to produce.",
+      "Occasional reports built on request; insights arrive days later and are hard to act on.",
+      "Standard dashboards refreshed daily or weekly; teams still interpret numbers manually.",
+      "Near real-time dashboards with alerts and drill-downs let teams act the same day.",
+      "AI explains changes in plain language, answers questions and recommends actions as data updates."
+    ]
   },
   {
     "id": 93,
@@ -1485,7 +2129,14 @@
     "revHigh": 7500000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Store and online sales are reported separately or not compared at all.",
+      "Store and online figures manually combined in spreadsheets from time to time.",
+      "A shared report shows store and online sales side by side, refreshed on a schedule.",
+      "Unified, automatically updated dashboard compares channels by product, region and period.",
+      "AI flags unusual channel shifts and explains them in narrative form without anyone asking."
+    ]
   },
   {
     "id": 94,
@@ -1501,7 +2152,14 @@
     "revHigh": 20000000.0,
     "costLow": 7500000.0,
     "costHigh": 7500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Inventory turnover is not measured by SKU.",
+      "Turnover checked occasionally for top SKUs using manual stock counts and sales exports.",
+      "SKU turnover reports run regularly, but data is a day or more old.",
+      "Real-time turnover by SKU in dashboards, with thresholds triggering alerts.",
+      "AI proactively flags slow-moving and at-risk SKUs and recommends markdowns or transfers."
+    ]
   },
   {
     "id": 95,
@@ -1517,7 +2175,14 @@
     "revHigh": 32500000.0,
     "costLow": 10000000.0,
     "costHigh": 10000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Turnover is not tracked by store or warehouse.",
+      "A few locations estimate turnover informally; methods differ between sites.",
+      "Turnover reports exist for each location, compiled manually or on a set schedule.",
+      "Automated per-location turnover dashboards compare sites and highlight outliers.",
+      "AI spots at-risk stock at each location and proactively suggests rebalancing or markdowns."
+    ]
   },
   {
     "id": 96,
@@ -1533,7 +2198,14 @@
     "revHigh": 27500000.0,
     "costLow": 17500000.0,
     "costHigh": 17500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No attribution; marketing budget is split by habit or gut feel.",
+      "Channel results judged by last click or platform reports that disagree with each other.",
+      "Rule-based attribution in one tool gives a consistent view, but budget shifts are manual.",
+      "Multi-channel attribution reports regularly guide budget shifts between channels.",
+      "ML multi-touch attribution continuously shows true channel impact and recommends budget allocation."
+    ]
   },
   {
     "id": 97,
@@ -1549,7 +2221,14 @@
     "revHigh": 15000000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Customer lifetime value is not calculated.",
+      "LTV estimated occasionally for the whole customer base using simple averages.",
+      "LTV calculated by cohort or segment in spreadsheets, updated periodically.",
+      "Automated LTV dashboards by cohort and segment guide acquisition and retention decisions.",
+      "Predictive models forecast LTV per cohort and customer, refreshing as behavior changes."
+    ]
   },
   {
     "id": 98,
@@ -1565,7 +2244,14 @@
     "revHigh": 7500000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Decisions are reactive; no forecasts are used to plan growth.",
+      "Occasional forecasts built from last year's sales; opportunities spotted late, if at all.",
+      "Regular forecasts produced manually; teams sometimes act on them ahead of time.",
+      "Statistical forecasts drive planning, with teams acting early on flagged growth opportunities.",
+      "ML forecasting surfaces emerging opportunities early and triggers recommended actions automatically."
+    ]
   },
   {
     "id": 99,
@@ -1581,7 +2267,14 @@
     "revHigh": 20000000.0,
     "costLow": 10000000.0,
     "costHigh": 10000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Systems are not connected; data is re-keyed or stuck in silos.",
+      "A few systems linked through one-off scripts or manual file transfers.",
+      "A central integration platform connects main systems, though some remain disconnected.",
+      "All core systems connect through a managed gateway, with monitoring and shared data.",
+      "AI maps schemas and detects unusual traffic across integrations, keeping silos from reappearing."
+    ]
   },
   {
     "id": 100,
@@ -1597,7 +2290,14 @@
     "revHigh": 20000000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Every new system needs a separate custom build, taking months.",
+      "New integrations are coded case by case, taking weeks and relying on a few people.",
+      "Standard APIs and templates exist, but each new system still needs significant developer effort.",
+      "Reusable connectors and documented APIs let new systems join in days.",
+      "AI-assisted mapping and testing let new systems integrate with minimal effort."
+    ]
   },
   {
     "id": 101,
@@ -1613,7 +2313,14 @@
     "revHigh": 10000000.0,
     "costLow": 7500000.0,
     "costHigh": 7500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Data is copied between POS, ERP, e-commerce and CRM by hand.",
+      "Some syncs run through scheduled file exports; mismatches are found by accident.",
+      "Main systems sync automatically, but errors and mismatches are fixed manually.",
+      "Fully automated syncs with built-in checks and alerts for failed or mismatched records.",
+      "AI reconciles records across systems, detects anomalies and fixes mismatches automatically."
+    ]
   },
   {
     "id": 102,
@@ -1629,7 +2336,14 @@
     "revHigh": 15000000.0,
     "costLow": 7500000.0,
     "costHigh": 7500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Systems are updated rarely; teams see stale data for weeks.",
+      "Data syncs weekly or on request, so stock and customer details are often outdated.",
+      "Syncs run nightly; most data is a day old.",
+      "Key data syncs within minutes, so stock, orders and customers stay current.",
+      "Real-time sync across all systems, with AI monitoring delays and fixing them proactively."
+    ]
   },
   {
     "id": 103,
@@ -1645,7 +2359,14 @@
     "revHigh": 32500000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No data pipelines; information moves only by manual exports.",
+      "A few scripts or webhooks move data between systems, breaking without notice.",
+      "Pipelines move data in batches, with real-time flow limited to some systems.",
+      "Real-time event flow connects most systems, monitored with dashboards and alerts.",
+      "AI watches pipeline health, detects anomalies and alerts or self-corrects before users notice."
+    ]
   },
   {
     "id": 104,
@@ -1661,7 +2382,14 @@
     "revHigh": 7500000.0,
     "costLow": 22500000.0,
     "costHigh": 22500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "ERP connections need heavy custom coding for every change.",
+      "ERP integrations are mostly custom-built and fragile, depending on a few specialists.",
+      "Standard connectors cover basics, but significant customisation is still required for key flows.",
+      "Mostly configured with standard connectors and templates; custom work is small and well documented.",
+      "AI-assisted mapping handles most ERP data setup, keeping customisation minimal and changes fast."
+    ]
   },
   {
     "id": 105,
@@ -1677,7 +2405,14 @@
     "revHigh": 12500000.0,
     "costLow": 7500000.0,
     "costHigh": 7500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "ERP data is updated manually, often taking weeks to reflect.",
+      "ERP syncs take days and depend on manual uploads or fixes.",
+      "ERP syncs run on a nightly schedule; changes and new setups take weeks.",
+      "ERP syncs happen within minutes to hours, and new data flows go live in days.",
+      "AI-assisted mapping cuts setup to hours and keeps ERP data continuously in sync."
+    ]
   },
   {
     "id": 106,
@@ -1693,7 +2428,14 @@
     "revHigh": 20000000.0,
     "costLow": 22500000.0,
     "costHigh": 22500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No hub of plug-ins; every new capability needs custom development.",
+      "Add-ons are found and installed ad hoc, each needing custom work.",
+      "A set of approved extensions exists, but selection and setup are manual.",
+      "A managed hub offers vetted plug-ins installed without custom integration work.",
+      "AI recommends extensions that fill gaps in your stack and helps install them."
+    ]
   },
   {
     "id": 107,
@@ -1709,7 +2451,14 @@
     "revHigh": 27500000.0,
     "costLow": 12500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Tax is calculated by hand or in spreadsheets, with frequent errors.",
+      "Tax is calculated in billing software but with many manual overrides and corrections.",
+      "A tax engine handles standard cases; exceptions and rate changes need manual work.",
+      "Tax is calculated automatically and accurately, with rate updates and routine checks built in.",
+      "AI checks every calculation, flags anomalies and learns from corrections, keeping manual steps near zero."
+    ]
   },
   {
     "id": 108,
@@ -1725,7 +2474,14 @@
     "revHigh": 7500000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Compliance is checked only when filing; problems are found late.",
+      "Staff review tax records before filing, but checks are inconsistent and incomplete.",
+      "Regular manual or semi-automated reviews catch most issues before filing.",
+      "Automated validation rules and reconciliation flag compliance gaps well ahead of filing.",
+      "AI continuously detects non-compliance risk and alerts teams before filing, adapting to regulatory changes."
+    ]
   },
   {
     "id": 109,
@@ -1741,7 +2497,14 @@
     "revHigh": 27500000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Invoices and credit notes are matched by hand, with frequent delays.",
+      "Staff match invoices in spreadsheets; credit notes often lag, delaying cash.",
+      "Accounting software supports matching, but exceptions and document entry remain largely manual.",
+      "Most invoices and credit notes match automatically, with staff handling only exceptions.",
+      "AI and OCR read documents, match them and resolve exceptions with little human help."
+    ]
   },
   {
     "id": 110,
@@ -1757,7 +2520,14 @@
     "revHigh": 17500000.0,
     "costLow": 17500000.0,
     "costHigh": 17500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No visibility into what payment gateways have settled.",
+      "Settlements checked occasionally from gateway statements, with gaps and delays.",
+      "Settlement reports from each gateway are collected and reviewed on a regular schedule.",
+      "All gateways feed one view showing settlements, fees and differences daily.",
+      "AI detects settlement mismatches across gateways instantly and explains likely causes."
+    ]
   },
   {
     "id": 111,
@@ -1773,7 +2543,14 @@
     "revHigh": 30000000.0,
     "costLow": 10000000.0,
     "costHigh": 10000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Edits and approvals are not recorded.",
+      "Some approvals are recorded by email or notes; edits are rarely tracked.",
+      "Key systems log edits and approvals, but logs are separate and reviewed manually.",
+      "All edits and approvals are logged centrally, complete and searchable for review.",
+      "AI scores transactions and approvals by risk so reviewers focus on the riskiest first."
+    ]
   },
   {
     "id": 112,
@@ -1789,7 +2566,14 @@
     "revHigh": 17500000.0,
     "costLow": 10000000.0,
     "costHigh": 10000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Compliance with PCI DSS, GDPR or ISO 27001 is not addressed.",
+      "Compliance measures exist but are out of date and reviewed only after incidents.",
+      "Compliance is reviewed in periodic audits; gaps are tracked and fixed manually.",
+      "Controls are regularly reviewed, automated where possible, and kept current between audits.",
+      "AI continuously monitors controls, flags drift immediately and keeps compliance evidence up to date."
+    ]
   },
   {
     "id": 113,
@@ -1805,7 +2589,14 @@
     "revHigh": 32500000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No structured onboarding; new store staff are left to learn on the job.",
+      "Onboarding depends on each store manager; training content and timing vary widely.",
+      "Standard onboarding checklist and training modules exist, but stores run them manually.",
+      "Online onboarding and training are tracked centrally and assigned automatically by role in every store.",
+      "AI builds personal learning paths per associate, adapting to role, pace and results."
+    ]
   },
   {
     "id": 114,
@@ -1821,7 +2612,14 @@
     "revHigh": 27500000.0,
     "costLow": 25000000.0,
     "costHigh": 25000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Shifts are not planned deliberately; staff are called in as needed.",
+      "Managers build rosters by hand in spreadsheets, with little link to expected trade.",
+      "A scheduling tool helps build rosters, but managers still adjust most shifts manually.",
+      "Rosters are auto-generated from rules and availability, with manager approval only.",
+      "AI sets shifts from footfall and sales forecasts, re-optimizing as demand shifts."
+    ]
   },
   {
     "id": 115,
@@ -1837,7 +2635,14 @@
     "revHigh": 15000000.0,
     "costLow": 22500000.0,
     "costHigh": 22500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Attendance records are not kept in a way that can be checked against pay.",
+      "Attendance is noted informally; payroll mismatches are found only when staff complain.",
+      "Attendance is checked against payroll each cycle by hand, with frequent corrections.",
+      "Attendance and pay are reconciled automatically each cycle, with few exceptions left to review.",
+      "AI flags attendance and payroll discrepancies as they arise and learns common error patterns."
+    ]
   },
   {
     "id": 116,
@@ -1853,7 +2658,14 @@
     "revHigh": 17500000.0,
     "costLow": 17500000.0,
     "costHigh": 17500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Attendance and payroll run on separate or paper processes with no connection.",
+      "Attendance data is re-keyed or emailed to payroll, with frequent delays and errors.",
+      "Some data transfers between systems, but exports and fixes still need manual effort.",
+      "Attendance feeds payroll automatically through a standard integration across all stores.",
+      "AI monitors the attendance-to-payroll data flow and flags anomalies before pay runs."
+    ]
   },
   {
     "id": 117,
@@ -1869,7 +2681,14 @@
     "revHigh": 35000000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Staff have no clear incentive rules or view of what they could earn.",
+      "Incentives exist but rules are unclear; staff learn payouts only after the fact.",
+      "Incentive rules are documented and shared, with results reported to staff periodically.",
+      "Staff see live incentive progress in a dashboard, calculated automatically from sales data.",
+      "AI sets personal incentive targets based on each associate's own performance patterns."
+    ]
   },
   {
     "id": 118,
@@ -1885,7 +2704,14 @@
     "revHigh": 25000000.0,
     "costLow": 10000000.0,
     "costHigh": 10000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Staff are not formally recognized and engagement is not measured.",
+      "Recognition is occasional and informal; engagement is judged by manager impressions.",
+      "Regular recognition and periodic engagement surveys run, with results reviewed manually.",
+      "Recognition programs and pulse surveys run systematically, with engagement tracked by store.",
+      "AI reads staff feedback for sentiment, flagging engagement risks before people leave."
+    ]
   },
   {
     "id": 119,
@@ -1901,7 +2727,14 @@
     "revHigh": 10000000.0,
     "costLow": 15000000.0,
     "costHigh": 15000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "CCTV and IoT devices are absent or operate fully separately with no monitoring link.",
+      "CCTV is mainly used to review incidents afterward; IoT sensors are not linked.",
+      "CCTV and some sensors feed a central view, but staff must watch for threats.",
+      "CCTV and IoT are linked, with rule-based alerts for events like after-hours movement.",
+      "Computer vision spots threats and unusual behavior live across CCTV and IoT feeds."
+    ]
   },
   {
     "id": 120,
@@ -1917,7 +2750,14 @@
     "revHigh": 37500000.0,
     "costLow": 10000000.0,
     "costHigh": 10000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Anyone can reach most data; there is no role-based access.",
+      "Access is granted case by case, with inconsistent rules and few reviews.",
+      "Defined roles limit data access, but assignments and reviews are done manually.",
+      "Role-based access is enforced centrally, with automated provisioning and regular scheduled reviews.",
+      "AI reviews permission use continuously and flags unusual access for investigation."
+    ]
   },
   {
     "id": 121,
@@ -1933,7 +2773,14 @@
     "revHigh": 12500000.0,
     "costLow": 17500000.0,
     "costHigh": 17500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No monitoring of digital or physical security; issues are found after damage.",
+      "Security is checked occasionally, and incidents are mostly spotted by chance or by staff.",
+      "Basic monitoring and alerts cover key systems and sites, reviewed manually.",
+      "Central real-time monitoring with automated alerts covers both digital systems and stores.",
+      "AI detects anomalies in real time across digital and physical security and improves over time."
+    ]
   },
   {
     "id": 122,
@@ -1949,7 +2796,14 @@
     "revHigh": 12500000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Staff and sites use keys or open entry with no access control.",
+      "Keys or shared codes are used, and entry is slow and hard to track.",
+      "Card or badge entry is used at some sites, with manual management of access rights.",
+      "Biometric or badge entry is quick and fully logged at all key sites, managed centrally.",
+      "AI facial and liveness checks give fast, secure entry and spot spoofing attempts."
+    ]
   },
   {
     "id": 123,
@@ -1965,7 +2819,14 @@
     "revHigh": 25000000.0,
     "costLow": 22500000.0,
     "costHigh": 22500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Physical and system access is largely uncontrolled; shared logins and open areas are common.",
+      "Some locks and passwords exist, but practice is inconsistent and rarely enforced.",
+      "Standard access controls cover main sites and systems, with manual oversight and gaps.",
+      "Strong controls, such as multi-factor login and badged areas, are enforced consistently everywhere.",
+      "AI-backed biometric and liveness checks protect access and adapt to new risks."
+    ]
   },
   {
     "id": 124,
@@ -1981,7 +2842,14 @@
     "revHigh": 25000000.0,
     "costLow": 17500000.0,
     "costHigh": 17500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No continuity plan; a tech outage would stop trading until fixed.",
+      "Informal workarounds exist, but no written plan and nothing has been tested.",
+      "A written continuity plan with backups exists, but it is tested rarely and run manually.",
+      "Tested plan with automated backups and failover keeps stores trading through most outages.",
+      "AI predicts likely failures and triggers backups ahead of outages, not on fixed schedules."
+    ]
   },
   {
     "id": 125,
@@ -1997,7 +2865,14 @@
     "revHigh": 30000000.0,
     "costLow": 12500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Customer sentiment is not measured or tracked in any way.",
+      "Sentiment is gauged from occasional complaints or anecdotes, with no structured tracking.",
+      "Surveys and reviews are collected and analyzed manually, and only after the event.",
+      "Sentiment is tracked systematically across channels and shared with teams in dashboards.",
+      "AI reads sentiment live across channels and adapts each customer's experience in the moment."
+    ]
   },
   {
     "id": 126,
@@ -2013,7 +2888,14 @@
     "revHigh": 20000000.0,
     "costLow": 5000000.0,
     "costHigh": 5000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No immersive experiences like virtual try-on are offered online.",
+      "A basic pilot or limited product view exists, but it is not part of the journey.",
+      "Virtual try-on is offered for some products, and uptake and impact are tracked manually.",
+      "Try-on is available across key categories, integrated into the shop, with conversion tracked.",
+      "AI-generated, lifelike try-on is tuned continuously to raise online conversion."
+    ]
   },
   {
     "id": 127,
@@ -2029,7 +2911,14 @@
     "revHigh": 10000000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Product authenticity and origin cannot be verified.",
+      "Authenticity relies on supplier word or occasional manual checks of paperwork.",
+      "Origin records are kept for key products, but checks are done manually.",
+      "Provenance is tracked and verified systematically, with customers able to confirm authenticity.",
+      "AI scans provenance data to flag likely counterfeits and learns from each case."
+    ]
   },
   {
     "id": 128,
@@ -2045,7 +2934,14 @@
     "revHigh": 30000000.0,
     "costLow": 17500000.0,
     "costHigh": 17500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No voice-enabled shopping is available to customers.",
+      "Basic voice search or a smart speaker listing exists, with limited use.",
+      "Voice ordering works for simple tasks, but needs scripted commands and manual handling.",
+      "Voice shopping is integrated with catalog and checkout, and handles common requests reliably.",
+      "Conversational AI handles natural voice ordering and improves from every interaction."
+    ]
   },
   {
     "id": 129,
@@ -2061,7 +2957,14 @@
     "revHigh": 25000000.0,
     "costLow": 20000000.0,
     "costHigh": 20000000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "No livestream or influencer selling is offered.",
+      "Occasional livestreams or influencer posts run, with sales tracked by hand.",
+      "Livestream selling runs regularly, linked to the shop, with manual moderation and reporting.",
+      "Livestreams and influencer sales connect directly to inventory, checkout and attribution.",
+      "AI scores engagement live, moderates chats automatically and guides what is promoted."
+    ]
   },
   {
     "id": 130,
@@ -2077,7 +2980,14 @@
     "revHigh": 27500000.0,
     "costLow": 12500000.0,
     "costHigh": 12500000.0,
-    "isNew": false
+    "isNew": false,
+    "levels": [
+      "Customers get no support responses, or only unmonitored contact forms.",
+      "Replies are handwritten and inconsistent, or limited to a fixed FAQ page.",
+      "Scripted bots and templates answer common questions; complex cases go to staff.",
+      "Support tools resolve most queries consistently, with context from orders and customer history.",
+      "Generative AI agents resolve complex queries naturally and improve from past conversations."
+    ]
   },
   {
     "id": 131,
@@ -2093,7 +3003,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Assortment is not planned by store; one range goes everywhere.",
+      "Category managers set ranges mostly by judgment and last year's sales.",
+      "Assortments are planned by store cluster using reports, with spreadsheets and manual choices.",
+      "Cluster assortments are built from sales data using standard tools and regular reviews.",
+      "Generative AI proposes and refines assortments by store or cluster for managers to approve."
+    ]
   },
   {
     "id": 132,
@@ -2109,7 +3026,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Prices are set once and rarely changed.",
+      "Prices are changed by hand, often copying competitors' prices occasionally.",
+      "Rule-based pricing, such as fixed margins or competitor matching, is applied with manual oversight.",
+      "Pricing is systematically reviewed with automated rules and regular analysis of competitors and demand.",
+      "AI sets prices dynamically using demand and competitor signals, and learns from results."
+    ]
   },
   {
     "id": 133,
@@ -2125,7 +3049,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Promotions are run ad hoc, with no planning of depth or timing.",
+      "Category managers plan promotions on judgment and past calendars, with little evaluation.",
+      "Promotion plans use past results in spreadsheets, and evaluation is manual.",
+      "Planning tools forecast promotion uplift and guide depth and timing across categories.",
+      "ML optimizes promotion depth, timing and mechanics and improves from every campaign."
+    ]
   },
   {
     "id": 134,
@@ -2141,7 +3072,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Buying and supplier negotiations are done without any analytical support.",
+      "Buyers negotiate and order from experience, with data used only occasionally.",
+      "Buyers use reports and spreadsheets to prepare negotiations and order, with manual analysis.",
+      "Standard tools recommend order quantities and flag supplier performance for negotiations.",
+      "An AI copilot advises buyers on negotiation positions and purchase orders in real time."
+    ]
   },
   {
     "id": 135,
@@ -2157,7 +3095,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Markdowns happen reactively, when stock is already clearly stuck.",
+      "Markdowns follow a fixed calendar or rule of thumb, applied by hand.",
+      "Markdown plans use sell-through reports, but timing and depth are set manually.",
+      "Markdown tools recommend timing and depth from sell-through data, with buyer approval.",
+      "An ML model sets markdown timing and depth per product and store, learning continuously."
+    ]
   },
   {
     "id": 136,
@@ -2173,7 +3118,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Categories have no regular insight review; planograms are rarely revisited.",
+      "Planograms are updated yearly, and category insight is based on managers' experience.",
+      "Category reports on space, mix and stockouts are produced manually each quarter.",
+      "Dashboards update category space, mix and stockout views regularly for managers.",
+      "AI generates continuous category insight on space, mix and stockout risk, updating plans."
+    ]
   },
   {
     "id": 137,
@@ -2189,7 +3141,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No central data platform; data sits in separate spreadsheets and systems.",
+      "Several disconnected databases exist, mainly used for basic reports.",
+      "A central platform serves reporting, but is not built for AI or machine learning.",
+      "A unified platform serves both reporting and machine learning, with governed, reusable data.",
+      "The platform is built for AI, with automated pipelines and models continuously improving."
+    ]
   },
   {
     "id": 138,
@@ -2205,7 +3164,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Data is scattered with no warehouse or lakehouse in place.",
+      "Separate warehouses and files hold data by team, with little sharing.",
+      "A warehouse is central, but unstructured data like images and text is held apart.",
+      "A lakehouse holds structured and unstructured data together, with common governance across teams.",
+      "AI workloads run directly on the lakehouse, with automated data preparation and optimization."
+    ]
   },
   {
     "id": 139,
@@ -2221,7 +3187,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Data quality is not monitored; problems are only noticed when users complain.",
+      "Data is cleaned reactively, usually after a report breaks.",
+      "Some quality checks run manually or periodically, without a shared score.",
+      "Automated quality rules score key data sets and alert owners to failures.",
+      "AI detects data quality issues early, predicts impact on models and self-corrects."
+    ]
   },
   {
     "id": 140,
@@ -2237,7 +3210,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No vector database; search is keyword-only or not available.",
+      "A vector database is being explored in a small trial by one team.",
+      "A vector database supports one use case, such as semantic search, managed manually.",
+      "A managed vector database serves several semantic search and retrieval uses across teams.",
+      "A vector database powers AI agents and retrieval, with embeddings refreshed automatically."
+    ]
   },
   {
     "id": 141,
@@ -2253,7 +3233,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No linked view of products, customers and stores; data sits in separate systems",
+      "A few analysts manually join product and customer data for one-off questions",
+      "Product, customer and store links exist in one area, maintained by hand",
+      "Connected graph spans products, customers and stores, updated automatically from core systems",
+      "AI reasons across the graph daily, and it learns and adds new relationships itself"
+    ]
   },
   {
     "id": 142,
@@ -2269,7 +3256,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Nobody owns data risks like bias, drift or where data came from",
+      "Individual analysts occasionally check data quality or bias when asked",
+      "A governance team exists, but bias, drift and lineage checks are manual",
+      "Governance team runs standard, tool-supported checks on bias, drift and lineage for AI data",
+      "AI continuously monitors data for bias and drift, traces lineage, and flags fixes automatically"
+    ]
   },
   {
     "id": 143,
@@ -2285,7 +3279,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No group is responsible for deciding which AI uses are approved",
+      "Leaders informally discuss AI decisions when issues come up, with no set roles",
+      "An AI committee meets regularly, but decision rights are only partly defined",
+      "Committee has clear decision rights, a set process, and reviews every AI use",
+      "Committee uses AI-driven monitoring to review live systems and adjusts rules as risks change"
+    ]
   },
   {
     "id": 144,
@@ -2301,7 +3302,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No written policy on AI bias, transparency or human oversight",
+      "Some informal guidelines exist, applied inconsistently by individual teams",
+      "A written policy exists, but compliance is checked manually and unevenly",
+      "Policy is enforced across all AI projects with standard reviews and sign-offs",
+      "AI tools automatically test for bias and explain decisions, and the policy keeps improving"
+    ]
   },
   {
     "id": 145,
@@ -2317,7 +3325,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No executive is named as accountable for AI",
+      "AI is a part-time side duty of an executive already busy with IT",
+      "A named executive owns AI, but with limited authority or budget",
+      "A dedicated AI executive, separate from IT, owns strategy, budget and results",
+      "AI executive steers an AI-run portfolio, using live performance data to shift investment"
+    ]
   },
   {
     "id": 146,
@@ -2333,7 +3348,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No team or budget exists for innovation",
+      "A volunteer group meets occasionally to share ideas, without budget",
+      "A small innovation team exists, with limited budget and unclear mandate",
+      "Dedicated innovation team has its own budget, mandate and regular delivery targets",
+      "Team uses AI to spot opportunities and steer funding toward the best ideas"
+    ]
   },
   {
     "id": 147,
@@ -2349,7 +3371,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "AI tools are launched with no plan for staff adoption",
+      "Managers sometimes brief staff on new AI tools, case by case",
+      "A change plan exists for major AI rollouts, but it is manual and uneven",
+      "Every AI rollout follows a standard change program with training, feedback and adoption targets",
+      "AI tracks usage and feedback, and tailors support to teams where adoption lags"
+    ]
   },
   {
     "id": 148,
@@ -2365,7 +3394,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No AI training is offered outside the technical team",
+      "A few staff attend occasional AI sessions or learn on their own",
+      "An AI training course exists for some non-technical groups, completed manually",
+      "Structured role-based AI training is rolled out across the business with tracked completion",
+      "AI personalizes learning to each role and skill gap and measures real tool usage"
+    ]
   },
   {
     "id": 149,
@@ -2381,7 +3417,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No one looks for startups; vendors approach us occasionally",
+      "Startup meetings happen ad hoc, whenever a vendor or contact reaches out",
+      "Someone scouts startups on a loose schedule, with notes kept manually",
+      "A defined scouting process with criteria and a tracked pipeline runs all year",
+      "AI scans the startup market continuously and matches companies to our open needs"
+    ]
   },
   {
     "id": 150,
@@ -2397,7 +3440,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Pilots start and stop with no defined path to scale",
+      "Some pilots have goals, but scaling decisions are made informally",
+      "A pilot process exists with basic success criteria, though gates are applied inconsistently",
+      "Every pilot follows stage gates and agreed success criteria, with clear scale or stop decisions",
+      "AI analyzes pilot results to recommend scale, adjust or stop, and refines the gates"
+    ]
   },
   {
     "id": 151,
@@ -2413,7 +3463,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Innovation projects are not tracked as a group or balanced by time horizon",
+      "Projects are listed in a flat list, mostly near-term and easy to justify",
+      "A portfolio view exists with horizons, but updated and balanced by hand",
+      "Portfolio is managed across horizons 1, 2 and 3, with set funding splits and reviews",
+      "AI models returns and risks to rebalance funding across horizons as conditions change"
+    ]
   },
   {
     "id": 152,
@@ -2429,7 +3486,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No partnerships with accelerators or innovation networks",
+      "We occasionally attend accelerator events or meet partners without any formal agreement",
+      "One or two formal ecosystem partnerships exist, managed manually with limited follow-through",
+      "A structured partnership program with defined goals, owners and regular engagement across several partners",
+      "AI identifies the best-fit partners and startups and tracks the value each partnership delivers"
+    ]
   },
   {
     "id": 153,
@@ -2445,7 +3509,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No investments in startups, directly or through funds",
+      "We have discussed startup investment or made a one-off small bet",
+      "A few startup investments exist, handled case by case without a formal program",
+      "A formal investment program with a mandate, budget, process and portfolio tracking",
+      "AI sources and screens deals and monitors portfolio performance to guide new investments"
+    ]
   },
   {
     "id": 154,
@@ -2461,7 +3532,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No capability to run quick tests; changes just roll out",
+      "Teams run occasional tests on their own, with no shared method or tools",
+      "A test-and-learn process exists, but setup and analysis are largely manual",
+      "A standing experimentation team and tools run many tests with standard measurement",
+      "AI designs tests, runs them automatically, and applies winning results continuously"
+    ]
   },
   {
     "id": 155,
@@ -2477,7 +3555,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Employees have no AI assistants for their work",
+      "Some staff use chat assistants on their own to answer questions",
+      "Approved assistants help staff, but handle single steps and need manual direction",
+      "Agents complete multi-step tasks for staff in set workflows, with oversight",
+      "Agents plan and act across tasks for many roles, and improve from outcomes"
+    ]
   },
   {
     "id": 156,
@@ -2493,7 +3578,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Customers have no AI agent; the site and app only offer search and browse",
+      "A chatbot answers customer questions but hands off every purchase or task to people",
+      "A customer agent handles simple tasks like order status, with human approval for transactions",
+      "Agents complete purchases, returns or bookings independently within set limits across main channels",
+      "Agents negotiate, personalize and complete customer transactions autonomously, learning from each outcome"
+    ]
   },
   {
     "id": 157,
@@ -2509,7 +3601,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Buyers place and negotiate all orders manually; no AI agents involved",
+      "Buyers occasionally try AI tools to draft supplier messages or compare offers",
+      "An agent suggests orders or supplier terms, but buyers approve and place each one",
+      "Agents place routine orders and negotiate within set rules for defined categories",
+      "Agents negotiate and buy autonomously across categories, learning from supplier results and market prices"
+    ]
   },
   {
     "id": 158,
@@ -2525,7 +3624,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Supply chain problems are found and handled entirely by people",
+      "Dashboards or alerts flag some exceptions, and staff decide what to do",
+      "Tools propose responses to common exceptions, but people trigger and approve each action",
+      "Agents resolve routine exceptions like delays or shortages automatically within defined limits",
+      "Agents detect, resolve and learn from exceptions end to end, escalating only unusual cases"
+    ]
   },
   {
     "id": 159,
@@ -2541,7 +3647,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Store reordering, scheduling and escalations are done entirely by staff",
+      "Store managers sometimes use AI tools to suggest orders or schedules",
+      "Store tools recommend reorders and schedule fixes, but managers approve every action",
+      "Store agents place routine reorders and handle schedule exceptions within set limits",
+      "Store agents run most routine tasks autonomously, learn local patterns, and escalate only real problems"
+    ]
   },
   {
     "id": 160,
@@ -2557,7 +3670,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Finance reconciliation, anomaly checks and reporting are fully manual",
+      "Finance staff occasionally use AI tools to help with analysis or drafts",
+      "Tools match transactions and flag anomalies, but staff review and act on each",
+      "Agents reconcile routine accounts and prepare reports automatically, with staff handling exceptions",
+      "Agents reconcile, investigate anomalies and report autonomously, improving accuracy and escalating only judgment calls"
+    ]
   },
   {
     "id": 161,
@@ -2573,7 +3693,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Screening, interview scheduling and HR questions are handled fully by people",
+      "HR staff occasionally use AI tools to draft messages or summarize resumes",
+      "An AI tool assists with screening or policy questions, but HR drives every step",
+      "Agents schedule interviews, screen applicants and answer policy questions with HR oversight",
+      "Agents run HR workflows autonomously end to end, improve from outcomes, and escalate sensitive cases"
+    ]
   },
   {
     "id": 162,
@@ -2589,7 +3716,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Every business workflow needs a person to handle at least one step",
+      "A few simple tasks are automated, but people still start or check them",
+      "Some workflows are mostly automated, with required manual approval steps",
+      "Several end-to-end workflows run unattended in normal conditions, with monitoring and exception handling",
+      "Many workflows run without humans, and AI adapts them and fixes problems itself"
+    ]
   },
   {
     "id": 163,
@@ -2605,7 +3739,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Systems are closed or isolated, with no plan for sharing data and tools with AI",
+      "Some systems have custom connections, but nothing standard for AI access",
+      "Key systems have APIs, and MCP or similar standards are being evaluated or piloted",
+      "Core systems expose data and tools through MCP or an equivalent standard, with access controls",
+      "Systems expose tools through standards, and AI agents discover and use them safely at scale"
+    ]
   },
   {
     "id": 164,
@@ -2621,7 +3762,14 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "Company knowledge sits in scattered documents that AI cannot reliably search",
+      "Some documents are organized and searchable, but AI results are often wrong",
+      "Key knowledge is organized in a structured form, maintained by hand for some AI uses",
+      "Structured, current knowledge is maintained across the business and AI agents query it reliably",
+      "AI keeps knowledge up to date itself, checks its trustworthiness, and fills gaps automatically"
+    ]
   },
   {
     "id": 165,
@@ -2637,6 +3785,13 @@
     "revHigh": 0.0,
     "costLow": 0.0,
     "costHigh": 0.0,
-    "isNew": true
+    "isNew": true,
+    "levels": [
+      "No rules define what autonomous AI agents may do without approval",
+      "Teams set informal limits on agents, differing from one project to the next",
+      "A written policy lists agent limits, but enforcement and review are manual",
+      "Formal framework sets approval thresholds, permissions and audit trails, enforced by systems for all agents",
+      "AI monitors agent actions in real time, enforces limits automatically, and recommends boundary updates"
+    ]
   }
 ]
