@@ -14,11 +14,11 @@ router.get("/questions", (req, res) => {
 router.get("/responses", requireAuth, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      "SELECT question_id, maturity, evidence FROM responses WHERE user_id = $1",
+      "SELECT question_id, maturity, evidence, not_applicable FROM responses WHERE user_id = $1",
       [req.user.id]
     );
     const responses = {};
-    rows.forEach((r) => { responses[r.question_id] = { maturity: r.maturity, evidence: r.evidence }; });
+    rows.forEach((r) => { responses[r.question_id] = { maturity: r.maturity, evidence: r.evidence, na: !!r.not_applicable }; });
     res.json({ responses });
   } catch (err) {
     next(err);
@@ -37,17 +37,19 @@ router.put("/responses", requireAuth, async (req, res, next) => {
     await client.query("BEGIN");
     for (const [questionId, val] of Object.entries(responses)) {
       await client.query(
-        `INSERT INTO responses (user_id, question_id, maturity, evidence, updated_at)
-         VALUES ($1, $2, $3, $4, now())
+        `INSERT INTO responses (user_id, question_id, maturity, evidence, not_applicable, updated_at)
+         VALUES ($1, $2, $3, $4, $5, now())
          ON CONFLICT (user_id, question_id) DO UPDATE SET
            maturity = EXCLUDED.maturity,
            evidence = EXCLUDED.evidence,
+           not_applicable = EXCLUDED.not_applicable,
            updated_at = EXCLUDED.updated_at`,
         [
           req.user.id,
           Number(questionId),
-          val && val.maturity != null ? val.maturity : null,
+          val && val.na ? null : (val && val.maturity != null ? val.maturity : null),
           (val && val.evidence) || null,
+          !!(val && val.na),
         ]
       );
     }

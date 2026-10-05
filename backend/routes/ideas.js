@@ -62,11 +62,11 @@ router.get("/opportunities", requireRole("junior_employee", "jury", "admin"), as
     if (!client) return res.json({ opportunities: [], sourceClient: null });
 
     const { rows: respRows } = await pool.query(
-      "SELECT question_id, maturity, evidence FROM responses WHERE user_id = $1",
+      "SELECT question_id, maturity, evidence, not_applicable FROM responses WHERE user_id = $1",
       [sourceClientId]
     );
     const responses = {};
-    respRows.forEach((r) => { responses[r.question_id] = { maturity: r.maturity, evidence: r.evidence }; });
+    respRows.forEach((r) => { responses[r.question_id] = { maturity: r.maturity, evidence: r.evidence, na: !!r.not_applicable }; });
 
     const scores = computeScores(responses);
     res.json({
