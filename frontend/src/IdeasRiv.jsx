@@ -492,7 +492,7 @@ function JuryListView({ opportunities, ideas, myRatings, loading, error, onOpenI
                 <div style={{ minWidth: 220 }}>
                   <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14, color: BRAND.ink }}>{idea.title}</div>
                   <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 4 }}>
-                    By {idea.submitted_by_name} · {idea.rating_count} jury rating{idea.rating_count !== 1 ? "s" : ""}
+                    By {idea.submitted_by_name}{idea.rating_count != null && <> · {idea.rating_count} jury rating{idea.rating_count !== 1 ? "s" : ""}</>}
                   </div>
                 </div>
                 {myRating ? (
@@ -606,7 +606,7 @@ export function LeaderboardView({ leaderboard, loading, error, onOpenIdea }) {
         <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 20, color: BRAND.ink }}>Leaderboard</div>
       </div>
       <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 26 }}>
-        Ranked by average jury star rating. The top 3 ranks are published below. Ideas with the same average share a rank (marked "Tied"); within a tie, the idea with more jury ratings is listed first, then the earlier submission.
+        Ranked by average jury star rating (scores themselves are shown to admins only, so ratings stay blind). The top 3 ranks are published below. Ideas with the same average share a rank (marked "Tied"); within a tie, the idea with more jury ratings is listed first, then the earlier submission.
       </div>
 
       {loading && <Spinner label="Loading leaderboard…" />}
@@ -627,16 +627,18 @@ export function LeaderboardView({ leaderboard, loading, error, onOpenIdea }) {
             <div>
               <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{r.question?.module} · {r.question?.submodule}</div>
               <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14.5, color: BRAND.ink, marginTop: 2 }}>{r.title}</div>
-              <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 4 }}>By {r.submitted_by_name} · {r.rating_count} jury rating{r.rating_count !== 1 ? "s" : ""}</div>
+              <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 4 }}>By {r.submitted_by_name}{r.rating_count != null && <> · {r.rating_count} jury rating{r.rating_count !== 1 ? "s" : ""}</>}</div>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {r.tied && <Pill tone="blue">Tied</Pill>}
             {r.published && <Pill tone="green">Published</Pill>}
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: BRAND.ink }}>{r.avg_score.toFixed(1)}</div>
-              <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#9B958F" }}>/ 5 avg</div>
-            </div>
+            {r.avg_score != null && (
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: BRAND.ink }}>{r.avg_score.toFixed(1)}</div>
+                <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#9B958F" }}>/ 5 avg</div>
+              </div>
+            )}
           </div>
         </Card>
       ))}
