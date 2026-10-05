@@ -688,7 +688,7 @@ function AuditView({ campaign, campaigns, onDone }) {
    MY ENTRIES — every campaign this respondent has ever submitted to,
    supports re-participation across quarters/geos (PRD §7).
    ========================================================================= */
-function MyEntriesView({ setView, setActiveEntryId }) {
+function MyEntriesView({ setView, setActiveEntryId, setReportCampaignId }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -721,6 +721,15 @@ function MyEntriesView({ setView, setActiveEntryId }) {
                   {[e.geo, e.quarter_label].filter(Boolean).join(" · ") || "—"}
                   {" · "}{e.campaign_is_open ? "Open" : "Closed"}
                 </div>
+                {/* O21: once the campaign closes, its collated report opens here */}
+                {e.campaign_is_open ? (
+                  <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#B7B2AE", marginTop: 6 }}>The collated report becomes available here once this campaign closes.</div>
+                ) : (
+                  <button onClick={() => { setReportCampaignId(e.campaign_id); setView("report"); }}
+                    style={{ marginTop: 8, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: BRAND.coral, display: "flex", alignItems: "center", gap: 5 }}>
+                    <FileText size={13} /> View the collated report
+                  </button>
+                )}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1B7A5A", background: "#E7F5EF", padding: "4px 10px", borderRadius: 999 }}>
@@ -824,6 +833,58 @@ function DashboardView({ entryId, onBack }) {
             <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 16 }}>Five Dimensions</div>
             {(data.indexDimensions || []).map((dim) => (
               <DimensionBar key={dim} label={dim} mine={data.dimensionScores?.[dim]} cohort={data.dimensionCohortAverage?.[dim]} />
+            ))}
+          </Card>
+        </>
+      )}
+      <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", display: "flex", alignItems: "center", gap: 6 }}>
+        <TrendingUp size={13} /> Only cohort averages are shown — no other respondent's individual score is ever visible here.
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   O21: COLLATED CAMPAIGN REPORT — shown to a campaign's own respondents once it closes.
+   Averages only; no individual respondent's score is ever shown.
+   ========================================================================= */
+function CampaignReportView({ campaignId, onBack }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    api.getIndexCampaignReport(campaignId)
+      .then(setData)
+      .catch((e) => setError(e.message || "Couldn't load the report."))
+      .finally(() => setLoading(false));
+  }, [campaignId]);
+
+  if (loading) return <Spinner label="Loading the report…" />;
+  const c = data?.campaign;
+  return (
+    <div style={{ maxWidth: 620, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginBottom: 16, padding: 0 }}>
+        <ChevronLeft size={14} /> My entries
+      </button>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink }}>{c ? c.name : "Campaign report"}</div>
+      {c && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", margin: "4px 0 20px" }}>{[c.geo, c.quarter_label].filter(Boolean).join(" · ")}</div>}
+      <ErrorBanner text={error} />
+      {data && (
+        <>
+          <Card style={{ padding: 22, textAlign: "center", marginBottom: 20 }}>
+            <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 6 }}>Cohort Index score</div>
+            <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 30, color: BRAND.ink }}>
+              {data.cohortAverage != null ? Number(data.cohortAverage).toFixed(1) : "—"}<span style={{ fontSize: 15, color: "#9B958F" }}>/5</span>
+            </div>
+            <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", marginTop: 4 }}>
+              across {data.cohortSize} {data.cohortSize === 1 ? "response" : "responses"}
+            </div>
+          </Card>
+          <Card style={{ padding: 24, marginBottom: 20 }}>
+            <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 16 }}>Five Dimensions (cohort average)</div>
+            {(data.indexDimensions || []).map((dim) => (
+              <DimensionBar key={dim} label={dim} mine={data.dimensionAverages?.[dim] ?? null} />
             ))}
           </Card>
         </>
@@ -1172,6 +1233,7 @@ export default function IndexRivApp() {
   const [pendingCampaign, setPendingCampaign] = useState(null);
   const [activeEntryId, setActiveEntryId] = useState(null);
   const [activeCampaignId, setActiveCampaignId] = useState(null);
+  const [reportCampaignId, setReportCampaignId] = useState(null);
 
   useEffect(() => {
     api.getIndexCampaigns()
@@ -1251,10 +1313,13 @@ export default function IndexRivApp() {
         <AuditView campaign={pendingCampaign} campaigns={campaigns} onDone={() => goToView("my-entries")} />
       )}
       {view === "my-entries" && session && (
-        <MyEntriesView setView={goToView} setActiveEntryId={setActiveEntryId} />
+        <MyEntriesView setView={goToView} setActiveEntryId={setActiveEntryId} setReportCampaignId={setReportCampaignId} />
       )}
       {view === "dashboard" && session && activeEntryId && (
         <DashboardView entryId={activeEntryId} onBack={() => goToView("my-entries")} />
+      )}
+      {view === "report" && session && reportCampaignId && (
+        <CampaignReportView campaignId={reportCampaignId} onBack={() => goToView("my-entries")} />
       )}
       {view === "admin-campaigns" && session?.role === "admin" && (
         <AdminCampaignsView setView={goToView} setActiveCampaignId={setActiveCampaignId} />
