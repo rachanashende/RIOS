@@ -177,6 +177,24 @@ router.post("/entries", async (req, res, next) => {
 
     const scored = scoreAnswers(answers || {});
 
+    // O11: keying the same person in again for the same campaign updates their entry instead of creating
+    // a duplicate (two unlinked entries with one email in one campaign broke that person's later sign-up).
+    if (!userId) {
+      const dup = await pool.query(
+        "SELECT id FROM index_entries WHERE campaign_id = $1 AND user_id IS NULL AND lower(respondent_email) = $2 ORDER BY updated_at DESC LIMIT 1",
+        [Number(campaignId), normalizedEmail]
+      );
+      if (dup.rows.length) {
+        const upd = await pool.query(
+          `UPDATE index_entries SET answers = $2, score = $3, company = $4, respondent_name = $5, updated_at = now()
+           WHERE id = $1 RETURNING *`,
+          [dup.rows[0].id, JSON.stringify(scored.answers), scored.overallScore, company || null, String(respondentName).trim()]
+        );
+        const e = upd.rows[0];
+        return res.status(200).json({ entry: { ...e, score: e.score != null ? Number(e.score) : null }, dimensionScores: scored.dimensionScores, updatedExisting: true });
+      }
+    }
+
     const { rows } = await pool.query(
       `INSERT INTO index_entries (campaign_id, user_id, respondent_name, respondent_email, company, answers, score, source, updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,'admin', now())
