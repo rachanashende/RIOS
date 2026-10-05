@@ -13,6 +13,7 @@ import { api, getToken, getStoredUser, setSession, clearSession, setIdeasSession
 import { computeScores, tierFor, fmtMoneyRange, computeCategoryScores } from "./scoring.js";
 import { BRAND } from "./brand.js";
 import IdeasRivApp from "./IdeasRiv.jsx";
+import ErrorBoundary from "./ErrorBoundary.jsx";
 
 // Every URL the app recognizes, mapped to the outer view it mounts.
 // Ideathon and Startup are each a single "container" view here (ideas-riv /
@@ -1250,7 +1251,7 @@ export default function RiosApp() {
   // hook above has already been called, so it doesn't violate the Rules
   // of Hooks — it just decides what to render, not which hooks to call.
   if (isIndexSubdomain()) {
-    return <IndexRivApp />;
+    return <ErrorBoundary><IndexRivApp /></ErrorBoundary>;
   }
 
   return (
@@ -1278,9 +1279,9 @@ export default function RiosApp() {
       {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip /></>)}
       {view === "login" && <LoginView onLogin={handleLogin} setView={goToView} />}
       {view === "signup" && <SignupView onSignup={handleSignup} setView={goToView} />}
-      {view === "ideas-riv" && <IdeasRivApp />}
-      {view === "rise-riv" && <RiseRivApp />}
-      {view === "r-index" && <IndexRivApp />}
+      {view === "ideas-riv" && <ErrorBoundary><IdeasRivApp /></ErrorBoundary>}
+      {view === "rise-riv" && <ErrorBoundary><RiseRivApp /></ErrorBoundary>}
+      {view === "r-index" && <ErrorBoundary><IndexRivApp /></ErrorBoundary>}
       {view === "assess" && user?.role === "client" && ready && (
         <AssessmentView questions={questions} modules={modules} responses={responses} setResponses={setResponses} moduleIdx={moduleIdx} setModuleIdx={setModuleIdx} saveStatus={saveStatus} onRetrySave={() => setRetryTick((n) => n + 1)} />
       )}
