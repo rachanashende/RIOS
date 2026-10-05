@@ -5,7 +5,7 @@ import {
   FileSpreadsheet, FileText, TrendingUp, Star,
 } from "lucide-react";
 import {
-  api, getStoredIndexUser, setIndexSession, clearIndexSession,
+  api, getStoredIndexUser, setIndexSession, clearIndexSession, clearAllSessions,
 } from "./api.js";
 import { BRAND } from "./brand.js";
 
@@ -1194,7 +1194,7 @@ export default function IndexRivApp() {
     setView(pendingCampaign ? "audit" : "my-entries");
   }
   function handleLogout() {
-    clearIndexSession();
+    clearIndexSession(); clearAllSessions();
     setSession(null);
     window.history.pushState(null, "", INDEX_VIEW_TO_PATH.landing);
     setView("landing");

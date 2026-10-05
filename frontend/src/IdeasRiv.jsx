@@ -5,7 +5,7 @@ import {
   ChevronLeft, Loader2, Compass, Trophy,
   ClipboardList, Star, AlertCircle,
 } from "lucide-react";
-import { api, getStoredIdeasUser, setIdeasSession, clearIdeasSession } from "./api.js";
+import { api, getStoredIdeasUser, setIdeasSession, clearIdeasSession, clearAllSessions } from "./api.js";
 import { BRAND } from "./brand.js";
 
 // Ideathon's own tabs, each with a real URL. IdeasRivMain owns this
@@ -1020,7 +1020,7 @@ export default function IdeasRivApp() {
     setSession(user);
   }
   function handleLogout() {
-    clearIdeasSession();
+    clearIdeasSession(); clearAllSessions();
     setSession(null);
   }
 
