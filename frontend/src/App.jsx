@@ -1017,6 +1017,10 @@ function DashboardView({ questions, modules, responses, setView, user, viewingCl
   const tier = tierFor(scores.overallScore);
   const isAdminViewing = user.role === "admin" && viewingClient;
   const exportUserId = isAdminViewing ? viewingClient.id : undefined;
+  // SC11: when an admin reviews a client, show when the audit was last touched.
+  const lastUpdated = isAdminViewing
+    ? Object.values(responses || {}).map((r) => r && r.updated_at).filter(Boolean).sort().slice(-1)[0] || null
+    : null;
   const [exporting, setExporting] = useState(null);
 
   async function doExport(type) {
@@ -1046,6 +1050,7 @@ function DashboardView({ questions, modules, responses, setView, user, viewingCl
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16, marginBottom: 6 }}>
         <div>
           <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink }}>{isAdminViewing ? `${viewingClient.company || viewingClient.name} — Scorecard` : "My Discover Scorecard"}</div>
+          {isAdminViewing && lastUpdated && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F", marginTop: 4 }}>Last updated {fmtDateTime(lastUpdated)} · {scores.answeredAll} of {scores.totalAll} questions answered</div>}
           <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginTop: 4 }}>
             {scores.answeredAll} of {scores.totalAll} questions scored
             {scores.answeredAll < scores.totalAll && " — unscored questions currently count as 0 toward the running total"}
@@ -1153,9 +1158,59 @@ function DashboardView({ questions, modules, responses, setView, user, viewingCl
           ))}
         </div>
       </div>
+
+      {isAdminViewing && <AdminEvidenceSection questions={questions} modules={modules} responses={responses} />}
     </div>
   );
 }
+function fmtDateTime(iso) {
+  try { return new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return ""; }
+}
+
+/** SC11: admin-only list of every answered question with its evidence note and the date it was
+ * last changed, grouped by module, so a reviewer doesn't have to open the Excel export. */
+function AdminEvidenceSection({ questions, modules, responses }) {
+  const [evidenceOnly, setEvidenceOnly] = useState(false);
+  const mono = "'Poppins',sans-serif";
+  const answeredCount = questions.filter((q) => responses[q.id] && responses[q.id].maturity != null).length;
+  const withEvidence = questions.filter((q) => responses[q.id] && responses[q.id].maturity != null && (responses[q.id].evidence || "").trim()).length;
+  return (
+    <div style={{ marginTop: 40 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 6 }}>
+        <div style={{ fontFamily: mono, fontWeight: 600, fontSize: 17, color: BRAND.ink }}>Answers &amp; evidence</div>
+        <label style={{ fontFamily: mono, fontSize: 12.5, color: BRAND.ink, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+          <input type="checkbox" checked={evidenceOnly} onChange={(e) => setEvidenceOnly(e.target.checked)} /> Only questions with evidence
+        </label>
+      </div>
+      <div style={{ fontFamily: mono, fontSize: 12.5, color: "#9B958F", marginBottom: 14 }}>{answeredCount} answered · {withEvidence} with an evidence note. Read-only — this is what the client entered.</div>
+      {modules.map((m) => {
+        const rows = questions.filter((q) => q.module === m && responses[q.id] && responses[q.id].maturity != null && (!evidenceOnly || (responses[q.id].evidence || "").trim()));
+        if (rows.length === 0) return null;
+        return (
+          <details key={m} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, background: "#fff", marginBottom: 10, padding: "10px 16px" }}>
+            <summary style={{ cursor: "pointer", fontFamily: mono, fontWeight: 600, fontSize: 13.5, color: BRAND.ink }}>{m} <span style={{ fontWeight: 400, color: "#9B958F" }}>· {rows.length} answered</span></summary>
+            <div style={{ marginTop: 10 }}>
+              {rows.map((q) => {
+                const r = responses[q.id];
+                return (
+                  <div key={q.id} style={{ borderTop: `1px solid ${BRAND.line}`, padding: "10px 0" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                      <div style={{ fontFamily: mono, fontSize: 13, color: BRAND.ink, lineHeight: 1.45 }}><strong>{q.submodule}</strong> — {q.q}</div>
+                      <div style={{ fontFamily: mono, fontWeight: 700, fontSize: 11.5, color: BRAND.coralDark, background: "#FCEEE1", borderRadius: 999, padding: "3px 10px", whiteSpace: "nowrap", height: "fit-content" }}>Maturity {r.maturity}/4</div>
+                    </div>
+                    <div style={{ fontFamily: mono, fontSize: 12.5, color: (r.evidence || "").trim() ? "#4A4642" : "#B7B2AE", marginTop: 4, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{(r.evidence || "").trim() || "No evidence note"}</div>
+                    {r.updated_at && <div style={{ fontFamily: mono, fontSize: 11, color: "#B7B2AE", marginTop: 3 }}>Last changed {fmtDateTime(r.updated_at)}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </details>
+        );
+      })}
+    </div>
+  );
+}
+
 const exportBtnStyle = { display: "flex", alignItems: "center", gap: 6, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, padding: "9px 14px", borderRadius: 9, cursor: "pointer", background: "#fff", color: BRAND.ink, border: `1px solid ${BRAND.line}` };
 
 /* =========================== ROOT =========================== */
