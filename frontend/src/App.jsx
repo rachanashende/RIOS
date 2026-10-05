@@ -1070,6 +1070,7 @@ function DashboardView({ questions, modules, responses, setView, user, viewingCl
           <Compass size={17} color={BRAND.coral} />
           <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 17, color: BRAND.ink }}>Where you stand, at a glance</div>
         </div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#9B958F", marginTop: -6, marginBottom: 14 }}>Pillar scores use the same question weighting as your overall score, so together they add up to it.</div>
         <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 20 }} className="rios-glance-grid">
           <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: "16px 8px 8px", background: "#fff" }}>
             <ResponsiveContainer width="100%" height={340}>
