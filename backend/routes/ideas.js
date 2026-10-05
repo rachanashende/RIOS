@@ -124,7 +124,8 @@ router.get("/", requireRole("junior_employee", "jury", "admin"), async (req, res
 
     const { rows } = await pool.query(sql, params);
     let ideas = rows.map(enrich);
-    if (req.user.role === "junior_employee") {
+    if (req.user.role === "junior_employee" || req.user.role === "jury") {
+      // Employees never see scores; jurors don't either (blind scoring, I16).
       ideas = ideas.map(({ rating_count, avg_score, ...rest }) => rest);
     }
     res.json({ ideas });
@@ -329,6 +330,12 @@ router.get("/leaderboard", requireRole("admin", "jury"), async (req, res, next) 
       return { ...row, rank, published: rank <= 3 };
     });
     for (const row of ranked) row.tied = ranked.filter((o) => o.rank === row.rank).length > 1;
+    // I16: blind scoring. Jurors get rank / published / tied only -- never the
+    // average or the rating count, which would let them back out another
+    // juror's score (e.g. avg minus their own rating). Admin sees everything.
+    if (req.user.role === "jury") {
+      return res.json({ leaderboard: ranked.map(({ avg_score, rating_count, ...rest }) => rest) });
+    }
     res.json({ leaderboard: ranked });
   } catch (err) {
     next(err);
