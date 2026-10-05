@@ -463,7 +463,7 @@ function MyIdeasView({ myIdeas, loading, error, onChanged }) {
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 100px" }}>
       <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 20, color: BRAND.ink, marginBottom: 6 }}>My submissions</div>
       <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 18 }}>
-        You can edit or withdraw an idea until the jury starts rating it.
+        Track each idea from Submitted to Under jury review to Published. You can edit or withdraw an idea until the jury starts rating it.
       </div>
       {loading && <Spinner />}
       <ErrorBanner text={error} />
@@ -485,11 +485,19 @@ function MyIdeasView({ myIdeas, loading, error, onChanged }) {
             </div>
           ) : (
             <>
-              <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14.5, color: BRAND.ink, marginTop: 3 }}>{idea.title}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginTop: 3 }}>
+                <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14.5, color: BRAND.ink }}>{idea.title}</div>
+                {idea.status === "published" ? <Pill tone="green">Published — one of the top ideas</Pill>
+                  : idea.status === "under_review" ? <Pill tone="blue">Under jury review</Pill>
+                  : <Pill tone="coral">Submitted</Pill>}
+              </div>
               {idea.description && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A746F", marginTop: 4, lineHeight: 1.5 }}>{idea.description}</div>}
+              <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", marginTop: 8 }}>
+                Submitted {idea.created_at ? new Date(idea.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : ""}
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
                 {idea.locked ? (
-                  <Pill tone="blue">Under jury review — locked</Pill>
+                  <span style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F" }}>Locked while the jury reviews it</span>
                 ) : (
                   <>
                     <button disabled={busy} onClick={() => startEdit(idea)} style={smallBtn}>Edit</button>
