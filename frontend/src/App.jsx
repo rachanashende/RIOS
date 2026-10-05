@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Menu, X, Award, Eye, EyeOff, FileSpreadsheet, FileText, Loader2,
   Compass, AlertTriangle, Gavel,
 } from "lucide-react";
-import { api, getToken, getStoredUser, setSession, clearSession, setIdeasSession, setRiseSession, setIndexSession } from "./api.js";
+import { api, getToken, getStoredUser, setSession, clearSession, setIdeasSession, setRiseSession, setIndexSession, clearIdeasSession, clearRiseSession, clearIndexSession } from "./api.js";
 import { computeScores, tierFor, fmtMoneyRange, computeCategoryScores, isAnswered } from "./scoring.js";
 import { BRAND } from "./brand.js";
 import IdeasRivApp from "./IdeasRiv.jsx";
@@ -89,7 +89,13 @@ function NavBar({ view, setView, user, onLogout }) {
   const [open, setOpen] = useState(false);
   const publicItems = [{ id: "home", label: "Overview" }];
   const clientItems = [{ id: "assess", label: "Audit" }, { id: "dashboard", label: "My Scorecard" }];
-  const adminItems = [{ id: "admin", label: "Manage Clients" }];
+  // O4: admins can open the Ideathon, Startup and R-Index screens from the menu (their own admin login works in each).
+  const adminItems = [
+    { id: "admin", label: "Manage Clients" },
+    { id: "ideas-riv", label: "Ideathon" },
+    { id: "rise-riv", label: "Startup" },
+    { id: "r-index", label: "R-Index" },
+  ];
   // Ideathon/Startup tabs are each gated to the exact role that belongs
   // to that module -- junior_employee/jury for Ideathon, rise_jury for
   // Startup -- using the main site's own logged-in user.role, which
@@ -1469,13 +1475,19 @@ export default function RiosApp() {
     // A4: save the last answer(s) before the session token is cleared.
     await flushPendingSave(false);
     pendingSave.current = null;
-    clearSession(); setUser(null); setViewingClient(null); setResponses({});
+    clearSession(); clearIdeasSession(); clearRiseSession(); clearIndexSession(); // a module session copy must not outlive the main login
+    setUser(null); setViewingClient(null); setResponses({});
     window.history.pushState(null, "", "/");
     setView("home");
   }
   function goToView(v) {
     if ((v === "assess" || v === "dashboard") && !user) { setView("login"); return; }
     if (v !== "dashboard") setViewingClient(null);
+    // O4: the admin's main login is accepted by each module; give the module its own session copy so it opens signed in.
+    if (user?.role === "admin" && (v === "ideas-riv" || v === "rise-riv" || v === "r-index")) {
+      const t = getToken();
+      if (t) { setIdeasSession(t, user); setRiseSession(t, user); setIndexSession(t, user); }
+    }
     const path = OUTER_VIEW_TO_PATH[v];
     if (path && window.location.pathname.replace(/\/+$/, "") !== path) {
       window.history.pushState(null, "", path);
