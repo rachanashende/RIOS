@@ -147,7 +147,8 @@ router.get("/", requireRole("junior_employee", "jury", "admin"), async (req, res
 router.get("/mine", requireRole("junior_employee", "admin"), async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, question_id, title, description, created_at
+      `SELECT id, question_id, title, description, created_at,
+              EXISTS (SELECT 1 FROM idea_ratings r WHERE r.idea_id = ideas.id) AS locked
        FROM ideas
        WHERE submitted_by = $1
        ORDER BY created_at DESC`,
@@ -195,6 +196,58 @@ router.post("/", requireRole("junior_employee", "admin"), async (req, res, next)
       return res.status(400).json({ error: "None of the submitted ideas had a title." });
     }
     res.status(201).json({ ideas: inserted });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PUT /api/ideas/:id  { title, description }  and  DELETE /api/ideas/:id
+ * (I7) An employee can fix or withdraw their own idea, but only until the
+ * first juror has rated it -- after that the idea is locked so jurors never
+ * score something that then changes or disappears.
+ */
+async function loadOwnUnratedIdea(req, res) {
+  const id = Number(req.params.id);
+  const { rows } = await pool.query(
+    `SELECT i.id, i.submitted_by,
+            EXISTS (SELECT 1 FROM idea_ratings r WHERE r.idea_id = i.id) AS locked
+     FROM ideas i WHERE i.id = $1`, [id]);
+  const idea = rows[0];
+  if (!idea || idea.submitted_by !== req.user.id) {
+    res.status(404).json({ error: "Idea not found." });
+    return null;
+  }
+  if (idea.locked) {
+    res.status(409).json({ error: "A jury member has already started rating this idea, so it can no longer be changed or withdrawn." });
+    return null;
+  }
+  return idea;
+}
+
+router.put("/:id", requireRole("junior_employee"), async (req, res, next) => {
+  try {
+    const idea = await loadOwnUnratedIdea(req, res);
+    if (!idea) return;
+    const title = ((req.body && req.body.title) || "").trim();
+    if (!title) return res.status(400).json({ error: "An idea needs a title." });
+    const description = ((req.body && req.body.description) || "").trim() || null;
+    const { rows } = await pool.query(
+      `UPDATE ideas SET title = $1, description = $2 WHERE id = $3
+       RETURNING id, question_id, title, description, created_at`,
+      [title, description, idea.id]);
+    res.json({ idea: { ...rows[0], question: questionById(rows[0].question_id), locked: false } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/:id", requireRole("junior_employee"), async (req, res, next) => {
+  try {
+    const idea = await loadOwnUnratedIdea(req, res);
+    if (!idea) return;
+    await pool.query("DELETE FROM ideas WHERE id = $1", [idea.id]);
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }
