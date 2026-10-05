@@ -19,6 +19,7 @@ import indexAdminRoutes from "./routes/indexAdmin.js";
 import indexExportRoutes from "./routes/indexExport.js";
 
 const app = express();
+app.set("trust proxy", 1); // behind Render's proxy: req.ip is the real client (used by the login throttle)
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 

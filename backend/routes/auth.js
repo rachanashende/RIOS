@@ -7,16 +7,47 @@ import { sendPasswordResetEmail } from "../lib/email.js";
 
 const router = Router();
 
+/* ---- O23: login throttle ------------------------------------------------
+   5 wrong passwords for one email within 15 minutes lock that email for 15 minutes; 30 wrong
+   passwords from one IP within 15 minutes lock that IP. A correct login or a completed password
+   reset clears the email's count. In memory (resets on restart / not shared across instances). */
+const FAIL_WINDOW_MS = 15 * 60 * 1000;
+const MAX_FAILS_PER_EMAIL = 5;
+const MAX_FAILS_PER_IP = 30;
+const failsByKey = new Map(); // "e:<email>" | "i:<ip>" -> failure timestamps
+function recentFails(key) {
+  const now = Date.now();
+  const list = (failsByKey.get(key) || []).filter((t) => now - t < FAIL_WINDOW_MS);
+  if (list.length) failsByKey.set(key, list); else failsByKey.delete(key);
+  return list;
+}
+function lockedFor(key, max) {
+  const list = recentFails(key);
+  return list.length >= max ? Math.ceil((FAIL_WINDOW_MS - (Date.now() - list[0])) / 60000) : 0;
+}
+function noteFail(key) { failsByKey.set(key, [...recentFails(key), Date.now()]); }
+setInterval(() => { for (const k of [...failsByKey.keys()]) recentFails(k); }, 10 * 60 * 1000).unref();
+
 router.post("/login", async (req, res, next) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: "Email and password are required." });
 
-    const { rows } = await pool.query("SELECT * FROM users WHERE email = $1", [String(email).toLowerCase().trim()]);
+    const normalizedEmail = String(email).toLowerCase().trim();
+    const emailKey = "e:" + normalizedEmail, ipKey = "i:" + (req.ip || "");
+    const wait = Math.max(lockedFor(emailKey, MAX_FAILS_PER_EMAIL), lockedFor(ipKey, MAX_FAILS_PER_IP));
+    if (wait > 0) {
+      res.set("Retry-After", String(wait * 60));
+      return res.status(429).json({ error: `Too many failed log-in attempts. Please wait about ${wait} minute${wait === 1 ? "" : "s"} and try again, or use "Forgot password?".` });
+    }
+
+    const { rows } = await pool.query("SELECT * FROM users WHERE email = $1", [normalizedEmail]);
     const user = rows[0];
     if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+      noteFail(emailKey); noteFail(ipKey);
       return res.status(401).json({ error: "Incorrect email or password." });
     }
+    failsByKey.delete(emailKey);
 
     const token = signToken(user);
     res.json({
@@ -97,6 +128,8 @@ router.post("/reset", async (req, res, next) => {
 
     await pool.query("UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2", [bcrypt.hashSync(String(password), 10), rows[0].user_id]);
     await pool.query("UPDATE password_resets SET used_at = now() WHERE user_id = $1 AND used_at IS NULL", [rows[0].user_id]);
+    const { rows: who } = await pool.query("SELECT email FROM users WHERE id = $1", [rows[0].user_id]);
+    if (who[0]) failsByKey.delete("e:" + String(who[0].email).toLowerCase().trim()); // O23: a completed reset lifts the lock
     res.json({ ok: true });
   } catch (err) {
     next(err);
