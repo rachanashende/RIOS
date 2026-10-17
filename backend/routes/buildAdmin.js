@@ -19,6 +19,19 @@ router.use(requireAuth, requireRole("admin", "riv_manager"));
 
 const clean = (v) => (v == null || String(v).trim() === "" ? null : String(v).trim());
 
+// Every *Id/*Ids field below comes straight from request input, so its name
+// alone doesn't make it a number -- a non-numeric value (e.g. someone typing
+// "client 1" into the admin console's Client ID field instead of the actual
+// numeric id) used to reach pool.query() unvalidated and surface as a raw
+// Postgres "invalid input syntax for type integer" error. toId() turns
+// anything that isn't a clean positive integer into null so routes can
+// reject it with a normal 400 instead.
+function toId(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 async function nextCode() {
   const { rows } = await pool.query("SELECT nextval('build_project_code_seq') AS n");
   return `BLD-${String(rows[0].n).padStart(4, "0")}`;
@@ -52,10 +65,14 @@ async function assertClientInScope(req, clientId) {
 // other).
 router.post("/projects", async (req, res, next) => {
   try {
-    const { type, title, description, clientId, ownerUserId, pocUserId, rivManagerId, targetEnd } = req.body || {};
+    const { type, title, description, targetEnd } = req.body || {};
+    const clientId = toId(req.body?.clientId);
+    const ownerUserId = toId(req.body?.ownerUserId);
+    const pocUserId = toId(req.body?.pocUserId);
+    const rivManagerId = toId(req.body?.rivManagerId);
     if (!["internal", "startup"].includes(type)) return res.status(400).json({ error: "type must be 'internal' or 'startup'." });
     if (!title || !String(title).trim()) return res.status(400).json({ error: "Title is required." });
-    if (!clientId) return res.status(400).json({ error: "clientId is required." });
+    if (!clientId) return res.status(400).json({ error: "clientId must be a valid numeric client ID." });
     await assertClientInScope(req, clientId);
 
     const { rows: clientRows } = await pool.query("SELECT id FROM users WHERE id = $1 AND role = 'client'", [clientId]);
@@ -66,7 +83,7 @@ router.post("/projects", async (req, res, next) => {
     const { rows } = await pool.query(
       `INSERT INTO build_projects (code, type, title, description, client_id, owner_user_id, poc_user_id, riv_manager_id, stage, target_end, created_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [code, type, String(title).trim(), clean(description), clientId, ownerUserId || null, pocUserId || null,
+      [code, type, String(title).trim(), clean(description), clientId, ownerUserId, pocUserId,
         rivManagerId || (req.user.role === "riv_manager" ? req.user.id : null), stage, clean(targetEnd), req.user.id]
     );
     const project = rows[0];
@@ -157,8 +174,8 @@ router.post("/from-application/:applicationId", async (req, res, next) => {
     const app = appRows[0];
     if (!app) return res.status(404).json({ error: "Application not found." });
     if (app.decision !== "selected_for_pilot") return res.status(400).json({ error: "This application hasn't been marked \"Selected for Pilot\" yet." });
-    const clientId = req.body?.clientId || app.opportunity_client_id;
-    if (!clientId) return res.status(400).json({ error: "This call has no client attached -- pass clientId, or set one on the call first." });
+    const clientId = toId(req.body?.clientId) || app.opportunity_client_id;
+    if (!clientId) return res.status(400).json({ error: "This call has no client attached -- pass a valid numeric clientId, or set one on the call first." });
     await assertClientInScope(req, clientId);
 
     const { rows: clientRows } = await pool.query("SELECT id FROM users WHERE id = $1 AND role = 'client'", [clientId]);
@@ -200,12 +217,16 @@ router.post("/from-application/:applicationId", async (req, res, next) => {
 // PUT /api/admin/build/projects/:id/assign { ownerUserId?, pocUserId?, rivManagerId? }
 router.put("/projects/:id/assign", async (req, res, next) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM build_projects WHERE id = $1", [req.params.id]);
+    const projectId = toId(req.params.id);
+    if (!projectId) return res.status(400).json({ error: "Invalid project ID." });
+    const { rows } = await pool.query("SELECT * FROM build_projects WHERE id = $1", [projectId]);
     const project = rows[0];
     if (!project) return res.status(404).json({ error: "Project not found." });
     await assertClientInScope(req, project.client_id);
 
-    const { ownerUserId, pocUserId, rivManagerId } = req.body || {};
+    const ownerUserId = toId(req.body?.ownerUserId);
+    const pocUserId = toId(req.body?.pocUserId);
+    const rivManagerId = toId(req.body?.rivManagerId);
     const { rows: out } = await pool.query(
       `UPDATE build_projects SET
          owner_user_id = COALESCE($1, owner_user_id),
@@ -213,7 +234,7 @@ router.put("/projects/:id/assign", async (req, res, next) => {
          riv_manager_id = COALESCE($3, riv_manager_id),
          updated_at = now()
        WHERE id = $4 RETURNING *`,
-      [ownerUserId ?? null, pocUserId ?? null, rivManagerId ?? null, project.id]
+      [ownerUserId, pocUserId, rivManagerId, project.id]
     );
     res.json({ project: out[0] });
   } catch (err) {
@@ -247,8 +268,9 @@ router.get("/poc", requireRole("admin"), async (req, res, next) => {
 // convention as every other role in RIOS (no self-registration).
 router.post("/poc", requireRole("admin"), async (req, res, next) => {
   try {
-    const { email, password, name, clientId } = req.body || {};
-    if (!email || !password || !name || !clientId) return res.status(400).json({ error: "Name, email, temporary password, and clientId are required." });
+    const { email, password, name } = req.body || {};
+    const clientId = toId(req.body?.clientId);
+    if (!email || !password || !name || !clientId) return res.status(400).json({ error: "Name, email, temporary password, and a valid numeric clientId are required." });
     if (String(password).length < 8) return res.status(400).json({ error: "The temporary password must be at least 8 characters." });
     const { rows: clientRows } = await pool.query("SELECT id, company FROM users WHERE id = $1 AND role = 'client'", [clientId]);
     if (!clientRows.length) return res.status(404).json({ error: "That client account doesn't exist." });
@@ -297,9 +319,15 @@ router.get("/managers", requireRole("admin"), async (req, res, next) => {
 
 router.post("/managers", requireRole("admin"), async (req, res, next) => {
   try {
-    const { email, password, name, clientIds } = req.body || {};
+    const { email, password, name } = req.body || {};
     if (!email || !password || !name) return res.status(400).json({ error: "Name, email, and a temporary password are required." });
     if (String(password).length < 8) return res.status(400).json({ error: "The temporary password must be at least 8 characters." });
+    // clientIds is optional, but anything in it must resolve to a real
+    // numeric client ID -- otherwise the INSERT below throws the same raw
+    // Postgres integer-syntax error the Client ID text field used to.
+    const rawClientIds = Array.isArray(req.body?.clientIds) ? req.body.clientIds : [];
+    const clientIds = rawClientIds.map(toId);
+    if (clientIds.some((id) => id === null)) return res.status(400).json({ error: "Assigned client IDs must all be valid numbers." });
     const normalizedEmail = String(email).toLowerCase().trim();
     const { rows: existing } = await pool.query("SELECT id FROM users WHERE email = $1", [normalizedEmail]);
     if (existing.length) return res.status(409).json({ error: "A user with that email already exists." });
@@ -310,7 +338,7 @@ router.post("/managers", requireRole("admin"), async (req, res, next) => {
       [normalizedEmail, password_hash, String(name).trim()]
     );
     const managerId = rows[0].id;
-    if (Array.isArray(clientIds) && clientIds.length) {
+    if (clientIds.length) {
       const values = clientIds.map((_, i) => `($1,$${i + 2})`).join(",");
       await pool.query(`INSERT INTO build_manager_clients (manager_user_id, client_id) VALUES ${values} ON CONFLICT DO NOTHING`, [managerId, ...clientIds]);
     }
@@ -323,12 +351,16 @@ router.post("/managers", requireRole("admin"), async (req, res, next) => {
 // PUT /api/admin/build/managers/:id/clients { clientIds: [] } -- replaces the full assignment set.
 router.put("/managers/:id/clients", requireRole("admin"), async (req, res, next) => {
   try {
-    const { clientIds } = req.body || {};
-    if (!Array.isArray(clientIds)) return res.status(400).json({ error: "clientIds must be an array." });
-    await pool.query("DELETE FROM build_manager_clients WHERE manager_user_id = $1", [req.params.id]);
+    const managerId = toId(req.params.id);
+    if (!managerId) return res.status(400).json({ error: "Invalid manager ID." });
+    const rawClientIds = req.body?.clientIds;
+    if (!Array.isArray(rawClientIds)) return res.status(400).json({ error: "clientIds must be an array." });
+    const clientIds = rawClientIds.map(toId);
+    if (clientIds.some((id) => id === null)) return res.status(400).json({ error: "clientIds must all be valid numbers." });
+    await pool.query("DELETE FROM build_manager_clients WHERE manager_user_id = $1", [managerId]);
     if (clientIds.length) {
       const values = clientIds.map((_, i) => `($1,$${i + 2})`).join(",");
-      await pool.query(`INSERT INTO build_manager_clients (manager_user_id, client_id) VALUES ${values} ON CONFLICT DO NOTHING`, [req.params.id, ...clientIds]);
+      await pool.query(`INSERT INTO build_manager_clients (manager_user_id, client_id) VALUES ${values} ON CONFLICT DO NOTHING`, [managerId, ...clientIds]);
     }
     res.json({ ok: true });
   } catch (err) {
@@ -352,7 +384,9 @@ router.delete("/managers/:id", requireRole("admin"), async (req, res, next) => {
 // POST /api/admin/build/reassess-link { projectId, questionId }
 router.post("/reassess-link", async (req, res, next) => {
   try {
-    const { projectId, questionId } = req.body || {};
+    const projectId = toId(req.body?.projectId);
+    const questionId = toId(req.body?.questionId);
+    if (!projectId || !questionId) return res.status(400).json({ error: "projectId and questionId must both be valid numbers." });
     const { rows } = await pool.query("SELECT * FROM build_projects WHERE id = $1", [projectId]);
     const project = rows[0];
     if (!project) return res.status(404).json({ error: "Project not found." });
@@ -363,7 +397,7 @@ router.post("/reassess-link", async (req, res, next) => {
     await pool.query(
       `INSERT INTO build_reassess_links (project_id, client_id, question_id) VALUES ($1,$2,$3)
        ON CONFLICT (project_id, question_id) DO NOTHING`,
-      [project.id, project.client_id, Number(questionId)]
+      [project.id, project.client_id, questionId]
     );
     res.status(201).json({ ok: true });
   } catch (err) {
@@ -374,12 +408,14 @@ router.post("/reassess-link", async (req, res, next) => {
 // GET /api/admin/build/reassess/:clientId -- "Addressed by BLD-xxxx (Scaled, <date>)" lookups for the next audit view.
 router.get("/reassess/:clientId", async (req, res, next) => {
   try {
-    await assertClientInScope(req, req.params.clientId);
+    const clientId = toId(req.params.clientId);
+    if (!clientId) return res.status(400).json({ error: "Invalid client ID." });
+    await assertClientInScope(req, clientId);
     const { rows } = await pool.query(
       `SELECT l.question_id, p.code, p.title, p.closed_at
        FROM build_reassess_links l JOIN build_projects p ON p.id = l.project_id
        WHERE l.client_id = $1`,
-      [req.params.clientId]
+      [clientId]
     );
     res.json({
       links: rows.map((r) => ({
