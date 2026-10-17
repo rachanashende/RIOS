@@ -257,24 +257,38 @@ function LoginView({ onAuthed }) {
 /* =========================================================================
    PROJECT LIST (PRD 8.1)
    ========================================================================= */
+// Projects splits into two sub-tabs, one per existing build_projects.type
+// value -- "Enterprise Innovation Management" (type='internal', RIV's own
+// Ideathon-sourced work) and "Open Innovation Management" (type='startup',
+// sourced from outside via Rise.RIV). No schema change: this just gives
+// the existing type field two names people recognize. The actual
+// "innovation management" calculation/metric for each tab is a
+// placeholder for now -- exact spec to follow.
+const INNOV_TABS = [
+  { id: "enterprise", label: "Enterprise Innovation Management", type: "internal" },
+  { id: "open", label: "Open Innovation Management", type: "startup" },
+];
+
 function ProjectListView({ session, onOpen }) {
+  const [innovTab, setInnovTab] = useState("enterprise");
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filters, setFilters] = useState({ type: "", stage: "", health: "", status: "", q: "", clientId: "" });
+  const [filters, setFilters] = useState({ stage: "", health: "", status: "", q: "", clientId: "" });
   // Backend only honours ?clientId= for admin and riv_manager (everyone else
   // is already scoped to one client, so a filter would be a no-op) -- only
   // show the picker where it actually does something.
   const showClientFilter = session.role === "admin" || session.role === "riv_manager";
   const clients = useClientOptions();
+  const activeType = INNOV_TABS.find((t) => t.id === innovTab).type;
 
   useEffect(() => {
     setLoading(true);
-    api.listBuildProjects(filters)
+    api.listBuildProjects({ ...filters, type: activeType })
       .then((d) => setProjects(d.projects || []))
       .catch((e) => setError(e.message || "Couldn't load projects."))
       .finally(() => setLoading(false));
-  }, [filters.type, filters.stage, filters.health, filters.status, filters.q, filters.clientId]);
+  }, [activeType, filters.stage, filters.health, filters.status, filters.q, filters.clientId]);
 
   const STAGE_OPTIONS = ["requirements", "agreement", "design", "build", "test", "pilot", "scale", "closed"];
 
@@ -285,6 +299,20 @@ function ProjectListView({ session, onOpen }) {
           <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink }}>Build projects</div>
           <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginTop: 4 }}>Ideathon winners and startup pilots tracked from Requirements through to Closed.</div>
         </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, borderBottom: `1px solid ${BRAND.line}` }}>
+        {INNOV_TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setInnovTab(t.id)}
+            style={{
+              fontFamily: FONT, fontWeight: 600, fontSize: 13, padding: "10px 4px", background: "none", border: "none",
+              borderBottom: innovTab === t.id ? `2px solid ${BRAND.coral}` : "2px solid transparent",
+              color: innovTab === t.id ? BRAND.ink : "#9B958F", cursor: "pointer", whiteSpace: "nowrap",
+            }}
+          >{t.label}</button>
+        ))}
       </div>
 
       <Card style={{ padding: 16, marginBottom: 20 }}>
@@ -303,11 +331,6 @@ function ProjectListView({ session, onOpen }) {
               {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.company || c.name}</option>)}
             </select>
           )}
-          <select style={{ ...selectStyle, flex: "0 1 140px" }} value={filters.type} onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}>
-            <option value="">All types</option>
-            <option value="internal">Internal</option>
-            <option value="startup">Startup</option>
-          </select>
           <select style={{ ...selectStyle, flex: "0 1 160px" }} value={filters.stage} onChange={(e) => setFilters((f) => ({ ...f, stage: e.target.value }))}>
             <option value="">All stages</option>
             {STAGE_OPTIONS.map((s) => <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>)}
