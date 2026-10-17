@@ -792,7 +792,11 @@ function IdeaRatingsDetailView({ idea, ratings, loading, error, onBack }) {
 
       <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{idea.question?.module} · {idea.question?.submodule}</div>
       <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 21, color: BRAND.ink, marginTop: 4 }}>{idea.title}</div>
-      <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 6 }}>Submitted by {idea.submitted_by_name}</div>
+      <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 6 }}>
+        Submitted by {idea.submitted_by_name}
+        {/* Build.RIV's "Create from idea" asks for this raw ID with no lookup of its own -- shown here so an admin never has to guess it. */}
+        <span style={{ marginLeft: 8, fontFamily: "monospace", color: "#B7B2AE" }}>· Idea ID: {idea.id}</span>
+      </div>
 
       {loading && <Spinner label="Loading ratings…" />}
       <ErrorBanner text={error} />

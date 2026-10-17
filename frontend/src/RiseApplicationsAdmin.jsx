@@ -71,7 +71,11 @@ function ApplicationDetail({ id, onBack, onChanged }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
           <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 20, color: BRAND.ink }}>{a.startup_name}</div>
-          <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F" }}>Applied {fmtDate(a.created_at)}</div>
+          <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F" }}>
+            Applied {fmtDate(a.created_at)}
+            {/* Build.RIV's "Create from application" asks for this raw ID with no lookup of its own -- shown here so an admin never has to guess it. */}
+            <span style={{ marginLeft: 8, fontFamily: "monospace", color: "#B7B2AE" }}>· Application ID: {a.id}</span>
+          </div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.coral }}>{fmtScore(avg)}</div>
