@@ -1191,12 +1191,21 @@ function ClientPicker({ value, onChange, required, label, hint }) {
 
 function CreateProjectPanel({ onCreated }) {
   const [mode, setMode] = useState("manual");
-  const [form, setForm] = useState({ type: "internal", title: "", description: "", clientId: "", targetEnd: "" });
+  const [form, setForm] = useState({ type: "internal", title: "", description: "", clientId: "", targetEnd: "", pocUserId: "" });
   const [ideaId, setIdeaId] = useState("");
   const [applicationId, setApplicationId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+
+  // So a project doesn't have to go through the Assign tab afterward just
+  // to get a POC on it -- when a client has POC logins already, offer them
+  // right here, scoped to whichever client was just picked above.
+  const [pocs, setPocs] = useState(null);
+  useEffect(() => {
+    if (!form.clientId) { setPocs(null); return; }
+    api.listBuildPocs(form.clientId).then((d) => setPocs(d.pocs || [])).catch(() => setPocs(null));
+  }, [form.clientId]);
 
   async function submit(e) {
     e.preventDefault();
@@ -1244,6 +1253,12 @@ function CreateProjectPanel({ onCreated }) {
             <Field label="Title" required><input style={inputStyle} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} /></Field>
             <Field label="Description"><textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} /></Field>
             <ClientPicker label="Client" required hint="The RIOS client (leader) account this project belongs to." value={form.clientId} onChange={(v) => setForm((f) => ({ ...f, clientId: v }))} />
+            <Field label="Client POC" hint={!form.clientId ? "Choose a client first." : pocs && !pocs.length ? "This client has no POC logins yet -- create one under POC / Manager logins, or assign later." : "Optional -- can also be set later from Assign people."}>
+              <select style={selectStyle} value={form.pocUserId} onChange={(e) => setForm((f) => ({ ...f, pocUserId: e.target.value }))} disabled={!pocs || !pocs.length}>
+                <option value="">— None yet —</option>
+                {(pocs || []).map((p) => <option key={p.id} value={p.id}>{p.name} ({p.email})</option>)}
+              </select>
+            </Field>
             <Field label="Target end date"><input type="date" style={inputStyle} value={form.targetEnd} onChange={(e) => setForm((f) => ({ ...f, targetEnd: e.target.value }))} /></Field>
           </>
         )}
@@ -1265,12 +1280,38 @@ function CreateProjectPanel({ onCreated }) {
   );
 }
 
+// Previously every field here was a raw numeric-ID text box -- Project ID,
+// Owner user ID, Client POC user ID, RIV Manager user ID -- none of which
+// were ever shown anywhere in the app. In practice that meant projects got
+// created with no POC assigned at all (CreateProjectPanel doesn't collect
+// one either), so a client_poc login would see a project in its list but
+// have no way to post updates on it, with no way for an admin to notice or
+// fix it short of a database query. Now: pick the project from a dropdown
+// (code + title), and POC/RIV Manager from dropdowns of the real logins
+// that exist for that project's client -- the numeric IDs still travel
+// underneath, they're just never something a person has to find or type.
+// Owner stays a numeric field: Build.RIV has no listing of candidate
+// "owner" accounts anywhere in the app to build a picker from.
 function AssignPanel() {
+  const [projects, setProjects] = useState(null);
   const [projectId, setProjectId] = useState("");
   const [form, setForm] = useState({ ownerUserId: "", pocUserId: "", rivManagerId: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+
+  useEffect(() => {
+    api.listBuildProjects().then((d) => setProjects(d.projects || [])).catch(() => setProjects(null));
+  }, []);
+
+  const selectedProject = (projects || []).find((p) => String(p.id) === String(projectId));
+  const [pocs, setPocs] = useState(null);
+  const [managers, setManagers] = useState(null);
+  useEffect(() => {
+    if (!selectedProject) { setPocs(null); setManagers(null); return; }
+    api.listBuildPocs(selectedProject.client_id).then((d) => setPocs(d.pocs || [])).catch(() => setPocs(null));
+    api.listBuildManagers().then((d) => setManagers(d.managers || [])).catch(() => setManagers(null));
+  }, [selectedProject?.id]);
 
   async function submit(e) {
     e.preventDefault();
@@ -1289,13 +1330,46 @@ function AssignPanel() {
     <Card style={{ padding: 20 }}>
       <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}>Assign people to a project</div>
       <form onSubmit={submit}>
-        <Field label="Project ID" required><input style={inputStyle} value={projectId} onChange={(e) => setProjectId(e.target.value)} /></Field>
-        <Field label="Owner user ID"><input style={inputStyle} value={form.ownerUserId} onChange={(e) => setForm((f) => ({ ...f, ownerUserId: e.target.value }))} /></Field>
-        <Field label="Client POC user ID"><input style={inputStyle} value={form.pocUserId} onChange={(e) => setForm((f) => ({ ...f, pocUserId: e.target.value }))} /></Field>
-        <Field label="RIV Manager user ID"><input style={inputStyle} value={form.rivManagerId} onChange={(e) => setForm((f) => ({ ...f, rivManagerId: e.target.value }))} /></Field>
+        <Field label="Project" required>
+          {projects && projects.length ? (
+            <select style={selectStyle} value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+              <option value="">— Choose a project —</option>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.title}</option>)}
+            </select>
+          ) : (
+            <input style={inputStyle} value={projectId} onChange={(e) => setProjectId(e.target.value)} placeholder="Numeric project ID" />
+          )}
+        </Field>
+
+        <Field label="Owner user ID" hint="No picker for this one yet -- there's no listing of candidate owner accounts in the app.">
+          <input style={inputStyle} value={form.ownerUserId} onChange={(e) => setForm((f) => ({ ...f, ownerUserId: e.target.value }))} />
+        </Field>
+
+        <Field label="Client POC" hint={selectedProject ? undefined : "Choose a project first."}>
+          {pocs && pocs.length ? (
+            <select style={selectStyle} value={form.pocUserId} onChange={(e) => setForm((f) => ({ ...f, pocUserId: e.target.value }))}>
+              <option value="">— No change —</option>
+              {pocs.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.email})</option>)}
+            </select>
+          ) : (
+            <input style={inputStyle} value={form.pocUserId} onChange={(e) => setForm((f) => ({ ...f, pocUserId: e.target.value }))} placeholder={selectedProject ? "This client has no POC logins yet -- create one under POC / Manager logins." : "Numeric POC user ID"} />
+          )}
+        </Field>
+
+        <Field label="RIV Manager">
+          {managers && managers.length ? (
+            <select style={selectStyle} value={form.rivManagerId} onChange={(e) => setForm((f) => ({ ...f, rivManagerId: e.target.value }))}>
+              <option value="">— No change —</option>
+              {managers.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.email})</option>)}
+            </select>
+          ) : (
+            <input style={inputStyle} value={form.rivManagerId} onChange={(e) => setForm((f) => ({ ...f, rivManagerId: e.target.value }))} placeholder="Numeric RIV Manager user ID" />
+          )}
+        </Field>
+
         {notice && <Notice text={notice} />}
         <ErrorBanner text={error} />
-        <PrimaryButton type="submit" disabled={submitting}>{submitting ? "Saving…" : "Save assignment"}</PrimaryButton>
+        <PrimaryButton type="submit" disabled={submitting || !projectId}>{submitting ? "Saving…" : "Save assignment"}</PrimaryButton>
       </form>
     </Card>
   );
