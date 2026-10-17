@@ -3,7 +3,11 @@ import {
   Hammer, LogOut, ArrowRight, ChevronLeft, Loader2, AlertCircle, Briefcase,
   LayoutDashboard, Settings, Plus, CheckCircle2, Paperclip, Download, Upload,
   History, FileText, Users, Building2, Gauge, Search, X, KeyRound, Trash2,
+  ArrowUpDown, ArrowUp, ArrowDown,
 } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+} from "recharts";
 import {
   api, divertIfTemporaryPassword, getStoredBuildUser, getToken,
   setBuildSession, clearBuildSession, clearAllSessions,
@@ -1020,6 +1024,100 @@ function ProjectDetailView({ projectId, session, onBack }) {
    dashboard too; a riv_manager sees the clients assigned to them via the
    same client-dashboard endpoint, one client at a time, from a picker.
    ========================================================================= */
+// Generic click-to-sort helper for the dashboard tables (PRD section C,
+// "a sortable project table") -- toggles asc/desc on the same column,
+// resets to asc on a new one. Rows are pre-flattened by the caller so
+// sortKey is always a plain top-level field (no nested p.roi.roiPct).
+function useSortedRows(rows, defaultKey, defaultDir = "asc") {
+  const [sortKey, setSortKey] = useState(defaultKey);
+  const [sortDir, setSortDir] = useState(defaultDir);
+  const sorted = useMemo(() => {
+    const arr = [...(rows || [])];
+    arr.sort((a, b) => {
+      let av = a[sortKey], bv = b[sortKey];
+      if (typeof av === "string") av = av.toLowerCase();
+      if (typeof bv === "string") bv = bv.toLowerCase();
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [rows, sortKey, sortDir]);
+  const toggleSort = (key) => {
+    if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  };
+  return { sorted, sortKey, sortDir, toggleSort };
+}
+
+function SortTh({ label, sortKey: key, active, dir, onSort }) {
+  const Icon = active ? (dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <th onClick={() => onSort(key)} style={{
+      fontFamily: FONT, fontSize: 11, fontWeight: 700, color: active ? BRAND.ink : "#7A746F",
+      textTransform: "uppercase", padding: "10px 14px", borderBottom: `1px solid ${BRAND.line}`,
+      cursor: "pointer", userSelect: "none", whiteSpace: "nowrap",
+    }}>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{label} <Icon size={11} /></span>
+    </th>
+  );
+}
+
+const BUILD_STAGE_ORDER = ["requirements", "agreement", "design", "build", "test", "pilot", "scale", "closed"];
+
+// Stage-count breakdown (PRD section C, "counts of projects at each
+// stage") -- data.pipelineByStage is a plain { stageKey: count } object
+// from GET /api/build/dashboard/client/:clientId, already computed
+// server-side; this just renders it as a row of mini stat tiles in a
+// fixed, sensible stage order.
+function StageBreakdown({ pipelineByStage }) {
+  if (!pipelineByStage) return null;
+  const keys = Object.keys(pipelineByStage);
+  if (!keys.length) return null;
+  const ordered = [...BUILD_STAGE_ORDER.filter((k) => keys.includes(k)), ...keys.filter((k) => !BUILD_STAGE_ORDER.includes(k))];
+  return (
+    <Card style={{ padding: 18, marginBottom: 20 }}>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}>Projects by stage</div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {ordered.map((k) => (
+          <div key={k} style={{ flex: "1 1 100px", background: BRAND.cream, borderRadius: 9, padding: "10px 12px" }}>
+            <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: BRAND.ink }}>{pipelineByStage[k]}</div>
+            <div style={{ fontFamily: FONT, fontSize: 11, color: "#7A746F", textTransform: "capitalize" }}>{k.replace(/_/g, " ")}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// Investment-vs-benefit chart (PRD section C). Takes either the per-project
+// shape from GET /dashboard/client/:clientId (investmentVsBenefit: [{code,
+// actualCost, realisedBenefit}]) or the per-client shape built from the
+// portfolio endpoint's own invested/benefit fields -- same chart, different
+// caller-supplied field names so neither dashboard needs a second component.
+function InvestmentVsBenefitChart({ title, rows, nameKey, investedKey, benefitKey }) {
+  if (!rows || !rows.length) return null;
+  return (
+    <Card style={{ padding: 18, marginBottom: 20 }}>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}>{title}</div>
+      <ResponsiveContainer width="100%" height={Math.max(220, Math.min(420, 56 * rows.length))}>
+        <BarChart data={rows} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={BRAND.line} horizontal={false} />
+          <XAxis type="number" tick={{ fontFamily: FONT, fontSize: 11, fill: "#7A746F" }} />
+          <YAxis type="category" dataKey={nameKey} width={90} tick={{ fontFamily: FONT, fontSize: 11, fill: "#7A746F" }} />
+          <Tooltip contentStyle={{ fontFamily: FONT, fontSize: 12, borderRadius: 8, border: `1px solid ${BRAND.line}` }} />
+          <Legend wrapperStyle={{ fontFamily: FONT, fontSize: 11 }} />
+          <Bar dataKey={investedKey} name="Invested" fill="#D9A79C" radius={[0, 4, 4, 0]} />
+          <Bar dataKey={benefitKey} name="Realised benefit" fill="#1B7A5A" radius={[0, 4, 4, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </Card>
+  );
+}
+
 function SummaryStat({ label, value, sub, color }) {
   return (
     <Card style={{ padding: 18, flex: "1 1 160px" }}>
@@ -1045,7 +1143,12 @@ function ClientDashboard({ clientId }) {
   if (error) return <ErrorBanner text={error} />;
   if (!data) return null;
 
-  const { summary, needsAttention, projects } = data;
+  const { summary, needsAttention, projects, pipelineByStage, investmentVsBenefit } = data;
+  const healthRank = { off_track: 0, at_risk: 1, on_track: 2 };
+  const rows = (projects || []).map((p) => ({ ...p, roiPct: p.roi?.roiPct ?? null, healthRank: healthRank[p.health] ?? 3 }));
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(rows, "code");
+  const chartRows = (investmentVsBenefit || []).map((r) => ({ name: r.code, invested: r.actualCost || 0, benefit: r.realisedBenefit || 0 }));
+
   return (
     <div>
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 20 }}>
@@ -1056,6 +1159,9 @@ function ClientDashboard({ clientId }) {
         <SummaryStat label="Realised benefit" value={summary.realisedBenefitFmt} sub={summary.estimated ? "partly estimated" : undefined} />
         <SummaryStat label="Portfolio ROI" value={fmtPct(summary.portfolioRoi)} color={summary.portfolioRoi >= 0 ? "#1B7A5A" : "#C13B3B"} />
       </div>
+
+      <StageBreakdown pipelineByStage={pipelineByStage} />
+      <InvestmentVsBenefitChart title="Investment vs. realised benefit" rows={chartRows} nameKey="name" investedKey="invested" benefitKey="benefit" />
 
       {needsAttention.length > 0 && (
         <Card style={{ padding: 18, marginBottom: 20 }}>
@@ -1075,12 +1181,12 @@ function ClientDashboard({ clientId }) {
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
             <thead><tr style={{ background: BRAND.cream, textAlign: "left" }}>
-              {["Code", "Title", "Stage", "Health", "Owner", "ROI"].map((h) => (
-                <th key={h} style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#7A746F", textTransform: "uppercase", padding: "10px 14px", borderBottom: `1px solid ${BRAND.line}` }}>{h}</th>
+              {[["Code", "code"], ["Title", "title"], ["Stage", "stage"], ["Health", "healthRank"], ["Owner", "ownerName"], ["ROI", "roiPct"]].map(([label, key]) => (
+                <SortTh key={key} label={label} sortKey={key} active={sortKey === key} dir={sortDir} onSort={toggleSort} />
               ))}
             </tr></thead>
             <tbody>
-              {projects.map((p) => (
+              {sorted.map((p) => (
                 <tr key={p.id}>
                   <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, fontWeight: 700, color: BRAND.coralDark, borderBottom: `1px solid ${BRAND.line}` }}>{p.code}</td>
                   <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 13, color: BRAND.ink, borderBottom: `1px solid ${BRAND.line}` }}>{p.title}</td>
@@ -1111,31 +1217,38 @@ function PortfolioDashboard() {
   if (error) return <ErrorBanner text={error} />;
   if (!clients.length) return <EmptyState icon={Building2} title="No clients with Build projects yet" text="Once a project exists for a client, their row will appear here." />;
 
+  const rows = clients.map((c) => ({ ...c, displayName: c.company || c.name }));
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(rows, "displayName");
+  const chartRows = rows.map((c) => ({ name: c.displayName, invested: c.invested || 0, benefit: c.benefit || 0 }));
+
   return (
-    <Card style={{ padding: 0, overflow: "hidden" }}>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
-          <thead><tr style={{ background: BRAND.cream, textAlign: "left" }}>
-            {["Client", "Active", "Red/Amber", "Invested", "Benefit", "ROI", "Latest audit score"].map((h) => (
-              <th key={h} style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#7A746F", textTransform: "uppercase", padding: "10px 14px", borderBottom: `1px solid ${BRAND.line}` }}>{h}</th>
-            ))}
-          </tr></thead>
-          <tbody>
-            {clients.map((c) => (
-              <tr key={c.clientId}>
-                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 13, fontWeight: 600, color: BRAND.ink, borderBottom: `1px solid ${BRAND.line}` }}>{c.company || c.name}</td>
-                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}` }}>{c.active}</td>
-                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}`, color: c.redAmber ? "#C13B3B" : "#7A746F", fontWeight: c.redAmber ? 700 : 400 }}>{c.redAmber}</td>
-                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}` }}>{c.investedFmt}</td>
-                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}` }}>{c.benefitFmt}</td>
-                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}` }}>{fmtPct(c.roi)}</td>
-                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}` }}>{c.latestAuditScore != null ? c.latestAuditScore : "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+    <div>
+      <InvestmentVsBenefitChart title="Investment vs. realised benefit by client" rows={chartRows} nameKey="name" investedKey="invested" benefitKey="benefit" />
+      <Card style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+            <thead><tr style={{ background: BRAND.cream, textAlign: "left" }}>
+              {[["Client", "displayName"], ["Active", "active"], ["Red/Amber", "redAmber"], ["Invested", "invested"], ["Benefit", "benefit"], ["ROI", "roi"], ["Latest audit score", "latestAuditScore"]].map(([label, key]) => (
+                <SortTh key={key} label={label} sortKey={key} active={sortKey === key} dir={sortDir} onSort={toggleSort} />
+              ))}
+            </tr></thead>
+            <tbody>
+              {sorted.map((c) => (
+                <tr key={c.clientId}>
+                  <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 13, fontWeight: 600, color: BRAND.ink, borderBottom: `1px solid ${BRAND.line}` }}>{c.displayName}</td>
+                  <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}` }}>{c.active}</td>
+                  <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}`, color: c.redAmber ? "#C13B3B" : "#7A746F", fontWeight: c.redAmber ? 700 : 400 }}>{c.redAmber}</td>
+                  <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}` }}>{c.investedFmt}</td>
+                  <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}` }}>{c.benefitFmt}</td>
+                  <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}` }}>{fmtPct(c.roi)}</td>
+                  <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}` }}>{c.latestAuditScore != null ? c.latestAuditScore : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
   );
 }
 
