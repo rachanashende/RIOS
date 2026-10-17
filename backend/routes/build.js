@@ -104,6 +104,10 @@ router.get("/projects", async (req, res, next) => {
     } else if (role === "riv_manager") {
       const ids = await assignedClientIds(req.user);
       if (!ids.length) return res.json({ projects: [] });
+      // ?clientId= narrows within their own assigned set -- same optional-narrow
+      // shape as admin gets above, just AND'ed with the assigned-clients scope
+      // rather than replacing it.
+      if (req.query.clientId) where.push(`p.client_id = ${p(Number(req.query.clientId))}`);
       where.push(`p.client_id = ANY(${p(ids)}::int[])`);
     } else if (role === "client") {
       where.push(`p.client_id = ${p(userId)}`);

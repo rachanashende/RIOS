@@ -257,7 +257,12 @@ function ProjectListView({ session, onOpen }) {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filters, setFilters] = useState({ type: "", stage: "", health: "", status: "", q: "" });
+  const [filters, setFilters] = useState({ type: "", stage: "", health: "", status: "", q: "", clientId: "" });
+  // Backend only honours ?clientId= for admin and riv_manager (everyone else
+  // is already scoped to one client, so a filter would be a no-op) -- only
+  // show the picker where it actually does something.
+  const showClientFilter = session.role === "admin" || session.role === "riv_manager";
+  const clients = useClientOptions();
 
   useEffect(() => {
     setLoading(true);
@@ -265,7 +270,7 @@ function ProjectListView({ session, onOpen }) {
       .then((d) => setProjects(d.projects || []))
       .catch((e) => setError(e.message || "Couldn't load projects."))
       .finally(() => setLoading(false));
-  }, [filters.type, filters.stage, filters.health, filters.status, filters.q]);
+  }, [filters.type, filters.stage, filters.health, filters.status, filters.q, filters.clientId]);
 
   const STAGE_OPTIONS = ["requirements", "agreement", "design", "build", "test", "pilot", "scale", "closed"];
 
@@ -288,6 +293,12 @@ function ProjectListView({ session, onOpen }) {
               style={{ ...inputStyle, paddingLeft: 32 }}
             />
           </div>
+          {showClientFilter && (
+            <select style={{ ...selectStyle, flex: "0 1 170px" }} value={filters.clientId} onChange={(e) => setFilters((f) => ({ ...f, clientId: e.target.value }))}>
+              <option value="">All clients</option>
+              {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.company || c.name}</option>)}
+            </select>
+          )}
           <select style={{ ...selectStyle, flex: "0 1 140px" }} value={filters.type} onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}>
             <option value="">All types</option>
             <option value="internal">Internal</option>
@@ -319,10 +330,10 @@ function ProjectListView({ session, onOpen }) {
       ) : (
         <Card style={{ overflow: "hidden" }}>
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 880 }}>
               <thead>
                 <tr style={{ textAlign: "left", background: BRAND.cream }}>
-                  {["Code", "Title", "Type", "Client", "Stage", "Health", "Status", "Owner", "Last update"].map((h) => (
+                  {["Code", "Title", "Type", "Client", "Stage", "Days in stage", "Health", "Status", "Owner", "Last update"].map((h) => (
                     <th key={h} style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 700, color: "#7A746F", textTransform: "uppercase", letterSpacing: "0.03em", padding: "10px 14px", borderBottom: `1px solid ${BRAND.line}` }}>{h}</th>
                   ))}
                 </tr>
@@ -335,6 +346,7 @@ function ProjectListView({ session, onOpen }) {
                     <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}`, textTransform: "capitalize" }}>{p.type}</td>
                     <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{p.client_company || p.client_name || "—"}</td>
                     <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, color: BRAND.ink, borderBottom: `1px solid ${BRAND.line}`, textTransform: "capitalize" }}>{p.stageLabel || p.stage}</td>
+                    <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, color: Number(p.days_in_stage) > 14 ? "#C13B3B" : "#7A746F", fontWeight: Number(p.days_in_stage) > 14 ? 700 : 400, borderBottom: `1px solid ${BRAND.line}` }}>{p.days_in_stage != null ? `${p.days_in_stage}d` : "—"}</td>
                     <td style={{ padding: "12px 14px", borderBottom: `1px solid ${BRAND.line}` }}><HealthBadge health={p.health} size="sm" /></td>
                     <td style={{ padding: "12px 14px", borderBottom: `1px solid ${BRAND.line}` }}><StatusBadge status={p.status} /></td>
                     <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{p.owner_name || "—"}</td>
