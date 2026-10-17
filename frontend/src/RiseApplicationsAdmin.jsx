@@ -17,6 +17,10 @@ function fmtDate(d) {
 }
 function fmtScore(n) { return n == null ? "Not scored" : Number(n).toFixed(1) + " / 5"; }
 
+const RIV_STATUS_LABEL = { pending: "Awaiting RIV review", approved: "Approved for jury", rejected: "Rejected" };
+const RIV_STATUS_TONE = { pending: { bg: "#FFF3E0", fg: "#9A6B1E" }, approved: { bg: "#E7F5EF", fg: "#1B7A5A" }, rejected: { bg: "#FBEAEA", fg: "#C13B3B" } };
+const DECISION_LABEL = { shortlist: "Shortlisted", on_hold: "On hold", not_selected: "Not selected", selected_for_pilot: "Selected for Pilot" };
+
 const SORTS = {
   score: { label: "Highest score", fn: (a, b) => (b.avg_total ?? -1) - (a.avg_total ?? -1) || new Date(b.created_at) - new Date(a.created_at) },
   recent: { label: "Most recent", fn: (a, b) => new Date(b.created_at) - new Date(a.created_at) },
@@ -32,25 +36,34 @@ function Field({ label, children }) {
   );
 }
 
-function ApplicationDetail({ id, onBack }) {
+function ApplicationDetail({ id, onBack, onChanged }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    setData(null); setError("");
-    api.getRiseApplicationAdmin(id).then(setData).catch((e) => setError(e.message || "Could not load this application."));
-  }, [id]);
+  const load = () => api.getRiseApplicationAdmin(id).then(setData).catch((e) => setError(e.message || "Could not load this application."));
+  useEffect(() => { setData(null); setError(""); load(); }, [id]);
+
+  async function review(status) {
+    setBusy(true); setError("");
+    try { await api.reviewRiseApplication(id, status); await load(); onChanged?.(); } catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
+  async function decide(decision) {
+    setBusy(true); setError("");
+    try { await api.decideRiseApplication(id, decision); await load(); onChanged?.(); } catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
 
   const backBtn = (
     <button onClick={onBack} style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, padding: "7px 12px", borderRadius: 8, border: `1px solid ${BRAND.line}`, background: "#fff", cursor: "pointer", marginBottom: 16 }}>← Back to applications</button>
   );
 
-  if (error) return <div>{backBtn}<div style={{ fontFamily: FONT, fontSize: 13, color: BRAND.coralDark }}>{error}</div></div>;
+  if (error && !data) return <div>{backBtn}<div style={{ fontFamily: FONT, fontSize: 13, color: BRAND.coralDark }}>{error}</div></div>;
   if (!data) return <div>{backBtn}<div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F" }}>Loading…</div></div>;
 
   const { application: a, scores, criteria } = data;
   const avg = scores.length ? scores.reduce((s, r) => s + r.total, 0) / scores.length : null;
   const extra = a.extra && typeof a.extra === "object" ? Object.entries(a.extra).filter(([, v]) => v !== "" && v != null) : [];
+  const btnStyle = (active) => ({ fontFamily: FONT, fontSize: 12, fontWeight: 600, padding: "7px 12px", borderRadius: 8, border: `1px solid ${BRAND.line}`, background: active ? BRAND.ink : "#fff", color: active ? "#fff" : BRAND.ink, cursor: busy ? "not-allowed" : "pointer" });
 
   return (
     <div>
@@ -63,6 +76,34 @@ function ApplicationDetail({ id, onBack }) {
         <div style={{ textAlign: "right" }}>
           <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.coral }}>{fmtScore(avg)}</div>
           <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F" }}>average of {scores.length} jury score{scores.length !== 1 ? "s" : ""}</div>
+        </div>
+      </div>
+
+      {error && <div style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.coralDark, marginBottom: 10 }}>{error}</div>}
+
+      <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 16, background: "#fff", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#9B958F", textTransform: "uppercase", letterSpacing: "0.03em" }}>RIV quality check</div>
+          <div style={{ display: "inline-block", marginTop: 4, fontFamily: FONT, fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 999, color: RIV_STATUS_TONE[a.riv_status]?.fg, background: RIV_STATUS_TONE[a.riv_status]?.bg }}>
+            {RIV_STATUS_LABEL[a.riv_status] || a.riv_status}
+          </div>
+          <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F", marginTop: 4 }}>Only an approved application is ever shown to the retailer's jury.</div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button disabled={busy} onClick={() => review("approved")} style={btnStyle(a.riv_status === "approved")}>Approve for jury</button>
+          <button disabled={busy} onClick={() => review("rejected")} style={btnStyle(a.riv_status === "rejected")}>Reject</button>
+        </div>
+      </div>
+
+      <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 16, background: "#fff", marginBottom: 20 }}>
+        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#9B958F", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 8 }}>
+          Shortlist decision {a.decision && <span style={{ color: BRAND.coralDark }}>— {DECISION_LABEL[a.decision] || a.decision}</span>}
+        </div>
+        <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F", marginBottom: 10 }}>"Selected for Pilot" is what unlocks creating a Build project from this application.</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {Object.entries(DECISION_LABEL).map(([k, label]) => (
+            <button key={k} disabled={busy} onClick={() => decide(k)} style={btnStyle(a.decision === k)}>{label}</button>
+          ))}
         </div>
       </div>
 
@@ -116,11 +157,13 @@ export default function RiseApplicationsAdmin({ opportunity, onClose }) {
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState(null);
 
+  const load = () => api.listRiseApplicationsAdmin()
+    .then((d) => setApps((d.applications || []).filter((a) => a.opportunity_id === opportunity.id)))
+    .catch((e) => setError(e.message || "Could not load applications."));
+
   useEffect(() => {
     setApps(null); setError(""); setOpenId(null);
-    api.listRiseApplicationsAdmin()
-      .then((d) => setApps((d.applications || []).filter((a) => a.opportunity_id === opportunity.id)))
-      .catch((e) => setError(e.message || "Could not load applications."));
+    load();
   }, [opportunity.id]);
 
   const rows = useMemo(() => {
@@ -136,7 +179,7 @@ export default function RiseApplicationsAdmin({ opportunity, onClose }) {
   return (
     <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 20, background: "#fff", marginBottom: 24 }}>
       {openId != null ? (
-        <ApplicationDetail id={openId} onBack={() => setOpenId(null)} />
+        <ApplicationDetail id={openId} onBack={() => setOpenId(null)} onChanged={load} />
       ) : (
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
@@ -163,7 +206,7 @@ export default function RiseApplicationsAdmin({ opportunity, onClose }) {
                 <thead>
                   <tr>
                     <th style={th}>Startup</th><th style={th}>Founder</th><th style={th}>Sector</th><th style={th}>Stage</th>
-                    <th style={th}>Applied</th><th style={th}>Avg score</th><th style={th}>Jurors scored</th><th style={th}></th>
+                    <th style={th}>Applied</th><th style={th}>RIV review</th><th style={th}>Avg score</th><th style={th}>Jurors scored</th><th style={th}>Decision</th><th style={th}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -174,8 +217,14 @@ export default function RiseApplicationsAdmin({ opportunity, onClose }) {
                       <td style={td}>{a.sector || "—"}</td>
                       <td style={td}>{a.stage || "—"}</td>
                       <td style={{ ...td, whiteSpace: "nowrap" }}>{fmtDate(a.created_at)}</td>
+                      <td style={{ ...td, whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, color: RIV_STATUS_TONE[a.riv_status]?.fg, background: RIV_STATUS_TONE[a.riv_status]?.bg }}>
+                          {RIV_STATUS_LABEL[a.riv_status] || a.riv_status}
+                        </span>
+                      </td>
                       <td style={{ ...td, fontWeight: 700, color: a.avg_total == null ? "#9B958F" : BRAND.coral, whiteSpace: "nowrap" }}>{fmtScore(a.avg_total)}</td>
                       <td style={td}>{a.score_count}</td>
+                      <td style={{ ...td, whiteSpace: "nowrap" }}>{a.decision ? DECISION_LABEL[a.decision] || a.decision : "—"}</td>
                       <td style={td}><span style={{ fontSize: 12, fontWeight: 600, color: BRAND.ink, textDecoration: "underline" }}>View</span></td>
                     </tr>
                   ))}

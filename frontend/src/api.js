@@ -383,7 +383,12 @@ export const api = {
   // ---- Build.RIV: unblocking endpoints added to the owning modules (R21/R22)
   selectIdeaForBuild: (ideaId) => request(`/admin/ideas/${ideaId}/select-for-build`, { method: "PUT" }),
   decideRiseApplication: (applicationId, decision) => request(`/admin/rise/applications/${applicationId}/decision`, { method: "PUT", body: { decision } }),
+  reviewRiseApplication: (applicationId, status) => request(`/admin/rise/applications/${applicationId}/riv-review`, { method: "PUT", body: { status } }),
   setRiseOpportunityClient: (opportunityId, clientId) => request(`/admin/rise/opportunities/${opportunityId}/client`, { method: "PUT", body: { clientId } }),
+  assignRiseJuryClient: (id, clientId) => request(`/admin/rise/jury/${id}/client`, { method: "PUT", body: { clientId } }),
+  getMyBuildPicksIdeas: () => ideasRequest("/build/my-picks"),
+  getMyBuildPicksRise: () => riseRequest("/build/my-picks"),
+  getMyReassessLinks: () => buildRequest("/build/my-reassess-links"),
 
   // ---- Build.RIV's own isolated login (client_poc / riv_manager), same
   // shared /auth/login endpoint as every other module.

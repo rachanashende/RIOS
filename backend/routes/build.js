@@ -8,7 +8,7 @@
 import { Router } from "express";
 import multer from "multer";
 import pool from "../db.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
   STAGES, STAGE_LABELS, nextStage, prevStage, isValidStage,
   gateApprovers, missingFieldsForStage, computeRoi,
@@ -84,6 +84,64 @@ function projectOut(row) {
   const { kpi_name, kpi_unit, baseline, target, currency, est_cost, actual_cost, est_benefit, realised_benefit, ...project } = row;
   return { ...project, metrics, roi: computeRoi(metrics), stageLabel: STAGE_LABELS[row.stage] || row.stage };
 }
+
+/* =========================================================================
+   CLIENT JURY -- read-only visibility (PRD role table: "Client Jury: read-
+   only access to projects they selected"). A jury member never gets a
+   Build login of their own -- this is reached with their existing
+   Ideas.RIV/Rise.RIV token, same shared-JWT pattern every other module
+   uses. Deliberately a flat status list, not full canSeeProject access:
+   no edit path anywhere here, and no detail-page view -- just "what
+   happened to the thing I picked."
+   ========================================================================= */
+router.get("/my-picks", requireRole("jury", "rise_jury"), async (req, res, next) => {
+  try {
+    const isIdeasJury = req.user.role === "jury";
+    const { rows } = await pool.query(
+      isIdeasJury
+        ? `SELECT DISTINCT p.id, p.code, p.title, p.type, p.stage, p.status, p.health, p.outcome, p.created_at
+           FROM build_projects p
+           JOIN build_project_sources s ON s.project_id = p.id AND s.source_type = 'idea'
+           JOIN idea_ratings r ON r.idea_id = s.source_id AND r.jury_user_id = $1
+           ORDER BY p.created_at DESC`
+        : `SELECT DISTINCT p.id, p.code, p.title, p.type, p.stage, p.status, p.health, p.outcome, p.created_at
+           FROM build_projects p
+           JOIN build_project_sources s ON s.project_id = p.id AND s.source_type = 'rise_application'
+           JOIN rise_scores r ON r.application_id = s.source_id AND r.jury_user_id = $1
+           ORDER BY p.created_at DESC`,
+      [req.user.id]
+    );
+    res.json({ projects: rows.map((r) => ({ ...r, stageLabel: STAGE_LABELS[r.stage] || r.stage })) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/build/my-reassess-links -- a client's own "addressed by" notes
+// for their scorecard view (PRD "Audit/Scorecard: preserve the link
+// between the original audit opportunity and the Build project, then
+// show when that opportunity has been addressed"). Same data as admin's
+// GET /admin/build/reassess/:clientId -- self-scoped so a client can read
+// it with their own login, which has no admin/riv_manager access.
+router.get("/my-reassess-links", async (req, res, next) => {
+  try {
+    if (req.user.role !== "client") return res.status(403).json({ error: "Not available for this role." });
+    const { rows } = await pool.query(
+      `SELECT l.question_id, p.code, p.title, p.closed_at
+       FROM build_reassess_links l JOIN build_projects p ON p.id = l.project_id
+       WHERE l.client_id = $1`,
+      [req.user.id]
+    );
+    res.json({
+      links: rows.map((r) => ({
+        questionId: r.question_id,
+        note: `Addressed by ${r.code} (Scaled, ${new Date(r.closed_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })})`,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 /* =========================================================================
    LIST / DETAIL

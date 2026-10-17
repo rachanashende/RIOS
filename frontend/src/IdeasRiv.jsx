@@ -677,7 +677,13 @@ function CriteriaRatingView({ idea, existingRating, onSaveRating, onBack }) {
 /* =========================================================================
    LEADER DASHBOARD — top ideas by average jury score
    ========================================================================= */
-export function LeaderboardView({ leaderboard, loading, error, onOpenIdea }) {
+export function LeaderboardView({ leaderboard, loading, error, onOpenIdea, isAdmin, onChanged, picksPanel }) {
+  const [busyId, setBusyId] = useState(null);
+  const [actionError, setActionError] = useState("");
+  async function selectForBuild(idea) {
+    setBusyId(idea.id); setActionError("");
+    try { await api.selectIdeaForBuild(idea.id); onChanged?.(); } catch (e) { setActionError(e.message); } finally { setBusyId(null); }
+  }
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 100px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -688,12 +694,14 @@ export function LeaderboardView({ leaderboard, loading, error, onOpenIdea }) {
         Ranked by average jury star rating (scores themselves are shown to admins only, so ratings stay blind). The top 3 ranks are published below. An idea needs at least two jury ratings before it is ranked or published; until then it is listed as "Awaiting more ratings". Ideas with the same average share a rank (marked "Tied"); within a tie, the idea with more jury ratings is listed first, then the earlier submission.
       </div>
 
+      {picksPanel}
       {loading && <Spinner label="Loading leaderboard…" />}
       <ErrorBanner text={error} />
 
       {!loading && !error && leaderboard.length === 0 && (
         <EmptyState icon={Trophy} title="No rated ideas yet" text="Once jury members rate ideas, the top-scoring ones will publish here automatically." />
       )}
+      {actionError && <div style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.coralDark, marginBottom: 12 }}>{actionError}</div>}
 
       {leaderboard.map((r, i) => (
         <Card key={r.id} onClick={() => onOpenIdea?.(r)} style={{ padding: 18, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap", cursor: onOpenIdea ? "pointer" : "default" }}>
@@ -713,6 +721,16 @@ export function LeaderboardView({ leaderboard, loading, error, onOpenIdea }) {
             {r.awaiting && <Pill tone="coral">Awaiting more ratings{r.rating_count != null && r.min_ratings ? ` (${r.rating_count} of ${r.min_ratings})` : ""}</Pill>}
             {r.tied && <Pill tone="blue">Tied</Pill>}
             {r.published && <Pill tone="green">Published</Pill>}
+            {r.selected_for_build_at && <Pill tone="green">Selected for Build</Pill>}
+            {isAdmin && r.published && !r.selected_for_build_at && (
+              <button
+                onClick={(e) => { e.stopPropagation(); selectForBuild(r); }}
+                disabled={busyId === r.id}
+                style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 600, padding: "6px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, background: "#fff", color: BRAND.ink, cursor: busyId === r.id ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}
+              >
+                {busyId === r.id ? "Selecting…" : "Select for Build"}
+              </button>
+            )}
             {r.avg_score != null && (
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: BRAND.ink }}>{r.avg_score.toFixed(1)}</div>
@@ -722,6 +740,38 @@ export function LeaderboardView({ leaderboard, loading, error, onOpenIdea }) {
           </div>
         </Card>
       ))}
+    </div>
+  );
+}
+
+/* =========================================================================
+   MY PICKS IN BUILD (PRD role table: "Client Jury: read-only access to
+   projects they selected") -- a jury member's own idea_ratings, matched
+   against build_projects via build_project_sources, read-only. No login
+   of its own; reached with this same Ideas.RIV jury session.
+   ========================================================================= */
+const BUILD_STATUS_TONE = { active: "green", on_hold: "coral", stopped: "coral", closed: "blue" };
+function MyBuildPicksPanel() {
+  const [projects, setProjects] = useState(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api.getMyBuildPicksIdeas().then((d) => setProjects(d.projects || [])).catch((e) => setError(e.message || "Couldn't load this."));
+  }, []);
+  if (error) return null; // non-essential panel -- never block the leaderboard over it
+  if (projects === null) return null;
+  if (!projects.length) return null;
+  return (
+    <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 18, background: "#fff", marginBottom: 20 }}>
+      <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 4 }}>Projects from your picks</div>
+      <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 12 }}>Build.RIV projects started from an idea you rated. Read-only — this is just what happened next.</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {projects.map((p) => (
+          <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, fontFamily: FONT, fontSize: 13 }}>
+            <span><b style={{ color: BRAND.coralDark }}>{p.code}</b> {p.title}</span>
+            <Pill tone={BUILD_STATUS_TONE[p.status] || "blue"}>{p.outcome ? p.outcome : p.stageLabel || p.stage}</Pill>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -859,14 +909,18 @@ function IdeasRivMain({ session, onLogout }) {
 
   // Leaderboard — now shown to both admin and jury (blind-scoring
   // restriction explicitly reversed; see IdeasNavBar and the backend route).
-  useEffect(() => {
-    if ((session.role !== "admin" && session.role !== "jury") || view !== "leaderboard") return;
+  const refreshLeaderboard = useCallback(() => {
+    if (session.role !== "admin" && session.role !== "jury") return;
     setLoadingLeaderboard(true);
     api.getLeaderboard()
       .then((d) => setLeaderboard(d.leaderboard || []))
       .catch((e) => setError(e.message))
       .finally(() => setLoadingLeaderboard(false));
-  }, [session, view]);
+  }, [session]);
+  useEffect(() => {
+    if ((session.role !== "admin" && session.role !== "jury") || view !== "leaderboard") return;
+    refreshLeaderboard();
+  }, [session, view, refreshLeaderboard]);
 
   function handleSaveRating(rating) {
     setMyRatings((m) => ({ ...m, [rating.idea_id]: rating }));
@@ -933,6 +987,8 @@ function IdeasRivMain({ session, onLogout }) {
           <LeaderboardView
             leaderboard={leaderboard} loading={loadingLeaderboard} error={error}
             onOpenIdea={session.role === "admin" ? openLeaderboardIdea : undefined}
+            isAdmin={session.role === "admin"} onChanged={refreshLeaderboard}
+            picksPanel={session.role === "jury" ? <MyBuildPicksPanel /> : null}
           />
         )}
 

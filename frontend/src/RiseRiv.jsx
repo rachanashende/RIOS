@@ -409,6 +409,36 @@ function JuryLoginView({ onAuthed }) {
 /* =========================================================================
    JURY DASHBOARD — progress + list of applications to score
    ========================================================================= */
+// PRD role table: "Client Jury: read-only access to projects they
+// selected" -- a rise_jury member's own rise_scores, matched against
+// build_projects via build_project_sources. No login of its own, reached
+// with this same Rise.RIV jury session. Non-essential: never blocks the
+// dashboard if it fails to load.
+const RISE_BUILD_STATUS_TONE = { active: { bg: "#E7F5EF", fg: "#1B7A5A" }, on_hold: { bg: "#FCEEE1", fg: BRAND.coralDark }, stopped: { bg: "#FCEEE1", fg: BRAND.coralDark }, closed: { bg: "#EFEAE4", fg: "#6B6561" } };
+function MyBuildPicksPanel() {
+  const [projects, setProjects] = useState(null);
+  useEffect(() => {
+    api.getMyBuildPicksRise().then((d) => setProjects(d.projects || [])).catch(() => setProjects([]));
+  }, []);
+  if (!projects || !projects.length) return null;
+  return (
+    <Card style={{ padding: 18, marginBottom: 20 }}>
+      <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 4 }}>Projects from your picks</div>
+      <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 12 }}>Build.RIV projects started from a startup you scored. Read-only — this is just what happened next.</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {projects.map((p) => (
+          <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, fontFamily: FONT, fontSize: 13 }}>
+            <span><b style={{ color: BRAND.coralDark }}>{p.code}</b> {p.title}</span>
+            <span style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 999, color: RISE_BUILD_STATUS_TONE[p.status]?.fg, background: RISE_BUILD_STATUS_TONE[p.status]?.bg, textTransform: "capitalize" }}>
+              {p.outcome || p.stageLabel || p.stage}
+            </span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function JuryDashboardView({ setView, setActiveApplicationId }) {
   const [applications, setApplications] = useState([]);
   const [dashboard, setDashboard] = useState(null);
@@ -434,6 +464,7 @@ function JuryDashboardView({ setView, setActiveApplicationId }) {
         </div>
       )}
       <ErrorBanner text={error} />
+      <MyBuildPicksPanel />
 
       {applications.length === 0 ? (
         <EmptyState icon={Building2} title="No applications yet" text="Check back once startups start applying." />

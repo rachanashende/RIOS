@@ -130,6 +130,28 @@ router.get("/applications", async (req, res, next) => {
   }
 });
 
+// PUT /api/admin/rise/applications/:id/riv-review { status } -- the RIV
+// quality check gate (PRD "Startup review process: add an RIV quality
+// check before submissions reach the retailer's jury"). Only an
+// 'approved' application is ever returned to a juror (routes/rise.js
+// filters on this); a juror can never see a 'pending' or 'rejected' one.
+router.put("/applications/:id/riv-review", async (req, res, next) => {
+  try {
+    const { status } = req.body || {};
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({ error: "status must be \"approved\" or \"rejected\"." });
+    }
+    const { rows } = await pool.query(
+      "UPDATE rise_applications SET riv_status = $1, riv_reviewed_by = $2, riv_reviewed_at = now() WHERE id = $3 RETURNING *",
+      [status, req.user.id, req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: "Application not found." });
+    res.json({ application: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // PUT /api/admin/rise/applications/:id/decision { decision } -- R22 shortlist
 // decision (shortlist / on_hold / not_selected / selected_for_pilot). Only
 // 'selected_for_pilot' unlocks Build.RIV's "Create Build project" action
@@ -176,16 +198,21 @@ router.get("/applications/:id", async (req, res, next) => {
   }
 });
 
-// GET /api/admin/rise/jury — jury roster with scoring progress
+// GET /api/admin/rise/jury — jury roster with scoring progress. Includes
+// which retailer each juror belongs to (PRD "Startup jury: the retailer's
+// internal leadership acts as the jury" -- same per-client scoping as
+// Ideathon's jury role, see db.js's I1 migration).
 router.get("/jury", async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
-      SELECT u.id, u.email, u.name, u.company, u.created_at,
+      SELECT u.id, u.email, u.name, u.company, u.created_at, u.client_id,
+             c.company AS client_company, c.name AS client_name,
              COUNT(s.id)::int AS scored_count
       FROM users u
+      LEFT JOIN users c ON c.id = u.client_id AND c.role = 'client'
       LEFT JOIN rise_scores s ON s.jury_user_id = u.id
       WHERE u.role = 'rise_jury'
-      GROUP BY u.id
+      GROUP BY u.id, c.company, c.name
       ORDER BY u.created_at DESC
     `);
     res.json({ jury: rows });
@@ -194,17 +221,21 @@ router.get("/jury", async (req, res, next) => {
   }
 });
 
-// POST /api/admin/rise/jury — create a jury login. Mirrors Ideas.RIV's
-// admin-only POST /api/admin/ideas/users: every account in RIOS is issued
-// top-down, no role self-registers. The admin hands the juror their email
-// + temporary password out of band (Slack, email, etc.).
+// POST /api/admin/rise/jury — create a jury login, scoped to one retailer.
+// Mirrors Ideas.RIV's admin-only POST /api/admin/ideas/users (and its I1
+// "every jury login belongs to one client" rule): every account in RIOS is
+// issued top-down, no role self-registers. The admin hands the juror their
+// email + temporary password out of band (Slack, email, etc.).
 router.post("/jury", async (req, res, next) => {
   try {
-    const { email, password, name, company } = req.body || {};
+    const { email, password, name, company, clientId } = req.body || {};
     if (!email || !password || !name) {
       return res.status(400).json({ error: "Name, email, and a temporary password are required." });
     }
     if (String(password).length < 8) return res.status(400).json({ error: "The temporary password must be at least 8 characters." });
+    if (!clientId) return res.status(400).json({ error: "Choose which retailer this jury member belongs to." });
+    const { rows: clientRows } = await pool.query("SELECT id, name, company FROM users WHERE id = $1 AND role = 'client'", [clientId]);
+    if (!clientRows.length) return res.status(404).json({ error: "That client account doesn't exist." });
     const normalizedEmail = String(email).toLowerCase().trim();
 
     const { rows: existing } = await pool.query("SELECT id FROM users WHERE email = $1", [normalizedEmail]);
@@ -212,10 +243,25 @@ router.post("/jury", async (req, res, next) => {
 
     const password_hash = bcrypt.hashSync(password, 10);
     const { rows } = await pool.query(
-      "INSERT INTO users (email, password_hash, name, role, company, must_change_password) VALUES ($1,$2,$3,'rise_jury',$4,true) RETURNING id",
-      [normalizedEmail, password_hash, String(name).trim(), company || null]
+      "INSERT INTO users (email, password_hash, name, role, company, client_id, must_change_password) VALUES ($1,$2,$3,'rise_jury',$4,$5,true) RETURNING id",
+      [normalizedEmail, password_hash, String(name).trim(), (company || "").trim() || clientRows[0].company || null, clientRows[0].id]
     );
-    res.status(201).json({ id: rows[0].id, email: normalizedEmail, name, role: "rise_jury", company: company || null });
+    res.status(201).json({ id: rows[0].id, email: normalizedEmail, name, role: "rise_jury", company: company || null, clientId: clientRows[0].id });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/admin/rise/jury/:id/client { clientId } — move a jury login to a
+// different retailer (same shape as Ideathon's analogous route).
+router.put("/jury/:id/client", async (req, res, next) => {
+  try {
+    const { clientId } = req.body || {};
+    const { rows: clientRows } = await pool.query("SELECT id FROM users WHERE id = $1 AND role = 'client'", [clientId]);
+    if (!clientRows.length) return res.status(404).json({ error: "That client account doesn't exist." });
+    const { rowCount } = await pool.query("UPDATE users SET client_id = $1 WHERE id = $2 AND role = 'rise_jury'", [clientId, req.params.id]);
+    if (!rowCount) return res.status(404).json({ error: "Jury login not found." });
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

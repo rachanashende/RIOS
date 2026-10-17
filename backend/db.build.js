@@ -107,6 +107,12 @@ export async function initBuildSchema() {
   `);
   await pool.query(`ALTER TABLE rise_applications ADD COLUMN IF NOT EXISTS decided_by INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
   await pool.query(`ALTER TABLE rise_applications ADD COLUMN IF NOT EXISTS decided_at TIMESTAMPTZ;`);
+  // Second half of the riv_status backfill started in db.rise.js (see its
+  // comment) -- 'decision' is this module's own column and didn't exist
+  // yet when that one ran, so an application already decided (but perhaps
+  // never scored, e.g. decided straight from a quick read) is caught here
+  // instead. Idempotent, same as the first half.
+  await pool.query(`UPDATE rise_applications SET riv_status = 'approved' WHERE riv_status = 'pending' AND decision IS NOT NULL;`);
 
   // R21: an Ideathon winner marked "Selected for Build" (section 6, "How a
   // project starts"). ideas has no generic status column today — rather than

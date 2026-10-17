@@ -639,13 +639,13 @@ function AdminView({ setView, setSelectedClient }) {
       </div>
 
       <IdeasTeamPanel clients={clients} />
-      <RiseTeamPanel />
+      <RiseTeamPanel clients={clients} />
     </div>
   );
 }
 
 /* ---------------- Admin: Startup team + opportunity control ---------------- */
-function RiseTeamPanel() {
+function RiseTeamPanel({ clients }) {
   const [opportunities, setOpportunities] = useState(null);
   const [jury, setJury] = useState(null);
   const EMPTY_OPP = { title: "", description: "", benefits: "", eligibility: "", deadline: "" };
@@ -654,7 +654,7 @@ function RiseTeamPanel() {
   const [viewingOpp, setViewingOpp] = useState(null); // O3/ST3: opportunity whose applications are open
   const [oppNotice, showOppNotice] = useNotice();
   const [juryNotice, showJuryNotice] = useNotice();
-  const [juryForm, setJuryForm] = useState({ name: "", email: "", password: "", company: "" });
+  const [juryForm, setJuryForm] = useState({ name: "", email: "", password: "", company: "", clientId: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -690,11 +690,12 @@ function RiseTeamPanel() {
 
   async function createJury(e) {
     e.preventDefault();
+    if (!juryForm.clientId) { setError("Choose which retailer this jury member belongs to."); return; }
     setError(""); showJuryNotice(""); setBusy(true);
     try {
-      await api.createRiseJury(juryForm);
+      await api.createRiseJury({ ...juryForm, clientId: Number(juryForm.clientId) });
       showJuryNotice(`Login created for ${juryForm.name}. Share the email and temporary password with them.`);
-      setJuryForm({ name: "", email: "", password: "", company: "" });
+      setJuryForm({ name: "", email: "", password: "", company: "", clientId: juryForm.clientId });
       refresh();
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   }
@@ -702,6 +703,10 @@ function RiseTeamPanel() {
     if (!confirm("Remove this jury login?")) return;
     await api.deleteRiseJury(id);
     refresh();
+  }
+  async function assignOpportunityClient(opportunityId, clientId) {
+    setError("");
+    try { await api.setRiseOpportunityClient(opportunityId, clientId ? Number(clientId) : null); refresh(); } catch (err) { setError(err.message); }
   }
 
   return (
@@ -722,6 +727,10 @@ function RiseTeamPanel() {
                   <button onClick={() => setViewingOpp(o)} title="View applications" style={{ display: "block", textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, color: BRAND.ink }}>{o.title}</button>
                   <button onClick={() => setViewingOpp(o)} title="View applications" style={{ display: "block", textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, color: BRAND.coralDark, textDecoration: "underline" }}>{o.application_count} application{o.application_count !== 1 ? "s" : ""} — view</button>
                   <button onClick={() => startEditOpp(o)} title="Edit the text shown on the public page" style={{ display: "block", textAlign: "left", background: "none", border: "none", padding: 0, marginTop: 2, cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, color: "#7A746F", textDecoration: "underline" }}>Edit public page text</button>
+                  <select value={o.client_id || ""} onChange={(e) => assignOpportunityClient(o.id, e.target.value)} title="Which retailer this call belongs to -- needed so a selected startup's Build project has a client, and so that retailer's own jury only sees their own calls" style={{ ...inputStyle, marginTop: 6, width: "auto", padding: "4px 8px", fontSize: 11.5 }}>
+                    <option value="">No retailer linked yet</option>
+                    {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.company || c.name}</option>)}
+                  </select>
                 </div>
                 <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                   {/* Status (a badge, not clickable) and action (a button with a verb) use different words. */}
@@ -771,6 +780,10 @@ function RiseTeamPanel() {
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, color: BRAND.ink }}>{u.name}</div>
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email}{u.company ? ` · ${u.company}` : ""}</div>
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: BRAND.coralDark, marginTop: 2, fontWeight: 600 }}>{u.scored_count} scored</div>
+                    <select value={u.client_id || ""} onChange={(e) => (async () => { if (!e.target.value) return; await api.assignRiseJuryClient(u.id, Number(e.target.value)); refresh(); })()} title="Which retailer's jury this person sits on" style={{ ...inputStyle, marginTop: 4, width: "auto", padding: "3px 7px", fontSize: 11 }}>
+                      <option value="">No retailer assigned</option>
+                      {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.company || c.name}</option>)}
+                    </select>
                   </div>
                   <button onClick={() => adminResetPassword(u, showJuryNotice, setError)} title="Reset password" style={resetBtnStyle("8px 10px")}><KeyRound size={14} /></button>
                   <button onClick={() => removeJury(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "8px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={14} /></button>
@@ -782,8 +795,13 @@ function RiseTeamPanel() {
 
         <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 20, background: "#fff", height: "fit-content" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 14 }}><UserPlus size={15} /> New jury login</div>
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F", marginBottom: 10 }}>Jury logins belong to one retailer -- they only ever score that retailer's own applications.</div>
           <form onSubmit={createJury}>
-            <input placeholder="Name" value={juryForm.name} onChange={(e) => setJuryForm({ ...juryForm, name: e.target.value })} required style={{ ...inputStyle, marginTop: 0 }} />
+            <select value={juryForm.clientId} onChange={(e) => setJuryForm({ ...juryForm, clientId: e.target.value })} required style={{ ...inputStyle, marginTop: 0 }}>
+              <option value="">Which retailer? *</option>
+              {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.company || c.name}</option>)}
+            </select>
+            <input placeholder="Name" value={juryForm.name} onChange={(e) => setJuryForm({ ...juryForm, name: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             <input placeholder="Company / affiliation (optional)" value={juryForm.company} onChange={(e) => setJuryForm({ ...juryForm, company: e.target.value })} style={{ ...inputStyle, marginTop: 10 }} />
             <input placeholder="Email" type="email" value={juryForm.email} onChange={(e) => setJuryForm({ ...juryForm, email: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             <input placeholder="Temporary password (min. 8 characters)" minLength={8} value={juryForm.password} onChange={(e) => setJuryForm({ ...juryForm, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
@@ -1014,7 +1032,7 @@ function SaveIndicator({ status, onRetry }) {
   return <span style={{ ...base, color: "#2E9E6B" }}>Saved ✓</span>;
 }
 
-function AssessmentView({ questions, modules, responses, setResponses, moduleIdx, setModuleIdx, saveStatus, onRetrySave, submittedAt, onSubmit }) {
+function AssessmentView({ questions, modules, responses, setResponses, moduleIdx, setModuleIdx, saveStatus, onRetrySave, submittedAt, onSubmit, reassessLinks }) {
   const locked = !!submittedAt;
   const module = modules[moduleIdx];
   const qs = useMemo(() => questions.filter((q) => q.module === module), [questions, module]);
@@ -1135,6 +1153,11 @@ function AssessmentView({ questions, modules, responses, setResponses, moduleIdx
                   <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 10.5, fontWeight: 700, color: BRAND.coral, background: "#FCEEE1", padding: "2px 8px", borderRadius: 999, flexShrink: 0 }}>AI weight ×{q.weight}</div>
                 </div>
                 <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 15, fontWeight: 500, color: BRAND.ink, lineHeight: 1.45 }}>{q.q}</div>
+                {reassessLinks?.[q.id] && (
+                  <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, color: "#1B7A5A", background: "#E7F5EF", borderRadius: 999, padding: "4px 10px", display: "inline-block", marginTop: 8 }}>
+                    ✓ {reassessLinks[q.id]}
+                  </div>
+                )}
                 <div style={{ fontFamily: "'Newsreader',Georgia,serif", fontStyle: "italic", fontSize: 13, color: "#8a8480", marginTop: 8, lineHeight: 1.5 }}>{q.aiAngle}</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6, marginTop: 16 }}>
                   {MATURITY_LABELS.map((ml) => {
@@ -1475,6 +1498,7 @@ export default function RiosApp() {
   const [responses, setResponses] = useState({});
   const [moduleIdx, setModuleIdx] = useState(0);
   const [viewingClient, setViewingClient] = useState(null); // admin viewing a specific client
+  const [reassessLinks, setReassessLinks] = useState({}); // questionId -> "Addressed by BLD-xxxx" note (PRD: audit <-> Build link)
   const [ready, setReady] = useState(false);
   const saveTimer = useRef(null);
   const skipNextSave = useRef(true);
@@ -1491,6 +1515,15 @@ export default function RiosApp() {
     if (isIndexSubdomain()) return;
     api.getQuestions().then(({ questions, modules }) => { setQuestions(questions); setModules(modules); setReady(true); });
   }, []);
+
+  // Non-essential: a client's own "this was already addressed by a Build
+  // project" notes on the scorecard. Never blocks the audit if it fails.
+  useEffect(() => {
+    if (!user || user.role !== "client" || user.buildScoped) { setReassessLinks({}); return; }
+    api.getMyReassessLinks()
+      .then((d) => setReassessLinks(Object.fromEntries((d.links || []).map((l) => [l.questionId, l.note]))))
+      .catch(() => setReassessLinks({}));
+  }, [user]);
 
   // Load the right responses set whenever identity/target changes
   useEffect(() => {
@@ -1720,7 +1753,7 @@ export default function RiosApp() {
       {view === "r-index" && <ErrorBoundary><IndexRivApp /></ErrorBoundary>}
       {view === "build-riv" && <ErrorBoundary><BuildRivApp /></ErrorBoundary>}
       {view === "assess" && user?.role === "client" && !user?.buildScoped && ready && (
-        <AssessmentView questions={questions} modules={modules} responses={responses} setResponses={setResponses} moduleIdx={moduleIdx} setModuleIdx={setModuleIdx} saveStatus={saveStatus} onRetrySave={() => setRetryTick((n) => n + 1)} submittedAt={submittedAt} onSubmit={submitAudit} />
+        <AssessmentView questions={questions} modules={modules} responses={responses} setResponses={setResponses} moduleIdx={moduleIdx} setModuleIdx={setModuleIdx} saveStatus={saveStatus} onRetrySave={() => setRetryTick((n) => n + 1)} submittedAt={submittedAt} onSubmit={submitAudit} reassessLinks={reassessLinks} />
       )}
       {view === "admin" && user?.role === "admin" && <AdminView setView={goToView} setSelectedClient={setViewingClient} />}
       {view === "dashboard" && user && !(user.role === "client" && user.buildScoped) && ready && (

@@ -453,7 +453,97 @@ function StageActions({ project, missing, gateApprovers, session, onAction, busy
   );
 }
 
-function OverviewTab({ project, sources, canEdit, onSaved }) {
+// Audit <-> Build reassess link (PRD "Audit/Scorecard: Preserve the link
+// between the original audit opportunity and the Build project, then show
+// when that opportunity has been addressed"). The backend (reassess-link /
+// reassess/:clientId) already existed; this is the UI that was missing --
+// without it an admin had no way to ever create the link. Admin-only, and
+// only once the project is Closed + Scaled (the backend enforces the same
+// rule, this just keeps the form from appearing before it would work).
+function ReassessLinkPanel({ project, session }) {
+  const [questions, setQuestions] = useState(null);
+  const [links, setLinks] = useState(null);
+  const [query, setQuery] = useState("");
+  const [questionId, setQuestionId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.getQuestions().then((d) => setQuestions(d.questions || [])).catch(() => setQuestions([]));
+    api.getBuildReassessLinks(project.client_id).then((d) => setLinks(d.links || [])).catch(() => setLinks([]));
+  }, [project.client_id]);
+
+  if (session.role !== "admin" || project.status !== "closed" || project.outcome !== "scaled") return null;
+
+  const matches = !query.trim() ? [] : (questions || [])
+    .filter((q) => `${q.module} ${q.submodule} ${q.q}`.toLowerCase().includes(query.trim().toLowerCase()))
+    .slice(0, 12);
+  const alreadyLinkedHere = (links || []).filter((l) => l.code === project.code);
+
+  async function link() {
+    if (!questionId) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api.linkBuildReassess(project.id, Number(questionId));
+      const d = await api.getBuildReassessLinks(project.client_id);
+      setLinks(d.links || []);
+      setNotice("Linked. The audit's next scorecard view will show this project as the fix.");
+      setQuestionId(""); setQuery("");
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
+
+  return (
+    <Card style={{ padding: 20, marginBottom: 20 }}>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 6 }}>Link to audit question</div>
+      <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 12 }}>
+        Tie this Scaled project back to the audit question it addresses. The client's next scorecard shows "Addressed by {project.code}" on that question.
+      </div>
+
+      {alreadyLinkedHere.length > 0 && (
+        <div style={{ marginBottom: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+          {alreadyLinkedHere.map((l) => (
+            <div key={l.questionId} style={{ fontFamily: FONT, fontSize: 12.5, color: "#1B7A5A", background: "#E7F5EF", borderRadius: 8, padding: "6px 10px" }}>
+              Already linked to question #{l.questionId} — {l.note}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <input
+        placeholder="Search audit questions by module or text…"
+        value={query}
+        onChange={(e) => { setQuery(e.target.value); setQuestionId(""); }}
+        style={{ ...inputStyle, marginTop: 0 }}
+      />
+      {matches.length > 0 && (
+        <div style={{ marginTop: 8, maxHeight: 220, overflowY: "auto", border: `1px solid ${BRAND.line}`, borderRadius: 9 }}>
+          {matches.map((q) => (
+            <div
+              key={q.id}
+              onClick={() => { setQuestionId(String(q.id)); setQuery(`${q.module} · ${q.submodule}`); }}
+              style={{
+                padding: "9px 12px", fontFamily: FONT, fontSize: 12.5, cursor: "pointer",
+                background: String(q.id) === questionId ? BRAND.cream : "#fff",
+                borderBottom: `1px solid ${BRAND.line}`,
+              }}
+            >
+              <div style={{ color: "#9B958F", fontSize: 11 }}>{q.module} · {q.submodule}</div>
+              <div style={{ color: BRAND.ink }}>{q.q}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {error && <div style={{ fontFamily: FONT, fontSize: 12, color: BRAND.coralDark, marginTop: 8 }}>{error}</div>}
+      <Notice text={notice} />
+      <PrimaryButton style={{ marginTop: 12 }} disabled={!questionId || busy} onClick={link}>
+        {busy ? "Linking…" : "Link this question"}
+      </PrimaryButton>
+    </Card>
+  );
+}
+
+function OverviewTab({ project, sources, canEdit, onSaved, session }) {
   const rows = [
     ["Client", project.client_company || project.client_name],
     ["Owner", project.owner_name], ["Client POC", project.poc_name], ["RIV Manager", project.riv_manager_name],
@@ -474,6 +564,7 @@ function OverviewTab({ project, sources, canEdit, onSaved }) {
         </div>
       </Card>
       {canEdit && <StageDetailsForm project={project} onSaved={onSaved} />}
+      <ReassessLinkPanel project={project} session={session} />
     </div>
   );
 }
@@ -1008,7 +1099,7 @@ function ProjectDetailView({ projectId, session, onBack }) {
         ))}
       </div>
 
-      {tab === "overview" && <OverviewTab project={project} sources={sources} canEdit={canAddUpdate} onSaved={load} />}
+      {tab === "overview" && <OverviewTab project={project} sources={sources} canEdit={canAddUpdate} onSaved={load} session={session} />}
       {tab === "updates" && <UpdatesTab project={project} updates={updates} canAdd={canAddUpdate} onAdded={load} />}
       {tab === "roi" && <RoiTab project={project} canEdit={canEditRoi} isClientLeader={isClientLeader && !canAddUpdate} onSaved={load} />}
       {tab === "lessons" && <LessonsTab project={project} lessons={lessons} canEdit={canAddUpdate} onSaved={load} />}

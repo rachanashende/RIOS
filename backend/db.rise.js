@@ -109,4 +109,32 @@ export async function initRiseSchema() {
     SELECT 'Rise GTM — Startup Application', 'Apply to the Rise GTM opportunity program.', true
     WHERE NOT EXISTS (SELECT 1 FROM rise_opportunities);
   `);
+
+  // RIV quality check (PRD "Startup review process: add an RIV quality
+  // check before submissions reach the retailer's jury") -- a raw
+  // application now sits in riv_status='pending' until an RIV admin
+  // screens it; only 'approved' ones are ever returned to a juror
+  // (enforced in routes/rise.js, not just hidden client-side).
+  await pool.query(`ALTER TABLE rise_applications ADD COLUMN IF NOT EXISTS riv_status TEXT NOT NULL DEFAULT 'pending';`);
+  await pool.query(`
+    DO $$ BEGIN
+      ALTER TABLE rise_applications ADD CONSTRAINT rise_applications_riv_status_check
+        CHECK (riv_status IN ('pending','approved','rejected'));
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+  await pool.query(`ALTER TABLE rise_applications ADD COLUMN IF NOT EXISTS riv_reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
+  await pool.query(`ALTER TABLE rise_applications ADD COLUMN IF NOT EXISTS riv_reviewed_at TIMESTAMPTZ;`);
+  // Backfill: this column didn't exist before, so any application already
+  // scored by a juror clearly already passed review in practice -- auto-
+  // approve those rather than retroactively locking live data behind a
+  // gate that didn't exist when it was scored. (A second backfill in
+  // db.build.js catches applications with a 'decision' but no score yet --
+  // that column lives in the Build module's own migration, which runs
+  // after this one, so it can't be referenced here.) Idempotent: only
+  // ever touches rows still sitting at the 'pending' default.
+  await pool.query(`
+    UPDATE rise_applications SET riv_status = 'approved'
+    WHERE riv_status = 'pending' AND id IN (SELECT DISTINCT application_id FROM rise_scores);
+  `);
 }

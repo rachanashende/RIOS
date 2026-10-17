@@ -376,7 +376,7 @@ const MIN_RATINGS = Math.max(1, Number(process.env.IDEAS_MIN_RATINGS) || 2);
 
 async function rankClientIdeas(clientId) {
   const { rows } = await pool.query(`
-    SELECT i.id, i.question_id, i.title, i.description, i.created_at,
+    SELECT i.id, i.question_id, i.title, i.description, i.created_at, i.selected_for_build_at,
            u.name AS submitted_by_name,
            COUNT(r.id)::int AS rating_count,
            AVG(r.score) AS avg_score
