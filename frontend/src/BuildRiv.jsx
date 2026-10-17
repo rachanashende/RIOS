@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import {
   Hammer, LogOut, ArrowRight, ChevronLeft, Loader2, AlertCircle, Briefcase,
   LayoutDashboard, Settings, Plus, CheckCircle2, Paperclip, Download, Upload,
-  History, FileText, Users, Building2, Gauge, Search, X,
+  History, FileText, Users, Building2, Gauge, Search, X, KeyRound, Trash2,
 } from "lucide-react";
 import {
   api, divertIfTemporaryPassword, getStoredBuildUser, getToken,
@@ -1486,15 +1486,21 @@ function PeoplePanel() {
 // ever sees Build.RIV -- the main site refuses the audit/scorecard routes
 // for it server-side (routes/responses.js, routes/export.js), not just
 // hides the nav button.
+// Laid out the same way the main site's own Manage Clients page is
+// (App.jsx's AdminView) -- a prominent list of bordered client cards on
+// the left, the create form as a compact sidebar on the right -- rather
+// than the smaller roster treatment PeoplePanel uses for POC/RIV Manager
+// logins. These are full client accounts (same weight as a regular
+// client), just scoped to Build, so they read as such.
 function ManageBuildClientsPanel() {
-  const [clients, setClients] = useState([]);
+  const [clients, setClients] = useState(null);
   const [form, setForm] = useState({ name: "", email: "", password: "", company: "" });
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   function load() {
-    api.listBuildClients().then((d) => setClients(d.clients || [])).catch(() => {});
+    api.listBuildClients().then((d) => setClients(d.clients || [])).catch(() => setClients([]));
   }
   useEffect(() => { load(); }, []);
 
@@ -1504,41 +1510,78 @@ function ManageBuildClientsPanel() {
     try {
       await api.createBuildClient(form);
       setForm({ name: "", email: "", password: "", company: "" });
-      setNotice("Client login created -- it will only ever see Build.RIV.");
+      setNotice(`Login created for ${form.name}${form.company ? ` (${form.company})` : ""}. Share the email and temporary password with the client.`);
       load();
     } catch (e) {
       setError(e.message || "Couldn't create that login.");
     } finally { setSubmitting(false); }
   }
 
+  async function removeClient(c) {
+    if (!confirm(`Remove ${c.company || c.name}'s Build-only login? They'll lose access to their project(s).`)) return;
+    await api.deleteBuildClient(c.id);
+    load();
+  }
+
+  async function resetPassword(c) {
+    const pw = window.prompt(`New temporary password for ${c.name || c.email} (at least 8 characters).\nThey will be asked to choose their own when they next log in.`);
+    if (pw === null) return;
+    if (pw.length < 8) { setError("The temporary password must be at least 8 characters."); return; }
+    try {
+      await api.adminResetPassword(c.id, pw);
+      setError(null);
+      setNotice(`Password reset for ${c.name || c.email}. Share the new temporary password with them.`);
+    } catch (e) { setError(e.message || "Couldn't reset that password."); }
+  }
+
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(360px,1fr))", gap: 16 }}>
-      <Card style={{ padding: 20 }}>
-        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 6 }}>
-          <Building2 size={14} style={{ marginRight: 6, verticalAlign: -2 }} />Build-only client logins
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 20 }}>
+      <div>
+        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 16, color: BRAND.ink, marginBottom: 4 }}>Build-only client logins</div>
+        <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginBottom: 16, lineHeight: 1.5 }}>
+          Client Leader logins scoped to Build.RIV only -- no access to the Discover Assessment or My Scorecard,
+          unlike a client created from the main site's Manage Clients.
         </div>
-        <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 14, lineHeight: 1.5 }}>
-          For a client whose engagement is Transform/Build only. This login acts as Client Leader for its own
-          Build projects, but has no access to the Discover Assessment or My Scorecard -- unlike a client created
-          from the main site's Manage Clients, which gets both.
+        {clients === null ? (
+          <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F" }}>Loading…</div>
+        ) : clients.length === 0 ? (
+          <div style={{ border: `1px dashed ${BRAND.line}`, borderRadius: 12, padding: 24, fontFamily: FONT, fontSize: 13, color: "#9B958F" }}>
+            No Build-only client logins yet -- create one on the right.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {clients.map((c) => (
+              <div key={c.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 16, background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14.5, color: BRAND.ink }}>{c.company || c.name}</div>
+                  <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginTop: 2 }}>
+                    {c.name} · {c.email} · <span style={{ color: "#B7B2AE" }}>ID {c.id}</span>
+                  </div>
+                  <div style={{ fontFamily: FONT, fontSize: 11.5, color: BRAND.coral, marginTop: 4, fontWeight: 600 }}>Build.RIV only</div>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => resetPassword(c)} title="Reset password" style={{ display: "flex", alignItems: "center", padding: "8px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink }}><KeyRound size={14} /></button>
+                  <button onClick={() => removeClient(c)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "8px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: "#C13B3B" }}><Trash2 size={14} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Card style={{ padding: 20, height: "fit-content" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 14 }}>
+          <Building2 size={15} /> New Build-only client login
         </div>
         <form onSubmit={createClient}>
-          <Field label="Company name"><input style={inputStyle} value={form.company} onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))} /></Field>
           <Field label="Contact name" required><input style={inputStyle} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></Field>
+          <Field label="Company"><input style={inputStyle} value={form.company} onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))} /></Field>
           <Field label="Email" required><input type="email" style={inputStyle} value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></Field>
-          <Field label="Temporary password" required><input style={inputStyle} value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} /></Field>
-          <PrimaryButton type="submit" icon={Plus} disabled={submitting}>{submitting ? "Creating…" : "Create login"}</PrimaryButton>
+          <Field label="Temporary password" required hint="At least 8 characters."><input style={inputStyle} value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} /></Field>
+          {notice && <Notice text={notice} />}
+          <ErrorBanner text={error} />
+          <PrimaryButton type="submit" icon={Plus} disabled={submitting} style={{ width: "100%" }}>{submitting ? "Creating…" : "Create login"}</PrimaryButton>
         </form>
-        {notice && <Notice text={notice} />}
-        <ErrorBanner text={error} />
-        <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 6 }}>
-          {clients.map((c) => (
-            <div key={c.id} style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.ink, display: "flex", justifyContent: "space-between" }}>
-              <span>{c.company || c.name} · {c.email} <span style={{ color: "#9B958F" }}>(ID {c.id})</span></span>
-              <button onClick={async () => { await api.deleteBuildClient(c.id); load(); }} style={{ background: "none", border: "none", color: "#C13B3B", cursor: "pointer" }}><X size={13} /></button>
-            </div>
-          ))}
-        </div>
       </Card>
     </div>
   );
