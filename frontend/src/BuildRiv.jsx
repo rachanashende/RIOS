@@ -405,16 +405,20 @@ function StageActions({ project, missing, gateApprovers, session, onAction, busy
         {project.status === "on_hold" && <GhostButton disabled={busy} onClick={() => onAction("resume", {})}>Resume</GhostButton>}
         {["active", "on_hold"].includes(project.status) && <GhostButton disabled={busy} onClick={() => setReasonModal("stop")}>Stop project</GhostButton>}
         {session.role === "admin" && ["active", "stopped"].includes(project.status) && (
-          <GhostButton disabled={busy} onClick={() => setReasonModal("close")} icon={CheckCircle2}>Close project</GhostButton>
+          <GhostButton disabled={busy} onClick={() => { setOutcome(project.stage === "closed" ? "scaled" : "stopped"); setReasonModal("close"); }} icon={CheckCircle2}>Close project</GhostButton>
         )}
       </div>
 
       {reasonModal && (
         <div style={{ marginTop: 16, borderTop: `1px solid ${BRAND.line}`, paddingTop: 16 }}>
           {reasonModal === "close" ? (
-            <Field label="Outcome" required>
+            <Field
+              label="Outcome"
+              required
+              hint={project.stage !== "closed" ? "\"Scaled\" isn't available yet -- the project hasn't reached the Closed stage (after Scale). Choose \"Stopped\" to close it now." : undefined}
+            >
               <select style={selectStyle} value={outcome} onChange={(e) => setOutcome(e.target.value)}>
-                <option value="scaled">Scaled</option>
+                <option value="scaled" disabled={project.stage !== "closed"}>Scaled{project.stage !== "closed" ? " (reach Closed stage first)" : ""}</option>
                 <option value="stopped">Stopped</option>
               </select>
             </Field>
