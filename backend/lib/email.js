@@ -74,3 +74,20 @@ export async function sendPasswordResetEmail(to, name, token) {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+
+// ---------------------------------------------------------------------------
+// Build.RIV (PRD section 10.3 notification table). One generic template --
+// a project's event triggers (created, gate waiting, stage changed, health
+// red, overdue) all boil down to "here's what happened, here's the link" --
+// rather than a near-duplicate function per trigger.
+// ---------------------------------------------------------------------------
+export async function sendBuildNotificationEmail(to, name, { subject, heading, body, projectCode }) {
+  const link = `${APP_URL}/?build=${encodeURIComponent(projectCode || "")}`;
+  const html = brandWrapper(`
+    <h2 style="font-size:20px; color:#272525; margin:0 0 12px;">${escapeHtml(heading)}</h2>
+    <p style="font-size:14px; color:#272525; line-height:1.6;">Hi ${escapeHtml(name || "there")},</p>
+    <p style="font-size:14px; color:#272525; line-height:1.6;">${body}</p>
+    ${projectCode ? `<a href="${link}" style="display:inline-block; margin-top:16px; background:#EF4C4F; color:#fff; text-decoration:none; font-weight:600; font-size:14px; padding:12px 22px; border-radius:9px;">Open ${escapeHtml(projectCode)} in RIOS</a>` : ""}
+  `);
+  return send({ to, subject, html });
+}

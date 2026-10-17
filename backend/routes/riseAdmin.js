@@ -62,6 +62,28 @@ router.put("/opportunities/:id", async (req, res, next) => {
   }
 });
 
+// PUT /api/admin/rise/opportunities/:id/client { clientId } -- which retailer
+// this call belongs to. Build.RIV needs this to attach a startup project to
+// a client (RIOS Build PRD section 10.1: "rise_opportunities: add
+// client_id -- today a startup call isn't linked to a retailer").
+router.put("/opportunities/:id/client", async (req, res, next) => {
+  try {
+    const { clientId } = req.body || {};
+    if (clientId) {
+      const { rows: clientRows } = await pool.query("SELECT id FROM users WHERE id = $1 AND role = 'client'", [clientId]);
+      if (!clientRows.length) return res.status(404).json({ error: "That client account doesn't exist." });
+    }
+    const { rows } = await pool.query(
+      "UPDATE rise_opportunities SET client_id = $1 WHERE id = $2 RETURNING *",
+      [clientId || null, Number(req.params.id)]
+    );
+    if (!rows[0]) return res.status(404).json({ error: "Opportunity not found." });
+    res.json({ opportunity: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // PUT /api/admin/rise/opportunities/:id/open — mark this one open and
 // every other one closed. Only one opportunity accepts applications at a
 // time in this v1 (see rise.js POST /apply).
@@ -103,6 +125,27 @@ router.get("/applications", async (req, res, next) => {
     res.json({
       applications: rows.map((r) => ({ ...r, avg_total: r.avg_total != null ? Number(r.avg_total) : null })),
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/admin/rise/applications/:id/decision { decision } -- R22 shortlist
+// decision (shortlist / on_hold / not_selected / selected_for_pilot). Only
+// 'selected_for_pilot' unlocks Build.RIV's "Create Build project" action
+// (backend/routes/buildAdmin.js POST /from-application/:applicationId).
+router.put("/applications/:id/decision", async (req, res, next) => {
+  try {
+    const { decision } = req.body || {};
+    if (!["shortlist", "on_hold", "not_selected", "selected_for_pilot"].includes(decision)) {
+      return res.status(400).json({ error: "Invalid decision." });
+    }
+    const { rows } = await pool.query(
+      "UPDATE rise_applications SET decision = $1, decided_by = $2, decided_at = now() WHERE id = $3 RETURNING *",
+      [decision, req.user.id, req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: "Application not found." });
+    res.json({ application: rows[0] });
   } catch (err) {
     next(err);
   }

@@ -5,6 +5,7 @@ import cors from "cors";
 import { initSchema } from "./db.js";
 import { initRiseSchema } from "./db.rise.js";
 import { initIndexSchema } from "./db.index.js";
+import { initBuildSchema } from "./db.build.js";
 import authRoutes from "./routes/auth.js";
 import adminRoutes from "./routes/admin.js";
 import responsesRoutes from "./routes/responses.js";
@@ -17,6 +18,9 @@ import riseAdminRoutes from "./routes/riseAdmin.js";
 import indexRoutes from "./routes/index.js";
 import indexAdminRoutes from "./routes/indexAdmin.js";
 import indexExportRoutes from "./routes/indexExport.js";
+import buildRoutes from "./routes/build.js";
+import buildAdminRoutes from "./routes/buildAdmin.js";
+import buildDashboardRoutes from "./routes/buildDashboard.js";
 
 const app = express();
 app.set("trust proxy", 1); // behind Render's proxy: req.ip is the real client (used by the login throttle)
@@ -28,6 +32,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin/ideas", ideasAdminRoutes); // more specific path — must be mounted before /api/admin
 app.use("/api/admin/rise", riseAdminRoutes); // more specific path — must be mounted before /api/admin
 app.use("/api/admin/index", indexAdminRoutes); // more specific path — must be mounted before /api/admin
+app.use("/api/admin/build", buildAdminRoutes); // more specific path — must be mounted before /api/admin
 app.use("/api/admin", adminRoutes);
 app.use("/api", responsesRoutes);
 app.use("/api/export", exportRoutes);
@@ -36,6 +41,8 @@ app.use("/api/ideas", critAssistantRoutes);
 app.use("/api/rise", riseRoutes);
 app.use("/api/index/export", indexExportRoutes); // more specific path — must be mounted before /api/index
 app.use("/api/index", indexRoutes);
+app.use("/api/build/dashboard", buildDashboardRoutes); // more specific path — must be mounted before /api/build
+app.use("/api/build", buildRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
@@ -57,6 +64,7 @@ const PORT = process.env.PORT || 4000;
 initSchema()
   .then(() => initRiseSchema())
   .then(() => initIndexSchema())
+  .then(() => initBuildSchema())
   .then(() => {
     app.listen(PORT, () => {
       console.log(`RIOS backend listening on http://localhost:${PORT}`);

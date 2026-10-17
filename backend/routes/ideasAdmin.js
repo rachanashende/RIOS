@@ -169,4 +169,21 @@ router.get("/users/:id/ideas", async (req, res, next) => {
   }
 });
 
+// PUT /api/admin/ideas/:id/select-for-build -- R21 "Publish winners": marks
+// an idea as selected for the Transform/Build module (backend/routes/
+// buildAdmin.js POST /from-idea/:ideaId reads this flag before it will
+// create the project, per the Build PRD's "How a project starts").
+router.put("/:id/select-for-build", async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      "UPDATE ideas SET selected_for_build_at = now(), selected_for_build_by = $1 WHERE id = $2 RETURNING *",
+      [req.user.id, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Idea not found." });
+    res.json({ idea: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

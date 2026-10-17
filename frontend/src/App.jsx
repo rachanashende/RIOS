@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Menu, X, Award, Eye, EyeOff, FileSpreadsheet, FileText, Loader2,
   Compass, AlertTriangle, Gavel, KeyRound,
 } from "lucide-react";
-import { api, getToken, getStoredUser, setSession, setIdeasSession, setRiseSession, setIndexSession, clearAllSessions } from "./api.js";
+import { api, getToken, getStoredUser, setSession, setIdeasSession, setRiseSession, setIndexSession, setBuildSession, clearAllSessions } from "./api.js";
 import { computeScores, tierFor, fmtMoneyRange, computeCategoryScores, isAnswered } from "./scoring.js";
 import { BRAND } from "./brand.js";
 import IdeasRivApp from "./IdeasRiv.jsx";
@@ -36,6 +36,10 @@ const OUTER_PATH_TO_VIEW = {
   "/rate-startup": "rise-riv",
   "/rindex": "r-index",
   "/rindex/my-entries": "r-index",
+  "/build": "build-riv",
+  "/build/projects": "build-riv",
+  "/build/dashboard": "build-riv",
+  "/build/admin": "build-riv",
 };
 // The canonical URL for each view this component navigates to directly
 // (via goToView or a login redirect). Ideathon/Startup/R-Index each get one
@@ -44,7 +48,7 @@ const OUTER_PATH_TO_VIEW = {
 // independently.
 const OUTER_VIEW_TO_PATH = {
   home: "/", admin: "/admin", assess: "/audit", dashboard: "/scorecard",
-  "ideas-riv": "/opportunities", "rise-riv": "/rate-startup", "r-index": "/rindex",
+  "ideas-riv": "/opportunities", "rise-riv": "/rate-startup", "r-index": "/rindex", "build-riv": "/build",
 };
 function pathToOuterView(pathname) {
   // O15: links from the reset-password email / "Forgot password?" open the matching screen
@@ -60,6 +64,7 @@ function pathToOuterView(pathname) {
 import RiseRivApp from "./RiseRiv.jsx";
 import RiseApplicationsAdmin from "./RiseApplicationsAdmin.jsx";
 import IndexRivApp, { isIndexSubdomain } from "./IndexRiv.jsx";
+import BuildRivApp from "./BuildRiv.jsx";
 
 const MATURITY_LABELS = [
   { v: 0, label: "No capability", desc: "Not in place, not planned" },
@@ -95,13 +100,14 @@ function Logo() {
 function NavBar({ view, setView, user, onLogout }) {
   const [open, setOpen] = useState(false);
   const publicItems = [{ id: "home", label: "Overview" }];
-  const clientItems = [{ id: "assess", label: "Audit" }, { id: "dashboard", label: "My Scorecard" }];
-  // O4: admins can open the Ideathon, Startup and R-Index screens from the menu (their own admin login works in each).
+  const clientItems = [{ id: "assess", label: "Audit" }, { id: "dashboard", label: "My Scorecard" }, { id: "build-riv", label: "Build" }];
+  // O4: admins can open the Ideathon, Startup, R-Index and Build screens from the menu (their own admin login works in each).
   const adminItems = [
     { id: "admin", label: "Manage Clients" },
     { id: "ideas-riv", label: "Ideathon" },
     { id: "rise-riv", label: "Startup" },
     { id: "r-index", label: "R-Index" },
+    { id: "build-riv", label: "Build" },
   ];
   // Ideathon/Startup tabs are each gated to the exact role that belongs
   // to that module -- junior_employee/jury for Ideathon, rise_jury for
@@ -120,8 +126,9 @@ function NavBar({ view, setView, user, onLogout }) {
   // avoids both failure modes.
   const items = [
     ...publicItems,
-    ...(user?.role === "junior_employee" || user?.role === "jury" ? [{ id: "ideas-riv", label: "Ideathon" }] : []),
+    ...(user?.role === "junior_employee" || user?.role === "jury" ? [{ id: "ideas-riv", label: "Ideathon" }, { id: "build-riv", label: "Build" }] : []),
     ...(user?.role === "rise_jury" ? [{ id: "rise-riv", label: "Startup" }] : []),
+    ...(user?.role === "client_poc" || user?.role === "riv_manager" ? [{ id: "build-riv", label: "Build" }] : []),
     ...(user?.role === "client" ? clientItems : []),
     ...(user?.role === "admin" ? adminItems : []),
   ];
@@ -1598,6 +1605,12 @@ export default function RiosApp() {
       // instead of showing its landing page as if logged out.
       setIndexSession(token, loggedInUser);
       path = "/rindex"; v = "r-index";
+    } else if (loggedInUser.role === "client_poc" || loggedInUser.role === "riv_manager") {
+      // Build.RIV's two brand-new login types (no other home in RIOS) --
+      // same shared /auth/login endpoint, routed into Build's own
+      // isolated session (see api.js's BUILD_TOKEN_KEY comment).
+      setBuildSession(token, loggedInUser);
+      path = "/build"; v = "build-riv";
     } else {
       path = "/audit"; v = "assess";
     }
@@ -1622,9 +1635,17 @@ export default function RiosApp() {
     if ((v === "assess" || v === "dashboard") && !user) { setView("login"); return; }
     if (v !== "dashboard") setViewingClient(null);
     // O4: the admin's main login is accepted by each module; give the module its own session copy so it opens signed in.
-    if (user?.role === "admin" && (v === "ideas-riv" || v === "rise-riv" || v === "r-index")) {
+    if (user?.role === "admin" && (v === "ideas-riv" || v === "rise-riv" || v === "r-index" || v === "build-riv")) {
       const t = getToken();
-      if (t) { setIdeasSession(t, user); setRiseSession(t, user); setIndexSession(t, user); }
+      if (t) { setIdeasSession(t, user); setRiseSession(t, user); setIndexSession(t, user); setBuildSession(t, user); }
+    }
+    // Client leader and a junior_employee (possible Build project owner)
+    // reach Build through their own main-site session already -- buildRequest()
+    // in api.js falls back to it -- but giving Build its own session copy too
+    // keeps it consistent with how every other module is entered from here.
+    if ((user?.role === "client" || user?.role === "junior_employee") && v === "build-riv") {
+      const t = getToken();
+      if (t) setBuildSession(t, user);
     }
     const path = OUTER_VIEW_TO_PATH[v];
     if (path && window.location.pathname.replace(/\/+$/, "") !== path) {
@@ -1665,7 +1686,7 @@ export default function RiosApp() {
           .rios-glance-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
-      {view !== "ideas-riv" && view !== "rise-riv" && view !== "r-index" && (
+      {view !== "ideas-riv" && view !== "rise-riv" && view !== "r-index" && view !== "build-riv" && (
         <NavBar view={view} setView={goToView} user={user} onLogout={handleLogout} />
       )}
       {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip /></>)}
@@ -1678,6 +1699,7 @@ export default function RiosApp() {
       {view === "ideas-riv" && <ErrorBoundary><IdeasRivApp /></ErrorBoundary>}
       {view === "rise-riv" && <ErrorBoundary><RiseRivApp /></ErrorBoundary>}
       {view === "r-index" && <ErrorBoundary><IndexRivApp /></ErrorBoundary>}
+      {view === "build-riv" && <ErrorBoundary><BuildRivApp /></ErrorBoundary>}
       {view === "assess" && user?.role === "client" && ready && (
         <AssessmentView questions={questions} modules={modules} responses={responses} setResponses={setResponses} moduleIdx={moduleIdx} setModuleIdx={setModuleIdx} saveStatus={saveStatus} onRetrySave={() => setRetryTick((n) => n + 1)} submittedAt={submittedAt} onSubmit={submitAudit} />
       )}
@@ -1685,7 +1707,7 @@ export default function RiosApp() {
       {view === "dashboard" && user && ready && (
         <DashboardView questions={questions} modules={modules} responses={responses} setView={goToView} user={user} viewingClient={viewingClient} />
       )}
-      <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#B7B2AE", display: (view === "ideas-riv" || view === "rise-riv" || view === "r-index") ? "none" : "block" }}>
+      <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#B7B2AE", display: (view === "ideas-riv" || view === "rise-riv" || view === "r-index" || view === "build-riv") ? "none" : "block" }}>
         <div>Questions? Write to us at <a href="mailto:contact@retailinnovation.ventures" style={{ color: BRAND.coralDark }}>contact@retailinnovation.ventures</a></div>
       </div>
     </div>

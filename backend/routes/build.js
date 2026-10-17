@@ -1,0 +1,650 @@
+// Build.RIV -- shared authenticated routes (project list/detail, status
+// updates, stage actions, ROI, lessons, files, notifications). Unlike
+// Ideas.RIV/Rise.RIV, Build has no single role that owns this router: an
+// admin, riv_manager, client (leader), client_poc, or a project's owner can
+// all reach it, each scoped to what they're allowed to see (PRD section
+// 10.2) -- so permission checks happen per-route via lib/buildPermissions.js
+// rather than one router.use(requireRole(...)) gate.
+import { Router } from "express";
+import multer from "multer";
+import pool from "../db.js";
+import { requireAuth } from "../middleware/auth.js";
+import {
+  STAGES, STAGE_LABELS, nextStage, prevStage, isValidStage,
+  gateApprovers, missingFieldsForStage, computeRoi,
+} from "../lib/buildWorkflow.js";
+import {
+  canSeeProject, canAddUpdate, canEditRoi, canHoldOrStop, canClose, canApproveGate, canSendBack,
+} from "../lib/buildPermissions.js";
+import { notifyBuild, recipientsForProject } from "../lib/buildNotify.js";
+
+const router = Router();
+router.use(requireAuth);
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const ALLOWED_FILE_TYPES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "image/png",
+  "image/jpeg",
+]);
+
+async function assignedClientIds(user) {
+  if (user.role !== "riv_manager") return [];
+  const { rows } = await pool.query("SELECT client_id FROM build_manager_clients WHERE manager_user_id = $1", [user.id]);
+  return rows.map((r) => r.id ?? r.client_id);
+}
+
+async function loadProject(id) {
+  const { rows } = await pool.query(
+    `SELECT p.*, m.kpi_name, m.kpi_unit, m.baseline, m.target, m.currency,
+            m.est_cost, m.actual_cost, m.est_benefit, m.realised_benefit,
+            c.name AS client_name, c.company AS client_company,
+            o.name AS owner_name, o.email AS owner_email,
+            poc.name AS poc_name, poc.email AS poc_email,
+            rm.name AS riv_manager_name, rm.email AS riv_manager_email
+     FROM build_projects p
+     LEFT JOIN build_metrics m ON m.project_id = p.id
+     LEFT JOIN users c ON c.id = p.client_id
+     LEFT JOIN users o ON o.id = p.owner_user_id
+     LEFT JOIN users poc ON poc.id = p.poc_user_id
+     LEFT JOIN users rm ON rm.id = p.riv_manager_id
+     WHERE p.id = $1`,
+    [Number(id)]
+  );
+  return rows[0] || null;
+}
+
+function projectOut(row) {
+  if (!row) return row;
+  const metrics = {
+    kpi_name: row.kpi_name, kpi_unit: row.kpi_unit,
+    baseline: row.baseline != null ? Number(row.baseline) : null,
+    target: row.target != null ? Number(row.target) : null,
+    currency: row.currency || "USD",
+    est_cost: row.est_cost != null ? Number(row.est_cost) : null,
+    actual_cost: row.actual_cost != null ? Number(row.actual_cost) : null,
+    est_benefit: row.est_benefit != null ? Number(row.est_benefit) : null,
+    realised_benefit: row.realised_benefit != null ? Number(row.realised_benefit) : null,
+  };
+  const { kpi_name, kpi_unit, baseline, target, currency, est_cost, actual_cost, est_benefit, realised_benefit, ...project } = row;
+  return { ...project, metrics, roi: computeRoi(metrics), stageLabel: STAGE_LABELS[row.stage] || row.stage };
+}
+
+/* =========================================================================
+   LIST / DETAIL
+   ========================================================================= */
+
+// GET /api/build/projects -- scoped list (PRD 8.1 project list). Query
+// params: clientId, type, stage, health, q (search by code/title).
+router.get("/projects", async (req, res, next) => {
+  try {
+    const { role, id: userId } = req.user;
+    const where = [];
+    const params = [];
+    const p = (v) => { params.push(v); return `$${params.length}`; };
+
+    if (role === "admin") {
+      // sees everything; optional ?clientId= narrows
+      if (req.query.clientId) where.push(`p.client_id = ${p(Number(req.query.clientId))}`);
+    } else if (role === "riv_manager") {
+      const ids = await assignedClientIds(req.user);
+      if (!ids.length) return res.json({ projects: [] });
+      where.push(`p.client_id = ANY(${p(ids)}::int[])`);
+    } else if (role === "client") {
+      where.push(`p.client_id = ${p(userId)}`);
+    } else if (role === "client_poc") {
+      // A client_poc login's own client_id (set the same way junior_employee/jury's is, per I1's pattern).
+      where.push(`p.client_id = (SELECT client_id FROM users WHERE id = ${p(userId)})`);
+    } else {
+      // project owner (e.g. junior_employee)
+      where.push(`p.owner_user_id = ${p(userId)}`);
+    }
+
+    if (req.query.type) where.push(`p.type = ${p(req.query.type)}`);
+    if (req.query.stage) where.push(`p.stage = ${p(req.query.stage)}`);
+    if (req.query.health) where.push(`p.health = ${p(req.query.health)}`);
+    if (req.query.status) where.push(`p.status = ${p(req.query.status)}`);
+    if (req.query.q) where.push(`(p.code ILIKE ${p("%" + req.query.q + "%")} OR p.title ILIKE ${p("%" + req.query.q + "%")})`);
+
+    const { rows } = await pool.query(
+      `SELECT p.*, m.actual_cost, m.est_cost, m.realised_benefit, m.est_benefit, m.currency,
+              c.name AS client_name, c.company AS client_company,
+              o.name AS owner_name,
+              GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date) AS last_update_date,
+              (CURRENT_DATE - GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date)) AS days_since_update,
+              (CURRENT_DATE - p.updated_at::date) AS days_in_stage
+       FROM build_projects p
+       LEFT JOIN build_metrics m ON m.project_id = p.id
+       LEFT JOIN users c ON c.id = p.client_id
+       LEFT JOIN users o ON o.id = p.owner_user_id
+       ${where.length ? "WHERE " + where.join(" AND ") : ""}
+       ORDER BY (p.health = 'off_track') DESC, (p.health = 'at_risk') DESC, p.created_at DESC`,
+      params
+    );
+
+    res.json({
+      projects: rows.map((r) => ({
+        ...r,
+        actual_cost: r.actual_cost != null ? Number(r.actual_cost) : null,
+        est_cost: r.est_cost != null ? Number(r.est_cost) : null,
+        realised_benefit: r.realised_benefit != null ? Number(r.realised_benefit) : null,
+        est_benefit: r.est_benefit != null ? Number(r.est_benefit) : null,
+        roi: computeRoi({ actual_cost: r.actual_cost, est_cost: r.est_cost, realised_benefit: r.realised_benefit, est_benefit: r.est_benefit }),
+        stageLabel: STAGE_LABELS[r.stage] || r.stage,
+        updateOverdue: Number(r.days_since_update) > 14 && r.status === "active",
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/build/projects/:id -- full detail: project, sources, stage
+// history, updates, lessons, files (metadata), KPI readings.
+router.get("/projects/:id", async (req, res, next) => {
+  try {
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    const assigned = await assignedClientIds(req.user);
+    if (!canSeeProject(req.user, project, assigned)) return res.status(403).json({ error: "You don't have access to this project." });
+
+    const [sources, history, updates, lessons, files, kpiReadings] = await Promise.all([
+      pool.query("SELECT * FROM build_project_sources WHERE project_id = $1", [project.id]),
+      pool.query(
+        `SELECT h.*, u.name AS by_name FROM build_stage_history h LEFT JOIN users u ON u.id = h.by_user_id
+         WHERE h.project_id = $1 ORDER BY h.at DESC`,
+        [project.id]
+      ),
+      pool.query(
+        `SELECT up.*, u.name AS by_name, a.name AS agreed_with_name FROM build_updates up
+         LEFT JOIN users u ON u.id = up.by_user_id LEFT JOIN users a ON a.id = up.agreed_with_user_id
+         WHERE up.project_id = $1 ORDER BY up.update_date DESC, up.created_at DESC`,
+        [project.id]
+      ),
+      pool.query("SELECT * FROM build_lessons WHERE project_id = $1", [project.id]),
+      pool.query("SELECT id, stage, file_name, content_type, size, by_user_id, at FROM build_files WHERE project_id = $1 ORDER BY at DESC", [project.id]),
+      pool.query("SELECT * FROM build_kpi_readings WHERE project_id = $1 ORDER BY reading_date ASC", [project.id]),
+    ]);
+
+    res.json({
+      project: projectOut(project),
+      sources: sources.rows,
+      stageOrder: STAGES[project.type],
+      stageLabels: STAGE_LABELS,
+      history: history.rows,
+      updates: updates.rows.map((u) => ({ ...u, pct_complete: u.pct_complete != null ? Number(u.pct_complete) : null })),
+      lessons: lessons.rows[0] || null,
+      files: files.rows,
+      kpiReadings: kpiReadings.rows.map((k) => ({ ...k, value: Number(k.value) })),
+      missingForNextStage: project.stage !== "closed" ? missingFieldsForStage(project.type, project.stage, project, project) : [],
+      gateApprovers: project.stage !== "closed" ? gateApprovers(project.type, project.stage) : [],
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* =========================================================================
+   STATUS UPDATES (PRD 8.2)
+   ========================================================================= */
+
+// POST /api/build/projects/:id/updates  { health, progress, nextSteps, blockers?, needsHelp?, pctComplete?, agreedWithUserId?, kpiActual? }
+router.post("/projects/:id/updates", async (req, res, next) => {
+  try {
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    const assigned = await assignedClientIds(req.user);
+    if (!canAddUpdate(req.user, project, assigned)) return res.status(403).json({ error: "You can't add an update to this project." });
+
+    const { health, progress, nextSteps, blockers, needsHelp, pctComplete, agreedWithUserId, kpiActual } = req.body || {};
+    if (!["on_track", "at_risk", "off_track"].includes(health)) return res.status(400).json({ error: "A valid health status is required." });
+    if (!progress || !String(progress).trim()) return res.status(400).json({ error: "Progress since last update is required." });
+    if (!nextSteps || !String(nextSteps).trim()) return res.status(400).json({ error: "Next steps is required." });
+    if (pctComplete != null && (pctComplete < 0 || pctComplete > 100)) return res.status(400).json({ error: "% complete must be between 0 and 100." });
+
+    const { rows } = await pool.query(
+      `INSERT INTO build_updates (project_id, health, progress, next_steps, blockers, needs_help, pct_complete, by_user_id, agreed_with_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [project.id, health, String(progress).trim(), String(nextSteps).trim(), (blockers || "").trim() || null,
+        !!needsHelp, pctComplete ?? null, req.user.id, agreedWithUserId || null]
+    );
+    const update = rows[0];
+
+    const wasHealth = project.health;
+    await pool.query("UPDATE build_projects SET health = $1, updated_at = now() WHERE id = $2", [health, project.id]);
+
+    if (kpiActual != null && kpiActual !== "") {
+      await pool.query(
+        "INSERT INTO build_kpi_readings (project_id, value, update_id) VALUES ($1,$2,$3)",
+        [project.id, Number(kpiActual), update.id]
+      );
+    }
+
+    // 10.3 triggers: health turns red, or "needs leadership help" ticked.
+    if ((health === "off_track" && wasHealth !== "off_track") || needsHelp) {
+      const recipients = await recipientsForProject(project, ["client", "admins"]);
+      await notifyBuild(recipients, {
+        projectId: project.id, projectCode: project.code,
+        kind: needsHelp ? "needs_help" : "health_red",
+        message: needsHelp
+          ? `${project.code} needs leadership help.`
+          : `${project.code} turned red (Off track).`,
+        subject: `RIOS Build: ${project.code} ${needsHelp ? "needs leadership help" : "is off track"}`,
+        heading: needsHelp ? "A project needs leadership help" : "A project just turned red",
+        body: `${project.title} (${project.code}) ${needsHelp ? "has flagged that it needs leadership help." : "was just marked Off track in its latest status update."}`,
+      });
+    }
+
+    res.status(201).json({ update });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/build/updates/:id -- fix a typo within 24h (section 8.2).
+router.put("/updates/:id", async (req, res, next) => {
+  try {
+    const { rows } = await pool.query("SELECT * FROM build_updates WHERE id = $1", [req.params.id]);
+    const update = rows[0];
+    if (!update) return res.status(404).json({ error: "Update not found." });
+    if (req.user.role !== "admin" && req.user.id !== update.by_user_id) {
+      return res.status(403).json({ error: "You can only edit your own update." });
+    }
+    const ageMs = Date.now() - new Date(update.created_at).getTime();
+    if (req.user.role !== "admin" && ageMs > 24 * 60 * 60 * 1000) {
+      return res.status(400).json({ error: "Updates can only be edited within 24 hours." });
+    }
+    const { progress, nextSteps, blockers, pctComplete } = req.body || {};
+    const { rows: out } = await pool.query(
+      `UPDATE build_updates SET progress = COALESCE($1, progress), next_steps = COALESCE($2, next_steps),
+         blockers = $3, pct_complete = COALESCE($4, pct_complete), edited_at = now()
+       WHERE id = $5 RETURNING *`,
+      [progress?.trim() || null, nextSteps?.trim() || null, (blockers ?? update.blockers) || null, pctComplete ?? null, update.id]
+    );
+    res.json({ update: out[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* =========================================================================
+   STAGE ACTIONS (PRD 6, 7 "Rules")
+   ========================================================================= */
+
+async function recordStageHistory(projectId, fromStage, toStage, action, reason, userId) {
+  await pool.query(
+    `INSERT INTO build_stage_history (project_id, from_stage, to_stage, action, reason, by_user_id) VALUES ($1,$2,$3,$4,$5,$6)`,
+    [projectId, fromStage, toStage, action, reason || null, userId]
+  );
+}
+
+// POST /api/build/projects/:id/advance { reason? }
+// Generic one-stage-forward move for every stage except Pilot (use
+// pilot-decision below) and once already Closed.
+router.post("/projects/:id/advance", async (req, res, next) => {
+  try {
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    if (project.status !== "active") return res.status(400).json({ error: `Project is ${project.status.replace("_", " ")} and can't be advanced.` });
+    if (project.stage === "pilot") return res.status(400).json({ error: "Use the Pilot decision (Scale / Iterate / Stop) to move on from Pilot." });
+    if (project.stage === "closed") return res.status(400).json({ error: "This project has already reached Closed." });
+
+    const assigned = await assignedClientIds(req.user);
+    const approvers = gateApprovers(project.type, project.stage);
+    if (!canApproveGate(req.user, project, approvers, assigned)) {
+      return res.status(403).json({ error: "You're not the approver for this gate." });
+    }
+
+    const missing = missingFieldsForStage(project.type, project.stage, project, project);
+    if (missing.length) return res.status(400).json({ error: `Fill in before moving on: ${missing.join(", ")}` });
+
+    const to = nextStage(project.type, project.stage);
+    await pool.query("UPDATE build_projects SET stage = $1, updated_at = now() WHERE id = $2", [to, project.id]);
+    await recordStageHistory(project.id, project.stage, to, "advance", req.body?.reason, req.user.id);
+
+    const recipients = await recipientsForProject(project, ["owner", "poc", "client", "riv_manager"]);
+    await notifyBuild(recipients, {
+      projectId: project.id, projectCode: project.code, kind: "stage_changed",
+      message: `${project.code} moved to ${STAGE_LABELS[to]}.`,
+      subject: `RIOS Build: ${project.code} moved to ${STAGE_LABELS[to]}`,
+      heading: "A project moved stage",
+      body: `${project.title} (${project.code}) moved from ${STAGE_LABELS[project.stage]} to ${STAGE_LABELS[to]}.`,
+    });
+
+    res.json({ project: projectOut(await loadProject(project.id)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/build/projects/:id/send-back { reason, toStage? }  (BLD-AC06)
+router.post("/projects/:id/send-back", async (req, res, next) => {
+  try {
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    if (project.status !== "active") return res.status(400).json({ error: `Project is ${project.status.replace("_", " ")}.` });
+
+    const { reason, toStage } = req.body || {};
+    if (!reason || !String(reason).trim()) return res.status(400).json({ error: "A reason is required to send a project back a stage." });
+
+    const assigned = await assignedClientIds(req.user);
+    const approvers = gateApprovers(project.type, project.stage);
+    if (!canSendBack(req.user, project, approvers, assigned)) return res.status(403).json({ error: "You're not the approver for this gate." });
+
+    const target = toStage && isValidStage(project.type, toStage) ? toStage : prevStage(project.type, project.stage);
+    if (!target || STAGES[project.type].indexOf(target) >= STAGES[project.type].indexOf(project.stage)) {
+      return res.status(400).json({ error: "Can't send back to that stage." });
+    }
+
+    await pool.query("UPDATE build_projects SET stage = $1, updated_at = now() WHERE id = $2", [target, project.id]);
+    await recordStageHistory(project.id, project.stage, target, "send_back", reason, req.user.id);
+
+    const recipients = await recipientsForProject(project, ["owner", "poc", "client", "riv_manager"]);
+    await notifyBuild(recipients, {
+      projectId: project.id, projectCode: project.code, kind: "stage_changed",
+      message: `${project.code} sent back to ${STAGE_LABELS[target]}: ${reason}`,
+      subject: `RIOS Build: ${project.code} sent back to ${STAGE_LABELS[target]}`,
+      heading: "A project was sent back a stage",
+      body: `${project.title} (${project.code}) was sent back from ${STAGE_LABELS[project.stage]} to ${STAGE_LABELS[target]}. Reason: ${reason}`,
+    });
+
+    res.json({ project: projectOut(await loadProject(project.id)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/build/projects/:id/pilot-decision { decision: 'scale'|'iterate'|'stop', iterateTo?, reason? }  (BLD-AC05/07)
+router.post("/projects/:id/pilot-decision", async (req, res, next) => {
+  try {
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    if (project.stage !== "pilot") return res.status(400).json({ error: "This project isn't in Pilot." });
+    if (project.status !== "active") return res.status(400).json({ error: `Project is ${project.status.replace("_", " ")}.` });
+
+    const assigned = await assignedClientIds(req.user);
+    if (!canApproveGate(req.user, project, gateApprovers(project.type, "pilot"), assigned)) {
+      return res.status(403).json({ error: "Only the Client Leader (or admin) can decide the Pilot gate." });
+    }
+
+    const { decision, iterateTo, reason } = req.body || {};
+    if (!["scale", "iterate", "stop"].includes(decision)) return res.status(400).json({ error: "decision must be 'scale', 'iterate', or 'stop'." });
+
+    if (decision === "scale") {
+      const missing = missingFieldsForStage(project.type, "pilot", project, project);
+      if (missing.length) return res.status(400).json({ error: `Fill in before moving on: ${missing.join(", ")}` });
+      const to = nextStage(project.type, "pilot"); // 'scale'
+      await pool.query("UPDATE build_projects SET stage = $1, updated_at = now() WHERE id = $2", [to, project.id]);
+      await recordStageHistory(project.id, "pilot", to, "advance", reason, req.user.id);
+    } else if (decision === "iterate") {
+      const target = ["design", "build"].includes(iterateTo) ? iterateTo : "design";
+      await pool.query("UPDATE build_projects SET stage = $1, updated_at = now() WHERE id = $2", [target, project.id]);
+      await recordStageHistory(project.id, "pilot", target, "iterate", reason, req.user.id);
+    } else {
+      if (!reason || !String(reason).trim()) return res.status(400).json({ error: "A reason is required to stop a project." });
+      await pool.query("UPDATE build_projects SET status = 'stopped', hold_reason = $1, updated_at = now() WHERE id = $2", [reason, project.id]);
+      await recordStageHistory(project.id, "pilot", "pilot", "stop", reason, req.user.id);
+    }
+
+    const recipients = await recipientsForProject(project, ["owner", "poc", "client", "riv_manager", "admins"]);
+    await notifyBuild(recipients, {
+      projectId: project.id, projectCode: project.code, kind: "stage_changed",
+      message: `${project.code}: Pilot decision — ${decision}.`,
+      subject: `RIOS Build: ${project.code} Pilot decision — ${decision}`,
+      heading: "A Pilot decision was made",
+      body: `${project.title} (${project.code})'s Pilot gate was decided: ${decision}.${reason ? " Reason: " + reason : ""}`,
+    });
+
+    res.json({ project: projectOut(await loadProject(project.id)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/build/projects/:id/hold { reason }
+router.post("/projects/:id/hold", async (req, res, next) => {
+  try {
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    if (project.status !== "active") return res.status(400).json({ error: "Only an active project can be put on hold." });
+    const assigned = await assignedClientIds(req.user);
+    if (!canHoldOrStop(req.user, project, assigned)) return res.status(403).json({ error: "You can't hold this project." });
+    const { reason } = req.body || {};
+    await pool.query("UPDATE build_projects SET status = 'on_hold', hold_reason = $1, updated_at = now() WHERE id = $2", [(reason || "").trim() || null, project.id]);
+    await recordStageHistory(project.id, project.stage, project.stage, "hold", reason, req.user.id);
+    const recipients = await recipientsForProject(project, ["owner", "poc", "client", "riv_manager", "admins"]);
+    await notifyBuild(recipients, {
+      projectId: project.id, projectCode: project.code, kind: "stage_changed",
+      message: `${project.code} put on hold.`, subject: `RIOS Build: ${project.code} on hold`,
+      heading: "A project was put on hold", body: `${project.title} (${project.code}) was put on hold.${reason ? " Reason: " + reason : ""}`,
+    });
+    res.json({ project: projectOut(await loadProject(project.id)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/build/projects/:id/resume
+router.post("/projects/:id/resume", async (req, res, next) => {
+  try {
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    if (project.status !== "on_hold") return res.status(400).json({ error: "Only a project on hold can be resumed." });
+    const assigned = await assignedClientIds(req.user);
+    if (!canHoldOrStop(req.user, project, assigned)) return res.status(403).json({ error: "You can't resume this project." });
+    await pool.query("UPDATE build_projects SET status = 'active', hold_reason = NULL, updated_at = now() WHERE id = $1", [project.id]);
+    await recordStageHistory(project.id, project.stage, project.stage, "resume", null, req.user.id);
+    res.json({ project: projectOut(await loadProject(project.id)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/build/projects/:id/stop { reason }
+router.post("/projects/:id/stop", async (req, res, next) => {
+  try {
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    if (!["active", "on_hold"].includes(project.status)) return res.status(400).json({ error: "This project can't be stopped from its current status." });
+    const assigned = await assignedClientIds(req.user);
+    if (!canHoldOrStop(req.user, project, assigned)) return res.status(403).json({ error: "You can't stop this project." });
+    const { reason } = req.body || {};
+    if (!reason || !String(reason).trim()) return res.status(400).json({ error: "A reason is required to stop a project." });
+    await pool.query("UPDATE build_projects SET status = 'stopped', hold_reason = $1, updated_at = now() WHERE id = $2", [reason, project.id]);
+    await recordStageHistory(project.id, project.stage, project.stage, "stop", reason, req.user.id);
+    const recipients = await recipientsForProject(project, ["owner", "poc", "client", "riv_manager", "admins"]);
+    await notifyBuild(recipients, {
+      projectId: project.id, projectCode: project.code, kind: "stage_changed",
+      message: `${project.code} stopped.`, subject: `RIOS Build: ${project.code} stopped`,
+      heading: "A project was stopped", body: `${project.title} (${project.code}) was stopped. Reason: ${reason}`,
+    });
+    res.json({ project: projectOut(await loadProject(project.id)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/build/projects/:id/close { outcome: 'scaled'|'stopped' }  (BLD-AC11, RIV Admin only)
+router.post("/projects/:id/close", async (req, res, next) => {
+  try {
+    if (!canClose(req.user)) return res.status(403).json({ error: "Only RIV Admin can close a project." });
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    if (!["active", "stopped"].includes(project.status)) return res.status(400).json({ error: "This project can't be closed from its current status." });
+
+    const { outcome } = req.body || {};
+    if (!["scaled", "stopped"].includes(outcome)) return res.status(400).json({ error: "outcome must be 'scaled' or 'stopped'." });
+    if (outcome === "scaled" && project.stage !== "closed") return res.status(400).json({ error: "A project can only be closed as Scaled once it has reached the Closed stage (after Scale)." });
+
+    const { rows: lessonRows } = await pool.query("SELECT 1 FROM build_lessons WHERE project_id = $1", [project.id]);
+    if (!lessonRows.length) return res.status(400).json({ error: "Add lessons learned first." });
+
+    await pool.query(
+      "UPDATE build_projects SET status = 'closed', outcome = $1, stage = 'closed', closed_at = now(), updated_at = now() WHERE id = $2",
+      [outcome, project.id]
+    );
+    await recordStageHistory(project.id, project.stage, "closed", "close", `Closed as ${outcome}`, req.user.id);
+
+    const recipients = await recipientsForProject(project, ["owner", "poc", "client", "riv_manager"]);
+    await notifyBuild(recipients, {
+      projectId: project.id, projectCode: project.code, kind: "closed",
+      message: `${project.code} closed (${outcome}).`, subject: `RIOS Build: ${project.code} closed`,
+      heading: "A project was closed", body: `${project.title} (${project.code}) was closed with outcome: ${outcome}.`,
+    });
+
+    res.json({ project: projectOut(await loadProject(project.id)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* =========================================================================
+   ROI (PRD 8.3)
+   ========================================================================= */
+
+// PUT /api/build/projects/:id/metrics
+router.put("/projects/:id/metrics", async (req, res, next) => {
+  try {
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    const assigned = await assignedClientIds(req.user);
+    if (!canEditRoi(req.user, project, assigned)) return res.status(403).json({ error: "You can't edit this project's ROI figures." });
+
+    const isClientLeader = req.user.role === "client";
+    const body = req.body || {};
+    // Client Leader may only confirm realised benefit (permission table 10.2).
+    const fields = isClientLeader
+      ? { realised_benefit: body.realisedBenefit }
+      : {
+          kpi_name: body.kpiName, kpi_unit: body.kpiUnit, baseline: body.baseline, target: body.target,
+          currency: body.currency, est_cost: body.estCost, actual_cost: body.actualCost,
+          est_benefit: body.estBenefit, realised_benefit: body.realisedBenefit,
+        };
+
+    const cols = Object.keys(fields).filter((k) => fields[k] !== undefined);
+    if (!cols.length) return res.status(400).json({ error: "Nothing to update." });
+
+    const setClause = cols.map((c, i) => `${c} = $${i + 2}`).join(", ");
+    await pool.query(
+      `INSERT INTO build_metrics (project_id) VALUES ($1)
+       ON CONFLICT (project_id) DO NOTHING`,
+      [project.id]
+    );
+    await pool.query(
+      `UPDATE build_metrics SET ${setClause}, updated_at = now() WHERE project_id = $1`,
+      [project.id, ...cols.map((c) => fields[c])]
+    );
+    res.json({ project: projectOut(await loadProject(project.id)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* =========================================================================
+   LESSONS LEARNED (PRD 8.4)
+   ========================================================================= */
+
+router.put("/projects/:id/lessons", async (req, res, next) => {
+  try {
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    const assigned = await assignedClientIds(req.user);
+    if (!canAddUpdate(req.user, project, assigned)) return res.status(403).json({ error: "You can't edit lessons learned for this project." });
+
+    const { worked, notWorked, doDifferently, recommendation, tags } = req.body || {};
+    if (recommendation && !["scale_to_others", "reuse_approach", "dont_repeat"].includes(recommendation)) {
+      return res.status(400).json({ error: "Invalid recommendation." });
+    }
+    const { rows } = await pool.query(
+      `INSERT INTO build_lessons (project_id, worked, not_worked, do_differently, recommendation, tags)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (project_id) DO UPDATE SET
+         worked = EXCLUDED.worked, not_worked = EXCLUDED.not_worked, do_differently = EXCLUDED.do_differently,
+         recommendation = EXCLUDED.recommendation, tags = EXCLUDED.tags, updated_at = now()
+       RETURNING *`,
+      [project.id, (worked || "").trim() || null, (notWorked || "").trim() || null, (doDifferently || "").trim() || null,
+        recommendation || null, Array.isArray(tags) ? tags : []]
+    );
+    res.json({ lessons: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* =========================================================================
+   FILES (PRD 8.6)
+   ========================================================================= */
+
+router.post("/projects/:id/files", upload.single("file"), async (req, res, next) => {
+  try {
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    const assigned = await assignedClientIds(req.user);
+    if (!canAddUpdate(req.user, project, assigned)) return res.status(403).json({ error: "You can't attach files to this project." });
+    if (!req.file) return res.status(400).json({ error: "No file uploaded." });
+    if (!ALLOWED_FILE_TYPES.has(req.file.mimetype)) {
+      return res.status(400).json({ error: "Only PDF, DOCX, XLSX, PPTX, PNG, or JPG files are accepted." });
+    }
+    const { rows } = await pool.query(
+      `INSERT INTO build_files (project_id, stage, file_name, content_type, size, content, by_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, stage, file_name, content_type, size, by_user_id, at`,
+      [project.id, req.body?.stage || project.stage, req.file.originalname, req.file.mimetype, req.file.size, req.file.buffer, req.user.id]
+    );
+    res.status(201).json({ file: rows[0] });
+  } catch (err) {
+    if (err?.message?.includes("File too large")) return res.status(400).json({ error: "Files must be 10MB or smaller." });
+    next(err);
+  }
+});
+
+router.get("/projects/:id/files/:fileId", async (req, res, next) => {
+  try {
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    const assigned = await assignedClientIds(req.user);
+    if (!canSeeProject(req.user, project, assigned)) return res.status(403).json({ error: "You don't have access to this project." });
+    const { rows } = await pool.query("SELECT * FROM build_files WHERE id = $1 AND project_id = $2", [req.params.fileId, project.id]);
+    const file = rows[0];
+    if (!file) return res.status(404).json({ error: "File not found." });
+    res.setHeader("Content-Type", file.content_type || "application/octet-stream");
+    res.setHeader("Content-Disposition", `attachment; filename="${file.file_name.replace(/"/g, "")}"`);
+    res.send(file.content);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* =========================================================================
+   NOTIFICATIONS
+   ========================================================================= */
+
+router.get("/notifications", async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT n.*, p.code AS project_code, p.title AS project_title
+       FROM build_notifications n LEFT JOIN build_projects p ON p.id = n.project_id
+       WHERE n.user_id = $1 ORDER BY n.created_at DESC LIMIT 50`,
+      [req.user.id]
+    );
+    res.json({ notifications: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put("/notifications/:id/read", async (req, res, next) => {
+  try {
+    await pool.query("UPDATE build_notifications SET read_at = now() WHERE id = $1 AND user_id = $2", [req.params.id, req.user.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+export default router;

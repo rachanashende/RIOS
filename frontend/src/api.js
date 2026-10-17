@@ -12,6 +12,8 @@ const RISE_TOKEN_KEY = "rios-rise-token";
 const RISE_USER_KEY = "rios-rise-user";
 const INDEX_TOKEN_KEY = "rios-index-token";
 const INDEX_USER_KEY = "rios-index-user";
+const BUILD_TOKEN_KEY = "rios-build-token";
+const BUILD_USER_KEY = "rios-build-user";
 
 // In local dev, the Vite dev server proxies /api/* to the backend (see
 // vite.config.js) — no env var needed. In a real deployment, frontend and
@@ -36,7 +38,7 @@ export function clearSession() {
 // O5: logging out anywhere ends every session this browser holds (main site and all three modules),
 // and a fresh login starts from a clean slate, so a leftover session can never show someone else's data.
 export function clearAllSessions() {
-  [TOKEN_KEY, USER_KEY, IDEAS_TOKEN_KEY, IDEAS_USER_KEY, RISE_TOKEN_KEY, RISE_USER_KEY, INDEX_TOKEN_KEY, INDEX_USER_KEY]
+  [TOKEN_KEY, USER_KEY, IDEAS_TOKEN_KEY, IDEAS_USER_KEY, RISE_TOKEN_KEY, RISE_USER_KEY, INDEX_TOKEN_KEY, INDEX_USER_KEY, BUILD_TOKEN_KEY, BUILD_USER_KEY]
     .forEach((k) => localStorage.removeItem(k));
 }
 
@@ -83,6 +85,38 @@ export function clearIndexSession() {
   localStorage.removeItem(INDEX_USER_KEY);
 }
 
+// ---- Build.RIV session (client_poc / riv_manager) — fully separate from
+// the above. Build.RIV is the one module that's shared ground between the
+// main site's existing logins (client leader, admin — they keep using their
+// main-site session, see buildRequest() below) and two brand-new login
+// types that have no other home in RIOS: client_poc and riv_manager. Those
+// two get their own isolated token/user pair, same as Ideas/Rise/Index, so
+// e.g. an admin testing the module and a client_poc can both be logged in
+// in the same browser tab without clobbering each other.
+export function getBuildToken() { return localStorage.getItem(BUILD_TOKEN_KEY); }
+export function getStoredBuildUser() {
+  try { return JSON.parse(localStorage.getItem(BUILD_USER_KEY)); } catch { return null; }
+}
+export function setBuildSession(token, user) {
+  localStorage.setItem(BUILD_TOKEN_KEY, token);
+  localStorage.setItem(BUILD_USER_KEY, JSON.stringify(user));
+}
+export function clearBuildSession() {
+  localStorage.removeItem(BUILD_TOKEN_KEY);
+  localStorage.removeItem(BUILD_USER_KEY);
+}
+
+// Build.RIV's project list/dashboard routes take several optional filters
+// (type, stage, health, status, q, clientId, period...) -- this turns a
+// {key: value} object into a "?key=value&..." suffix, skipping anything
+// null/undefined/empty so an unused filter is simply left off the URL.
+function toQuery(params) {
+  if (!params) return "";
+  const usable = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "");
+  if (!usable.length) return "";
+  return "?" + usable.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
+}
+
 async function requestWithToken(path, { method = "GET", body, raw, keepalive } = {}, token) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -111,6 +145,12 @@ function ideasRequest(path, opts) { return requestWithToken(path, opts, getIdeas
 function riseRequest(path, opts) { return requestWithToken(path, opts, getRiseToken()); }
 // R-Index calls (index_respondent) attach R-Index's own token instead.
 function indexRequest(path, opts) { return requestWithToken(path, opts, getIndexToken()); }
+// Build.RIV calls: project owners can be any existing user (admin, a
+// client leader, or an internal RIOS teammate) as well as the two new
+// client_poc/riv_manager logins, so — unlike the other modules — this
+// falls back to the main site's token when no Build-specific session is
+// active, rather than requiring everyone to log in twice.
+function buildRequest(path, opts) { return requestWithToken(path, opts, getBuildToken() || getToken()); }
 
 // O17: the login reply says whether the password is a temporary one; keep that on the user object.
 async function loginRequest(email, password) {
@@ -253,4 +293,91 @@ export const api = {
   updateIndexEntryAdmin: (id, payload) => indexRequest(`/admin/index/entries/${id}`, { method: "PUT", body: payload }),
   deleteIndexEntryAdmin: (id) => indexRequest(`/admin/index/entries/${id}`, { method: "DELETE" }),
   getIndexCampaignReportAdmin: (campaignId) => indexRequest(`/admin/index/campaigns/${campaignId}/report`),
+
+  // ---- Build.RIV: shared routes (backend/routes/build.js). Reachable by
+  // admin, riv_manager, client, client_poc, or a project's owner -- see
+  // buildRequest() above for why this attaches the Build session token
+  // when there is one, falling back to the main site's otherwise.
+  listBuildProjects: (params) => buildRequest(`/build/projects${toQuery(params)}`),
+  getBuildProject: (id) => buildRequest(`/build/projects/${id}`),
+  addBuildUpdate: (id, payload) => buildRequest(`/build/projects/${id}/updates`, { method: "POST", body: payload }),
+  editBuildUpdate: (updateId, payload) => buildRequest(`/build/updates/${updateId}`, { method: "PUT", body: payload }),
+  advanceBuildStage: (id, reason) => buildRequest(`/build/projects/${id}/advance`, { method: "POST", body: { reason } }),
+  sendBackBuildStage: (id, payload) => buildRequest(`/build/projects/${id}/send-back`, { method: "POST", body: payload }),
+  decideBuildPilot: (id, payload) => buildRequest(`/build/projects/${id}/pilot-decision`, { method: "POST", body: payload }),
+  holdBuildProject: (id, reason) => buildRequest(`/build/projects/${id}/hold`, { method: "POST", body: { reason } }),
+  resumeBuildProject: (id) => buildRequest(`/build/projects/${id}/resume`, { method: "POST" }),
+  stopBuildProject: (id, reason) => buildRequest(`/build/projects/${id}/stop`, { method: "POST", body: { reason } }),
+  closeBuildProject: (id, outcome) => buildRequest(`/build/projects/${id}/close`, { method: "POST", body: { outcome } }),
+  updateBuildMetrics: (id, payload) => buildRequest(`/build/projects/${id}/metrics`, { method: "PUT", body: payload }),
+  updateBuildLessons: (id, payload) => buildRequest(`/build/projects/${id}/lessons`, { method: "PUT", body: payload }),
+  // File upload/download need raw fetch (multipart body / binary response),
+  // not the JSON requestWithToken() wrapper -- same reason downloadIndexExport
+  // above doesn't use indexRequest() either.
+  uploadBuildFile: async (id, file, stage) => {
+    const token = getBuildToken() || getToken();
+    const form = new FormData();
+    form.append("file", file);
+    if (stage) form.append("stage", stage);
+    const res = await fetch(`${API_BASE}/api/build/projects/${id}/files`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      let message = `Request failed (${res.status})`;
+      try { message = (await res.json()).error || message; } catch {}
+      throw new Error(message);
+    }
+    return res.json();
+  },
+  buildFileUrl: (projectId, fileId) => `${API_BASE}/api/build/projects/${projectId}/files/${fileId}`,
+  downloadBuildFile: async (projectId, fileId, fileName) => {
+    const token = getBuildToken() || getToken();
+    const res = await fetch(`${API_BASE}/api/build/projects/${projectId}/files/${fileId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName || "file";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+  listBuildNotifications: () => buildRequest("/build/notifications"),
+  markBuildNotificationRead: (id) => buildRequest(`/build/notifications/${id}/read`, { method: "PUT" }),
+
+  // ---- Build.RIV: Leader dashboard (backend/routes/buildDashboard.js)
+  getBuildClientDashboard: (clientId, params) => buildRequest(`/build/dashboard/client/${clientId}${toQuery(params)}`),
+  getBuildPortfolioDashboard: () => buildRequest("/build/dashboard/portfolio"),
+
+  // ---- Build.RIV: admin + RIV Manager console (backend/routes/buildAdmin.js)
+  createBuildProject: (payload) => buildRequest("/admin/build/projects", { method: "POST", body: payload }),
+  createBuildProjectFromIdea: (ideaId) => buildRequest(`/admin/build/from-idea/${ideaId}`, { method: "POST" }),
+  createBuildProjectFromApplication: (applicationId, clientId) =>
+    buildRequest(`/admin/build/from-application/${applicationId}`, { method: "POST", body: clientId ? { clientId } : {} }),
+  assignBuildProject: (id, payload) => buildRequest(`/admin/build/projects/${id}/assign`, { method: "PUT", body: payload }),
+  listBuildPocs: (clientId) => buildRequest(`/admin/build/poc${toQuery({ clientId })}`),
+  createBuildPoc: (payload) => buildRequest("/admin/build/poc", { method: "POST", body: payload }),
+  deleteBuildPoc: (id) => buildRequest(`/admin/build/poc/${id}`, { method: "DELETE" }),
+  listBuildManagers: () => buildRequest("/admin/build/managers"),
+  createBuildManager: (payload) => buildRequest("/admin/build/managers", { method: "POST", body: payload }),
+  setBuildManagerClients: (id, clientIds) => buildRequest(`/admin/build/managers/${id}/clients`, { method: "PUT", body: { clientIds } }),
+  deleteBuildManager: (id) => buildRequest(`/admin/build/managers/${id}`, { method: "DELETE" }),
+  linkBuildReassess: (projectId, questionId) => buildRequest("/admin/build/reassess-link", { method: "POST", body: { projectId, questionId } }),
+  getBuildReassessLinks: (clientId) => buildRequest(`/admin/build/reassess/${clientId}`),
+  runBuildOverdueCheck: () => buildRequest("/admin/build/run-overdue-check", { method: "POST" }),
+
+  // ---- Build.RIV: unblocking endpoints added to the owning modules (R21/R22)
+  selectIdeaForBuild: (ideaId) => request(`/admin/ideas/${ideaId}/select-for-build`, { method: "PUT" }),
+  decideRiseApplication: (applicationId, decision) => request(`/admin/rise/applications/${applicationId}/decision`, { method: "PUT", body: { decision } }),
+  setRiseOpportunityClient: (opportunityId, clientId) => request(`/admin/rise/opportunities/${opportunityId}/client`, { method: "PUT", body: { clientId } }),
+
+  // ---- Build.RIV's own isolated login (client_poc / riv_manager), same
+  // shared /auth/login endpoint as every other module.
+  buildLogin: (email, password) => loginRequest(email, password),
 };
