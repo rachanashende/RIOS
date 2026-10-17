@@ -309,6 +309,7 @@ export const api = {
   resumeBuildProject: (id) => buildRequest(`/build/projects/${id}/resume`, { method: "POST" }),
   stopBuildProject: (id, reason) => buildRequest(`/build/projects/${id}/stop`, { method: "POST", body: { reason } }),
   closeBuildProject: (id, outcome) => buildRequest(`/build/projects/${id}/close`, { method: "POST", body: { outcome } }),
+  updateBuildDetails: (id, payload) => buildRequest(`/build/projects/${id}/details`, { method: "PUT", body: payload }),
   updateBuildMetrics: (id, payload) => buildRequest(`/build/projects/${id}/metrics`, { method: "PUT", body: payload }),
   updateBuildLessons: (id, payload) => buildRequest(`/build/projects/${id}/lessons`, { method: "PUT", body: payload }),
   // File upload/download need raw fetch (multipart body / binary response),

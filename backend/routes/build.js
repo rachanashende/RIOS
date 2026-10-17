@@ -505,6 +505,61 @@ router.post("/projects/:id/close", async (req, res, next) => {
 });
 
 /* =========================================================================
+   STAGE DETAILS -- the per-stage fields BLD-AC04's "must be filled before
+   moving on" check (lib/buildWorkflow.js's missingFieldsForStage) actually
+   looks at: target end date, Agreement's NDA/contract details, Design's
+   systems-touched note, Build's demo link, Test's result, Pilot's scope/
+   dates, Scale's rollout scope + contract value. These were being checked
+   for since the start, but nothing let anyone fill them in -- this route
+   (and the Overview tab's "Project details" form that calls it) closes
+   that gap. Same people who can post a status update can edit these.
+   ========================================================================= */
+
+// PUT /api/build/projects/:id/details
+router.put("/projects/:id/details", async (req, res, next) => {
+  try {
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    const assigned = await assignedClientIds(req.user);
+    if (!canAddUpdate(req.user, project, assigned)) return res.status(403).json({ error: "You can't edit this project's details." });
+
+    const body = req.body || {};
+    const fields = {
+      target_end: body.targetEnd,
+      kpi_baseline_note: body.kpiBaselineNote,
+      agreement_type: body.agreementType,
+      agreement_signed_at: body.agreementSignedAt,
+      pilot_fee: body.pilotFee,
+      systems_touched: body.systemsTouched,
+      data_shared: body.dataShared,
+      risks: body.risks,
+      security_check_done: body.securityCheckDone,
+      demo_link: body.demoLink,
+      test_result: body.testResult,
+      pilot_scope: body.pilotScope,
+      pilot_start: body.pilotStart,
+      pilot_end: body.pilotEnd,
+      rollout_scope: body.rolloutScope,
+      contract_value: body.contractValue,
+    };
+    const cols = Object.keys(fields).filter((k) => fields[k] !== undefined);
+    if (!cols.length) return res.status(400).json({ error: "Nothing to update." });
+    // Blank strings clear a field instead of trying to save "" into a
+    // DATE/NUMERIC/BOOLEAN column, which Postgres would reject outright.
+    const clean = (v) => (v === "" ? null : v);
+
+    const setClause = cols.map((c, i) => `${c} = $${i + 2}`).join(", ");
+    await pool.query(
+      `UPDATE build_projects SET ${setClause}, updated_at = now() WHERE id = $1`,
+      [project.id, ...cols.map((c) => clean(fields[c]))]
+    );
+    res.json({ project: projectOut(await loadProject(project.id)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* =========================================================================
    ROI (PRD 8.3)
    ========================================================================= */
 

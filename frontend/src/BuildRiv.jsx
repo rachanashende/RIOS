@@ -433,7 +433,7 @@ function StageActions({ project, missing, gateApprovers, session, onAction, busy
   );
 }
 
-function OverviewTab({ project, sources }) {
+function OverviewTab({ project, sources, canEdit, onSaved }) {
   const rows = [
     ["Client", project.client_company || project.client_name],
     ["Owner", project.owner_name], ["Client POC", project.poc_name], ["RIV Manager", project.riv_manager_name],
@@ -441,16 +441,155 @@ function OverviewTab({ project, sources }) {
     ["Source", sources?.[0] ? sources[0].source_type.replace("_", " ") : "manual"],
   ].filter(([, v]) => v);
   return (
-    <Card style={{ padding: 22 }}>
-      {project.description && <div style={{ fontFamily: FONT, fontSize: 13.5, color: "#4A4642", lineHeight: 1.6, marginBottom: 18, whiteSpace: "pre-wrap" }}>{project.description}</div>}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 14 }}>
-        {rows.map(([k, v]) => (
-          <div key={k}>
-            <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F", textTransform: "uppercase", letterSpacing: "0.03em" }}>{k}</div>
-            <div style={{ fontFamily: FONT, fontSize: 13.5, color: BRAND.ink, marginTop: 3, textTransform: k === "Source" ? "capitalize" : "none" }}>{v}</div>
-          </div>
-        ))}
+    <div>
+      <Card style={{ padding: 22, marginBottom: 20 }}>
+        {project.description && <div style={{ fontFamily: FONT, fontSize: 13.5, color: "#4A4642", lineHeight: 1.6, marginBottom: 18, whiteSpace: "pre-wrap" }}>{project.description}</div>}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 14 }}>
+          {rows.map(([k, v]) => (
+            <div key={k}>
+              <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F", textTransform: "uppercase", letterSpacing: "0.03em" }}>{k}</div>
+              <div style={{ fontFamily: FONT, fontSize: 13.5, color: BRAND.ink, marginTop: 3, textTransform: k === "Source" ? "capitalize" : "none" }}>{v}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+      {canEdit && <StageDetailsForm project={project} onSaved={onSaved} />}
+    </div>
+  );
+}
+
+// StageDetailsForm -- fills in the per-stage fields that
+// missingFieldsForStage() (backend/lib/buildWorkflow.js) checks before
+// letting a project advance a gate. Previously these fields had validation
+// logic but no way to ever be set from the UI, so "Advance stage" could get
+// permanently stuck (e.g. on "Target end date") with no way out. Grouped by
+// the stage each field gates, so people can see at a glance what the next
+// gate(s) need, regardless of which stage the project is currently on --
+// gates are usually filled in ahead of time, not exactly when blocked.
+function StageDetailsForm({ project, onSaved }) {
+  const [form, setForm] = useState({
+    targetEnd: project.target_end ? project.target_end.slice(0, 10) : "",
+    agreementType: project.agreement_type || "",
+    agreementSignedAt: project.agreement_signed_at ? project.agreement_signed_at.slice(0, 10) : "",
+    pilotFee: project.pilot_fee ?? "",
+    systemsTouched: project.systems_touched || "",
+    dataShared: project.data_shared || "",
+    risks: project.risks || "",
+    securityCheckDone: project.security_check_done == null ? "" : (project.security_check_done ? "yes" : "no"),
+    demoLink: project.demo_link || "",
+    testResult: project.test_result || "",
+    pilotScope: project.pilot_scope || "",
+    pilotStart: project.pilot_start ? project.pilot_start.slice(0, 10) : "",
+    pilotEnd: project.pilot_end ? project.pilot_end.slice(0, 10) : "",
+    rolloutScope: project.rollout_scope || "",
+    contractValue: project.contract_value ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [saved, setSaved] = useState(false);
+  const isStartup = project.type === "startup";
+
+  async function submit(e) {
+    e.preventDefault();
+    setSaving(true); setError(null); setSaved(false);
+    try {
+      const payload = {
+        targetEnd: form.targetEnd || null,
+        agreementType: form.agreementType || null,
+        agreementSignedAt: form.agreementSignedAt || null,
+        pilotFee: form.pilotFee === "" ? null : Number(form.pilotFee),
+        systemsTouched: form.systemsTouched || null,
+        dataShared: form.dataShared || null,
+        risks: form.risks || null,
+        securityCheckDone: form.securityCheckDone === "" ? null : form.securityCheckDone === "yes",
+        demoLink: form.demoLink || null,
+        testResult: form.testResult || null,
+        pilotScope: form.pilotScope || null,
+        pilotStart: form.pilotStart || null,
+        pilotEnd: form.pilotEnd || null,
+        rolloutScope: form.rolloutScope || null,
+        contractValue: form.contractValue === "" ? null : Number(form.contractValue),
+      };
+      await api.updateBuildDetails(project.id, payload);
+      setSaved(true);
+      onSaved();
+    } catch (e) {
+      setError(e.message || "Couldn't save project details.");
+    } finally { setSaving(false); }
+  }
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  return (
+    <Card style={{ padding: 20 }}>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 4 }}>Project details</div>
+      <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 16 }}>
+        These fields gate "Advance stage" at each step -- fill them in any time, not only when blocked.
       </div>
+      <form onSubmit={submit}>
+        <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Requirements</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 0 }}>
+          <Field label="Target end date"><input type="date" style={inputStyle} value={form.targetEnd} onChange={set("targetEnd")} /></Field>
+        </div>
+
+        <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Agreement</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 0 }}>
+          <Field label="Agreement type"><input style={inputStyle} placeholder="e.g. MSA, Pilot agreement" value={form.agreementType} onChange={set("agreementType")} /></Field>
+          <Field label="Signed date"><input type="date" style={inputStyle} value={form.agreementSignedAt} onChange={set("agreementSignedAt")} /></Field>
+          <Field label="Pilot fee (USD)"><input type="number" style={inputStyle} value={form.pilotFee} onChange={set("pilotFee")} /></Field>
+        </div>
+
+        <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Design</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 0 }}>
+          <Field label="Systems touched"><input style={inputStyle} value={form.systemsTouched} onChange={set("systemsTouched")} /></Field>
+          <Field label="Data shared"><input style={inputStyle} value={form.dataShared} onChange={set("dataShared")} /></Field>
+          <Field label="Risks"><input style={inputStyle} value={form.risks} onChange={set("risks")} /></Field>
+          {isStartup && (
+            <Field label="Security check done">
+              <select style={selectStyle} value={form.securityCheckDone} onChange={set("securityCheckDone")}>
+                <option value="">—</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </Field>
+          )}
+        </div>
+
+        <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Build</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 0 }}>
+          <Field label="Demo link or evidence"><input style={inputStyle} value={form.demoLink} onChange={set("demoLink")} /></Field>
+        </div>
+
+        <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Test</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 0 }}>
+          <Field label="Test result">
+            <select style={selectStyle} value={form.testResult} onChange={set("testResult")}>
+              <option value="">—</option>
+              <option value="pass">Pass</option>
+              <option value="pass_with_issues">Pass with issues</option>
+            </select>
+          </Field>
+        </div>
+
+        <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Pilot</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 0 }}>
+          <Field label="Pilot scope"><input style={inputStyle} value={form.pilotScope} onChange={set("pilotScope")} /></Field>
+          <Field label="Pilot start date"><input type="date" style={inputStyle} value={form.pilotStart} onChange={set("pilotStart")} /></Field>
+          <Field label="Pilot end date"><input type="date" style={inputStyle} value={form.pilotEnd} onChange={set("pilotEnd")} /></Field>
+        </div>
+
+        <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Scale</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 0 }}>
+          <Field label="Rollout scope"><input style={inputStyle} value={form.rolloutScope} onChange={set("rolloutScope")} /></Field>
+          {isStartup && (
+            <Field label="Contract value (USD)"><input type="number" style={inputStyle} value={form.contractValue} onChange={set("contractValue")} /></Field>
+          )}
+        </div>
+
+        {saved && <Notice text="Saved." />}
+        <ErrorBanner text={error} />
+        <PrimaryButton type="submit" disabled={saving}>{saving ? "Saving…" : "Save project details"}</PrimaryButton>
+      </form>
     </Card>
   );
 }
@@ -849,7 +988,7 @@ function ProjectDetailView({ projectId, session, onBack }) {
         ))}
       </div>
 
-      {tab === "overview" && <OverviewTab project={project} sources={sources} />}
+      {tab === "overview" && <OverviewTab project={project} sources={sources} canEdit={canAddUpdate} onSaved={load} />}
       {tab === "updates" && <UpdatesTab project={project} updates={updates} canAdd={canAddUpdate} onAdded={load} />}
       {tab === "roi" && <RoiTab project={project} canEdit={canEditRoi} isClientLeader={isClientLeader && !canAddUpdate} onSaved={load} />}
       {tab === "lessons" && <LessonsTab project={project} lessons={lessons} canEdit={canAddUpdate} onSaved={load} />}
