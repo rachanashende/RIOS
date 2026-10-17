@@ -55,7 +55,7 @@ router.post("/login", async (req, res, next) => {
     const token = signToken(user);
     res.json({
       token,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, company: user.company },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, company: user.company, buildScoped: !!user.build_scoped },
       mustChangePassword: !!user.must_change_password,
     });
   } catch (err) {
@@ -169,7 +169,7 @@ router.post("/signup", async (req, res, next) => {
     const token = signToken(user);
     res.status(201).json({
       token,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, company: user.company },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, company: user.company, buildScoped: !!user.build_scoped },
     });
   } catch (err) {
     next(err);

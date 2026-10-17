@@ -365,6 +365,13 @@ export const api = {
   listBuildPocs: (clientId) => buildRequest(`/admin/build/poc${toQuery({ clientId })}`),
   createBuildPoc: (payload) => buildRequest("/admin/build/poc", { method: "POST", body: payload }),
   deleteBuildPoc: (id) => buildRequest(`/admin/build/poc/${id}`, { method: "DELETE" }),
+  // Build-scoped Client Leader logins -- separate from the main site's own
+  // Manage Clients (api.listClients/createClient), which still creates
+  // ordinary full-access clients. These are "client" role too, just flagged
+  // so they only ever see Build.RIV (see db.build.js's build_scoped column).
+  listBuildClients: () => buildRequest("/admin/build/clients"),
+  createBuildClient: (payload) => buildRequest("/admin/build/clients", { method: "POST", body: payload }),
+  deleteBuildClient: (id) => buildRequest(`/admin/build/clients/${id}`, { method: "DELETE" }),
   listBuildManagers: () => buildRequest("/admin/build/managers"),
   createBuildManager: (payload) => buildRequest("/admin/build/managers", { method: "POST", body: payload }),
   setBuildManagerClients: (id, clientIds) => buildRequest(`/admin/build/managers/${id}/clients`, { method: "PUT", body: { clientIds } }),

@@ -298,6 +298,67 @@ router.delete("/poc/:id", requireRole("admin"), async (req, res, next) => {
   }
 });
 
+/* =========================================================================
+   BUILD-SCOPED CLIENT LOGINS -- a Client Leader login issued specifically
+   for a Build/Transform engagement. Still role='client' (so it works as
+   project.client_id and as Client Leader everywhere Build already checks
+   for that role -- see isClientLeaderOf in lib/buildPermissions.js), but
+   flagged build_scoped so the frontend shows it only the Build nav item
+   and redirects it straight there, and the backend actually refuses the
+   audit/scorecard routes (routes/responses.js, routes/export.js) rather
+   than just hiding the button. Kept separate from the main site's own
+   "Manage Clients" (routes/admin.js POST /clients), which still creates
+   ordinary full-access clients exactly as before.
+   ========================================================================= */
+
+// GET /api/admin/build/clients -- list build-scoped client logins only.
+router.get("/clients", requireRole("admin"), async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, email, name, company, created_at FROM users
+       WHERE role = 'client' AND build_scoped = true ORDER BY created_at DESC`
+    );
+    res.json({ clients: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/admin/build/clients -- RIV Admin only, same top-down-issued-login
+// convention as every other role in RIOS (no self-registration).
+router.post("/clients", requireRole("admin"), async (req, res, next) => {
+  try {
+    const { email, password, name, company } = req.body || {};
+    if (!email || !password || !name) return res.status(400).json({ error: "Name, email, and a temporary password are required." });
+    if (String(password).length < 8) return res.status(400).json({ error: "The temporary password must be at least 8 characters." });
+    const normalizedEmail = String(email).toLowerCase().trim();
+    const { rows: existing } = await pool.query("SELECT id FROM users WHERE email = $1", [normalizedEmail]);
+    if (existing.length) return res.status(409).json({ error: "A user with that email already exists." });
+
+    const password_hash = bcrypt.hashSync(password, 10);
+    const { rows } = await pool.query(
+      `INSERT INTO users (email, password_hash, name, role, company, build_scoped, must_change_password)
+       VALUES ($1,$2,$3,'client',$4,true,true) RETURNING id`,
+      [normalizedEmail, password_hash, String(name).trim(), clean(company)]
+    );
+    res.status(201).json({ id: rows[0].id, email: normalizedEmail, name, company: clean(company) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Guarded by "AND build_scoped = true" so this panel can only ever delete
+// a login it (or another admin, through this same endpoint) created --
+// never a full-access client from the main site's Manage Clients.
+router.delete("/clients/:id", requireRole("admin"), async (req, res, next) => {
+  try {
+    await pool.query("DELETE FROM users WHERE id = $1 AND role = 'client' AND build_scoped = true", [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/admin/build/managers -- RIV Manager roster with assigned clients.
 router.get("/managers", requireRole("admin"), async (req, res, next) => {
   try {

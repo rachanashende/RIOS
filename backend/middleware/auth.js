@@ -33,8 +33,22 @@ export function requireRole(...roles) {
 
 export function signToken(user) {
   return jwt.sign(
-    { id: user.id, email: user.email, name: user.name, role: user.role, company: user.company },
+    { id: user.id, email: user.email, name: user.name, role: user.role, company: user.company, buildScoped: !!user.build_scoped },
     JWT_SECRET,
     { expiresIn: "7d" }
   );
+}
+
+// A client login created specifically for a Build/Transform engagement
+// (users.build_scoped) is meant to see Build.RIV only -- not the main RIOS
+// audit/scorecard. The frontend already hides those nav items for such a
+// login, but per this codebase's own stated principle (buildPermissions.js:
+// "server-side ... never just hiding a button"), the routes themselves need
+// to refuse it too. Apply this after requireAuth to any route that's part
+// of the audit/scorecard experience, not Build.
+export function blockBuildScopedClient(req, res, next) {
+  if (req.user?.role === "client" && req.user?.buildScoped) {
+    return res.status(403).json({ error: "This login is for Build.RIV only." });
+  }
+  next();
 }

@@ -101,6 +101,10 @@ function NavBar({ view, setView, user, onLogout }) {
   const [open, setOpen] = useState(false);
   const publicItems = [{ id: "home", label: "Overview" }];
   const clientItems = [{ id: "assess", label: "Audit" }, { id: "dashboard", label: "My Scorecard" }, { id: "build-riv", label: "Build" }];
+  // A client login created specifically for a Build/Transform engagement
+  // (user.buildScoped -- see db.build.js's build_scoped column) is meant to
+  // see Build.RIV only, not the main audit/scorecard.
+  const buildScopedClientItems = [{ id: "build-riv", label: "Build" }];
   // O4: admins can open the Ideathon, Startup, R-Index and Build screens from the menu (their own admin login works in each).
   const adminItems = [
     { id: "admin", label: "Manage Clients" },
@@ -129,7 +133,7 @@ function NavBar({ view, setView, user, onLogout }) {
     ...(user?.role === "junior_employee" || user?.role === "jury" ? [{ id: "ideas-riv", label: "Ideathon" }, { id: "build-riv", label: "Build" }] : []),
     ...(user?.role === "rise_jury" ? [{ id: "rise-riv", label: "Startup" }] : []),
     ...(user?.role === "client_poc" || user?.role === "riv_manager" ? [{ id: "build-riv", label: "Build" }] : []),
-    ...(user?.role === "client" ? clientItems : []),
+    ...(user?.role === "client" ? (user?.buildScoped ? buildScopedClientItems : clientItems) : []),
     ...(user?.role === "admin" ? adminItems : []),
   ];
 
@@ -1494,7 +1498,10 @@ export default function RiosApp() {
     skipNextSave.current = true;
     if (user.role === "admin" && viewingClient) {
       api.getClientResponses(viewingClient.id).then((d) => setResponses(d.responses || {})).catch(() => setResponses({}));
-    } else if (user.role === "client") {
+    } else if (user.role === "client" && !user.buildScoped) {
+      // Skipped entirely for a build-scoped client -- the backend now
+      // refuses this endpoint for that login (routes/responses.js), so
+      // there's no point making a request that only ever 403s.
       api.getResponses().then((d) => { setResponses(d.responses || {}); setSubmittedAt(d.submittedAt || null); }).catch(() => setResponses({}));
     }
   }, [user, viewingClient]);
@@ -1517,7 +1524,7 @@ export default function RiosApp() {
     } catch (err) { alert(err.message || "Could not submit. Please try again."); }
   }
   useEffect(() => {
-    if (!user || user.role !== "client" || submittedAt) return;
+    if (!user || user.role !== "client" || user.buildScoped || submittedAt) return;
     if (skipNextSave.current) { skipNextSave.current = false; return; }
     if (saveTimer.current) clearTimeout(saveTimer.current);
     pendingSave.current = responses;
@@ -1613,6 +1620,13 @@ export default function RiosApp() {
       // isolated session (see api.js's BUILD_TOKEN_KEY comment).
       setBuildSession(token, loggedInUser);
       path = "/build"; v = "build-riv";
+    } else if (loggedInUser.role === "client" && loggedInUser.buildScoped) {
+      // A client login created specifically for a Build engagement (see
+      // db.build.js's build_scoped column) -- same redirect-into-Build
+      // treatment as client_poc/riv_manager above, instead of the
+      // "/audit" a regular client lands on just below.
+      setBuildSession(token, loggedInUser);
+      path = "/build"; v = "build-riv";
     } else {
       path = "/audit"; v = "assess";
     }
@@ -1635,6 +1649,9 @@ export default function RiosApp() {
   }
   function goToView(v) {
     if ((v === "assess" || v === "dashboard") && !user) { setView("login"); return; }
+    // A build-scoped client has no audit/scorecard -- send it to Build
+    // instead (mirrors the same redirect handleLogin does at login time).
+    if ((v === "assess" || v === "dashboard") && user?.role === "client" && user?.buildScoped) { v = "build-riv"; }
     if (v !== "dashboard") setViewingClient(null);
     // O4: the admin's main login is accepted by each module; give the module its own session copy so it opens signed in.
     if (user?.role === "admin" && (v === "ideas-riv" || v === "rise-riv" || v === "r-index" || v === "build-riv")) {
@@ -1702,11 +1719,11 @@ export default function RiosApp() {
       {view === "rise-riv" && <ErrorBoundary><RiseRivApp /></ErrorBoundary>}
       {view === "r-index" && <ErrorBoundary><IndexRivApp /></ErrorBoundary>}
       {view === "build-riv" && <ErrorBoundary><BuildRivApp /></ErrorBoundary>}
-      {view === "assess" && user?.role === "client" && ready && (
+      {view === "assess" && user?.role === "client" && !user?.buildScoped && ready && (
         <AssessmentView questions={questions} modules={modules} responses={responses} setResponses={setResponses} moduleIdx={moduleIdx} setModuleIdx={setModuleIdx} saveStatus={saveStatus} onRetrySave={() => setRetryTick((n) => n + 1)} submittedAt={submittedAt} onSubmit={submitAudit} />
       )}
       {view === "admin" && user?.role === "admin" && <AdminView setView={goToView} setSelectedClient={setViewingClient} />}
-      {view === "dashboard" && user && ready && (
+      {view === "dashboard" && user && !(user.role === "client" && user.buildScoped) && ready && (
         <DashboardView questions={questions} modules={modules} responses={responses} setView={goToView} user={user} viewingClient={viewingClient} />
       )}
       <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#B7B2AE", display: (view === "ideas-riv" || view === "rise-riv" || view === "r-index" || view === "build-riv") ? "none" : "block" }}>

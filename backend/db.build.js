@@ -69,6 +69,20 @@ async function widenRoleConstraint(newRoles) {
 export async function initBuildSchema() {
   await widenRoleConstraint(["client_poc", "riv_manager"]);
 
+  // The owner wants client logins created specifically for a Build/Transform
+  // engagement to be scoped to Build.RIV only -- no access to the main RIOS
+  // audit (Discover Assessment / My Scorecard). Rather than a new role (which
+  // would mean teaching every isClientLeaderOf()/canSeeClientDashboard() etc.
+  // check in buildPermissions.js a second "is this a client" case, and would
+  // split what "the client_id FK on build_projects points at a client" means),
+  // this stays role='client' -- still the Client Leader for Build purposes --
+  // with a flag that (a) the frontend uses to show only the Build nav item and
+  // redirect straight into it on login, and (b) the backend uses to actually
+  // block the audit/scorecard endpoints (routes/responses.js, routes/export.js),
+  // not just hide the button. Defaults false, so every existing client login
+  // (created from the main site's own Manage Clients) is completely unaffected.
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS build_scoped BOOLEAN NOT NULL DEFAULT false;`);
+
   // ------------------------------------------------------------------
   // Dependencies this module needs on tables that belong to Ideathon /
   // Startup (PRD section 10.1 "Changes to existing tables" + section 12.2

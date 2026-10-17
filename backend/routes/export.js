@@ -2,7 +2,7 @@ import { Router } from "express";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import pool from "../db.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, blockBuildScopedClient } from "../middleware/auth.js";
 import { QUESTIONS, computeScores } from "../lib/scoring.js";
 
 // SC1: same US$ convention as the on-screen scorecard
@@ -55,7 +55,7 @@ async function loadResponses(userId) {
   return responses;
 }
 
-router.get("/excel", requireAuth, async (req, res, next) => {
+router.get("/excel", requireAuth, blockBuildScopedClient, async (req, res, next) => {
   try {
   const target = await resolveTargetUser(req);
   if (!target) return res.status(404).json({ error: "Client not found." });
@@ -132,7 +132,7 @@ router.get("/excel", requireAuth, async (req, res, next) => {
   }
 });
 
-router.get("/pdf", requireAuth, async (req, res, next) => {
+router.get("/pdf", requireAuth, blockBuildScopedClient, async (req, res, next) => {
   try {
   const target = await resolveTargetUser(req);
   if (!target) return res.status(404).json({ error: "Client not found." });

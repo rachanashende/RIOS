@@ -1,6 +1,6 @@
 import { Router } from "express";
 import pool from "../db.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, blockBuildScopedClient } from "../middleware/auth.js";
 import { QUESTIONS, MODULES } from "../lib/scoring.js";
 
 const router = Router();
@@ -23,7 +23,7 @@ async function submittedAt(userId) {
 const LOCKED = { error: "Your audit has been submitted and is locked. Ask RIV to reopen it if you need to change an answer.", code: "audit_submitted" };
 
 // Logged-in client/admin's own saved responses
-router.get("/responses", requireAuth, async (req, res, next) => {
+router.get("/responses", requireAuth, blockBuildScopedClient, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
       "SELECT question_id, maturity, evidence, not_applicable FROM responses WHERE user_id = $1",
@@ -38,7 +38,7 @@ router.get("/responses", requireAuth, async (req, res, next) => {
 });
 
 // A7: client submits the audit -- locks their answers
-router.post("/responses/submit", requireAuth, async (req, res, next) => {
+router.post("/responses/submit", requireAuth, blockBuildScopedClient, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
       "SELECT count(*)::int AS n FROM responses WHERE user_id = $1 AND (maturity IS NOT NULL OR not_applicable)",
@@ -56,7 +56,7 @@ router.post("/responses/submit", requireAuth, async (req, res, next) => {
 });
 
 // Upsert a batch of responses: { responses: { [questionId]: { maturity, evidence } } }
-router.put("/responses", requireAuth, async (req, res, next) => {
+router.put("/responses", requireAuth, blockBuildScopedClient, async (req, res, next) => {
   const { responses } = req.body || {};
   if (!responses || typeof responses !== "object") {
     return res.status(400).json({ error: "Expected a responses object." });
@@ -95,7 +95,7 @@ router.put("/responses", requireAuth, async (req, res, next) => {
   }
 });
 
-router.delete("/responses", requireAuth, async (req, res, next) => {
+router.delete("/responses", requireAuth, blockBuildScopedClient, async (req, res, next) => {
   try {
     if (await submittedAt(req.user.id)) return res.status(409).json(LOCKED);
     await pool.query("DELETE FROM responses WHERE user_id = $1", [await ownerOf(req.user.id)]);

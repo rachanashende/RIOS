@@ -1479,6 +1479,71 @@ function PeoplePanel() {
   );
 }
 
+// Build-scoped Client Leader logins -- separate from the main RIOS site's
+// own "Manage Clients" (which creates a client with full access to the
+// audit/Discover Assessment too). A client created here is still the
+// Client Leader for whatever Build projects get assigned to it, but only
+// ever sees Build.RIV -- the main site refuses the audit/scorecard routes
+// for it server-side (routes/responses.js, routes/export.js), not just
+// hides the nav button.
+function ManageBuildClientsPanel() {
+  const [clients, setClients] = useState([]);
+  const [form, setForm] = useState({ name: "", email: "", password: "", company: "" });
+  const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  function load() {
+    api.listBuildClients().then((d) => setClients(d.clients || [])).catch(() => {});
+  }
+  useEffect(() => { load(); }, []);
+
+  async function createClient(e) {
+    e.preventDefault();
+    setError(null); setNotice(null); setSubmitting(true);
+    try {
+      await api.createBuildClient(form);
+      setForm({ name: "", email: "", password: "", company: "" });
+      setNotice("Client login created -- it will only ever see Build.RIV.");
+      load();
+    } catch (e) {
+      setError(e.message || "Couldn't create that login.");
+    } finally { setSubmitting(false); }
+  }
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(360px,1fr))", gap: 16 }}>
+      <Card style={{ padding: 20 }}>
+        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 6 }}>
+          <Building2 size={14} style={{ marginRight: 6, verticalAlign: -2 }} />Build-only client logins
+        </div>
+        <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 14, lineHeight: 1.5 }}>
+          For a client whose engagement is Transform/Build only. This login acts as Client Leader for its own
+          Build projects, but has no access to the Discover Assessment or My Scorecard -- unlike a client created
+          from the main site's Manage Clients, which gets both.
+        </div>
+        <form onSubmit={createClient}>
+          <Field label="Company name"><input style={inputStyle} value={form.company} onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))} /></Field>
+          <Field label="Contact name" required><input style={inputStyle} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></Field>
+          <Field label="Email" required><input type="email" style={inputStyle} value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></Field>
+          <Field label="Temporary password" required><input style={inputStyle} value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} /></Field>
+          <PrimaryButton type="submit" icon={Plus} disabled={submitting}>{submitting ? "Creating…" : "Create login"}</PrimaryButton>
+        </form>
+        {notice && <Notice text={notice} />}
+        <ErrorBanner text={error} />
+        <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 6 }}>
+          {clients.map((c) => (
+            <div key={c.id} style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.ink, display: "flex", justifyContent: "space-between" }}>
+              <span>{c.company || c.name} · {c.email} <span style={{ color: "#9B958F" }}>(ID {c.id})</span></span>
+              <button onClick={async () => { await api.deleteBuildClient(c.id); load(); }} style={{ background: "none", border: "none", color: "#C13B3B", cursor: "pointer" }}><X size={13} /></button>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function OverdueDigestPanel() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState(null);
@@ -1512,6 +1577,7 @@ function AdminConsoleView({ reload }) {
     { id: "create", label: "Create project" },
     { id: "assign", label: "Assign people" },
     { id: "people", label: "POC / Manager logins" },
+    { id: "clients", label: "Manage Clients" },
     { id: "overdue", label: "Overdue digest" },
   ];
   return (
@@ -1530,6 +1596,7 @@ function AdminConsoleView({ reload }) {
       {tab === "create" && <CreateProjectPanel onCreated={reload} />}
       {tab === "assign" && <AssignPanel />}
       {tab === "people" && <PeoplePanel />}
+      {tab === "clients" && <ManageBuildClientsPanel />}
       {tab === "overdue" && <OverdueDigestPanel />}
     </div>
   );
