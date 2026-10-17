@@ -70,12 +70,35 @@ router.get("/client/:clientId", async (req, res, next) => {
       ...overdue.filter((p) => !redAmber.includes(p)).map((p) => ({ projectId: p.id, code: p.code, title: p.title, reason: "Update overdue" })),
     ];
 
+    // Per-workflow breakdown -- "Enterprise Innovation Management" (type
+    // 'internal') vs "Open Innovation Management" (type 'startup'), the
+    // same split the Projects tab's sub-tabs use. Leadership-level ask: how
+    // many opportunities per workflow, and their invested/benefit/ROI.
     const byType = { internal: { count: 0, invested: 0, benefit: 0 }, startup: { count: 0, invested: 0, benefit: 0 } };
     for (const p of active) {
       byType[p.type].count += 1;
       byType[p.type].invested += p.actual_cost || 0;
       byType[p.type].benefit += p.realised_benefit || 0;
     }
+    for (const t of Object.keys(byType)) {
+      const b = byType[t];
+      b.roi = b.invested > 0 ? ((b.benefit - b.invested) / b.invested) * 100 : null;
+    }
+
+    // Lessons learned from completed implementations (PRD 8.4 data, surfaced
+    // at leadership level per this change's request). Most-recently-closed
+    // first; capped rather than paginated -- this dashboard is a one-minute
+    // read, not a lessons-learned archive browser.
+    const { rows: lessonRows } = await pool.query(
+      `SELECT p.id, p.code, p.title, p.type, p.outcome, p.closed_at,
+              l.recommendation, l.worked, l.not_worked, l.do_differently
+       FROM build_projects p
+       JOIN build_lessons l ON l.project_id = p.id
+       WHERE p.client_id = $1 AND p.status = 'closed'${typeFilter ? " AND p.type = $2" : ""}
+       ORDER BY p.closed_at DESC
+       LIMIT 8`,
+      typeFilter ? [clientId, typeFilter] : [clientId]
+    );
 
     res.json({
       summary: {
@@ -94,6 +117,10 @@ router.get("/client/:clientId", async (req, res, next) => {
         lastUpdateDate: p.last_update_date, ownerName: p.owner_name, roi: p.roi, overdue: p.overdue,
       })),
       byType,
+      recentLessons: lessonRows.map((l) => ({
+        projectId: l.id, code: l.code, title: l.title, type: l.type, outcome: l.outcome, closedAt: l.closed_at,
+        recommendation: l.recommendation, worked: l.worked, notWorked: l.not_worked, doDifferently: l.do_differently,
+      })),
     });
   } catch (err) {
     next(err);

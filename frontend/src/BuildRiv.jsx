@@ -1232,6 +1232,79 @@ function InvestmentVsBenefitChart({ title, rows, nameKey, investedKey, benefitKe
   );
 }
 
+// Leadership-level "which workflow" breakdown (PRD section 9 / this
+// change's request): the same Enterprise/Open Innovation Management split
+// as the Projects tab's sub-tabs, with each workflow's invested/benefit/ROI
+// as already computed server-side -- no new calculation invented here.
+function WorkflowBreakdown({ byType }) {
+  if (!byType) return null;
+  return (
+    <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 20 }}>
+      {INNOV_TABS.map((t) => {
+        const b = byType[t.type] || { count: 0, invested: 0, benefit: 0, roi: null };
+        return (
+          <Card key={t.id} style={{ padding: 18, flex: "1 1 260px" }}>
+            <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: BRAND.ink, marginBottom: 10 }}>{t.label}</div>
+            <div style={{ display: "flex", gap: 18 }}>
+              <div>
+                <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F", textTransform: "uppercase" }}>Active</div>
+                <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: BRAND.ink }}>{b.count}</div>
+              </div>
+              <div>
+                <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F", textTransform: "uppercase" }}>Invested</div>
+                <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: BRAND.ink }}>{fmtUSD(b.invested) || "—"}</div>
+              </div>
+              <div>
+                <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F", textTransform: "uppercase" }}>Benefit</div>
+                <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: BRAND.ink }}>{fmtUSD(b.benefit) || "—"}</div>
+              </div>
+              <div>
+                <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F", textTransform: "uppercase" }}>ROI</div>
+                <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: b.roi >= 0 ? "#1B7A5A" : (b.roi == null ? BRAND.ink : "#C13B3B") }}>{fmtPct(b.roi)}</div>
+              </div>
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+const RECOMMENDATION_LABEL = { scale_to_others: "Scale to others", reuse_approach: "Reuse approach", dont_repeat: "Don't repeat" };
+
+// "Lessons learned from completed implementations" at leadership level (PRD
+// section 9 / this change's request) -- reads build_lessons rows for this
+// client's closed projects; the lessons themselves are still edited on the
+// project's own Lessons learned tab, this is just visibility.
+function LessonsLearnedPanel({ recentLessons }) {
+  if (!recentLessons || !recentLessons.length) return null;
+  return (
+    <Card style={{ padding: 18, marginBottom: 20 }}>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 10 }}>Lessons learned from completed implementations</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {recentLessons.map((l) => (
+          <div key={l.projectId} style={{ borderBottom: `1px solid ${BRAND.line}`, paddingBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6, fontFamily: FONT, fontSize: 13 }}>
+              <span>
+                <b style={{ color: BRAND.coralDark }}>{l.code}</b> {l.title}
+                <span style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F", marginLeft: 8 }}>
+                  {INNOV_TABS.find((t) => t.type === l.type)?.label} · {l.outcome === "scaled" ? "Scaled" : "Stopped"} · {fmtDate(l.closedAt)}
+                </span>
+              </span>
+              {l.recommendation && (
+                <span style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 600, color: "#1B7A5A", background: "#E7F5EF", borderRadius: 999, padding: "3px 10px" }}>
+                  {RECOMMENDATION_LABEL[l.recommendation] || l.recommendation}
+                </span>
+              )}
+            </div>
+            {l.worked && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A746F", marginTop: 4 }}><b>What worked:</b> {l.worked}</div>}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function SummaryStat({ label, value, sub, color }) {
   return (
     <Card style={{ padding: 18, flex: "1 1 160px" }}>
@@ -1257,7 +1330,7 @@ function ClientDashboard({ clientId }) {
   if (error) return <ErrorBanner text={error} />;
   if (!data) return null;
 
-  const { summary, needsAttention, projects, pipelineByStage, investmentVsBenefit } = data;
+  const { summary, needsAttention, projects, pipelineByStage, investmentVsBenefit, byType, recentLessons } = data;
   const healthRank = { off_track: 0, at_risk: 1, on_track: 2 };
   const rows = (projects || []).map((p) => ({ ...p, roiPct: p.roi?.roiPct ?? null, healthRank: healthRank[p.health] ?? 3 }));
   const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(rows, "code");
@@ -1274,8 +1347,10 @@ function ClientDashboard({ clientId }) {
         <SummaryStat label="Portfolio ROI" value={fmtPct(summary.portfolioRoi)} color={summary.portfolioRoi >= 0 ? "#1B7A5A" : "#C13B3B"} />
       </div>
 
+      <WorkflowBreakdown byType={byType} />
       <StageBreakdown pipelineByStage={pipelineByStage} />
       <InvestmentVsBenefitChart title="Investment vs. realised benefit" rows={chartRows} nameKey="name" investedKey="invested" benefitKey="benefit" />
+      <LessonsLearnedPanel recentLessons={recentLessons} />
 
       {needsAttention.length > 0 && (
         <Card style={{ padding: 18, marginBottom: 20 }}>
@@ -1295,7 +1370,7 @@ function ClientDashboard({ clientId }) {
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
             <thead><tr style={{ background: BRAND.cream, textAlign: "left" }}>
-              {[["Code", "code"], ["Title", "title"], ["Stage", "stage"], ["Health", "healthRank"], ["Owner", "ownerName"], ["ROI", "roiPct"]].map(([label, key]) => (
+              {[["Code", "code"], ["Title", "title"], ["Workflow", "type"], ["Stage", "stage"], ["Health", "healthRank"], ["Owner", "ownerName"], ["ROI", "roiPct"]].map(([label, key]) => (
                 <SortTh key={key} label={label} sortKey={key} active={sortKey === key} dir={sortDir} onSort={toggleSort} />
               ))}
             </tr></thead>
@@ -1304,6 +1379,7 @@ function ClientDashboard({ clientId }) {
                 <tr key={p.id}>
                   <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, fontWeight: 700, color: BRAND.coralDark, borderBottom: `1px solid ${BRAND.line}` }}>{p.code}</td>
                   <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 13, color: BRAND.ink, borderBottom: `1px solid ${BRAND.line}` }}>{p.title}</td>
+                  <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 11.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{p.type === "internal" ? "Enterprise" : "Open"}</td>
                   <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}`, textTransform: "capitalize" }}>{p.stage}</td>
                   <td style={{ padding: "10px 14px", borderBottom: `1px solid ${BRAND.line}` }}><HealthBadge health={p.health} size="sm" /></td>
                   <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{p.ownerName || "—"}</td>
