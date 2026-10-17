@@ -40,6 +40,15 @@ async function assignedClientIds(user) {
   return rows.map((r) => r.id ?? r.client_id);
 }
 
+// A client_poc login's own client_id -- not in the JWT, so canSeeProject
+// needs it looked up to scope viewing to "my client's projects", matching
+// GET /projects' own list-scoping query for this role (see buildPermissions.js).
+async function pocClientId(user) {
+  if (user.role !== "client_poc") return null;
+  const { rows } = await pool.query("SELECT client_id FROM users WHERE id = $1", [user.id]);
+  return rows[0]?.client_id ?? null;
+}
+
 async function loadProject(id) {
   const { rows } = await pool.query(
     `SELECT p.*, m.kpi_name, m.kpi_unit, m.baseline, m.target, m.currency,
@@ -152,7 +161,8 @@ router.get("/projects/:id", async (req, res, next) => {
     const project = await loadProject(req.params.id);
     if (!project) return res.status(404).json({ error: "Project not found." });
     const assigned = await assignedClientIds(req.user);
-    if (!canSeeProject(req.user, project, assigned)) return res.status(403).json({ error: "You don't have access to this project." });
+    const pocClient = await pocClientId(req.user);
+    if (!canSeeProject(req.user, project, assigned, pocClient)) return res.status(403).json({ error: "You don't have access to this project." });
 
     const [sources, history, updates, lessons, files, kpiReadings] = await Promise.all([
       pool.query("SELECT * FROM build_project_sources WHERE project_id = $1", [project.id]),
@@ -663,7 +673,8 @@ router.get("/projects/:id/files/:fileId", async (req, res, next) => {
     const project = await loadProject(req.params.id);
     if (!project) return res.status(404).json({ error: "Project not found." });
     const assigned = await assignedClientIds(req.user);
-    if (!canSeeProject(req.user, project, assigned)) return res.status(403).json({ error: "You don't have access to this project." });
+    const pocClient = await pocClientId(req.user);
+    if (!canSeeProject(req.user, project, assigned, pocClient)) return res.status(403).json({ error: "You don't have access to this project." });
     const { rows } = await pool.query("SELECT * FROM build_files WHERE id = $1 AND project_id = $2", [req.params.fileId, project.id]);
     const file = rows[0];
     if (!file) return res.status(404).json({ error: "File not found." });

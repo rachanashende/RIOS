@@ -29,11 +29,21 @@ export function isRivManagerOf(user, project, assignedClientIds) {
   return (assignedClientIds || []).map(Number).includes(Number(project.client_id));
 }
 
-export function canSeeProject(user, project, assignedClientIds) {
+// pocClientId is the client_poc user's OWN client_id (looked up from the
+// users table -- it isn't carried in the JWT). Viewing is scoped to "any
+// project under my own client", matching GET /projects' list query for
+// this role exactly -- isPocOf alone (specifically assigned as THIS
+// project's poc_user_id) used to be the only path in, which meant a
+// client_poc could see a project in their list but get "You don't have
+// access to this project" clicking into it the moment it wasn't assigned
+// to them personally. Posting updates (canAddUpdate) stays restricted to
+// the assigned POC -- only viewing was ever meant to match the list.
+export function canSeeProject(user, project, assignedClientIds, pocClientId) {
   if (isAdmin(user)) return true;
   if (isRivManagerOf(user, project, assignedClientIds)) return true;
   if (isClientLeaderOf(user, project)) return true;
   if (isPocOf(user, project)) return true;
+  if (user?.role === "client_poc" && pocClientId != null && Number(pocClientId) === Number(project.client_id)) return true;
   if (isOwnerOf(user, project)) return true;
   return false;
 }
