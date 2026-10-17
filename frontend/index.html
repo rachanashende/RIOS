@@ -7,6 +7,18 @@
     <style>
       html, body, #root { height: 100%; margin: 0; }
       body { -webkit-text-size-adjust: 100%; }
+      /* Every number input across the app (ROI figures, Pilot fee, Contract
+         value, % complete, etc.) is typed in directly, not stepped through
+         with the browser's built-in up/down spinner -- hide it everywhere
+         rather than fixing it field-by-field. */
+      input[type="number"]::-webkit-outer-spin-button,
+      input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type="number"] {
+        -moz-appearance: textfield;
+      }
     </style>
   </head>
   <body>
