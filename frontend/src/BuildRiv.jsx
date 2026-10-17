@@ -1015,6 +1015,41 @@ function DashboardView({ session }) {
    (manual / from an Ideathon winner / from a selected startup), assign
    people, and manage client_poc + riv_manager logins.
    ========================================================================= */
+// Admin and RIV Manager both reach the Build admin console, but only admin
+// can list every client (GET /api/admin/clients is admin-only). So this
+// tries to fetch the list -- which lets admin pick a client by name instead
+// of having to go find and type its numeric ID -- and if it 403s (a
+// riv_manager, who isn't allowed to see every client), it quietly falls
+// back to null, and callers show a plain numeric field with a hint instead.
+function useClientOptions() {
+  const [clients, setClients] = useState(null); // null = not loaded/unavailable
+  useEffect(() => {
+    api.listClients().then((d) => setClients(d.clients || [])).catch(() => setClients(null));
+  }, []);
+  return clients;
+}
+
+function ClientPicker({ value, onChange, required, label, hint }) {
+  const clients = useClientOptions();
+  if (clients && clients.length) {
+    return (
+      <Field label={label} required={required} hint={hint}>
+        <select style={selectStyle} value={value} onChange={(e) => onChange(e.target.value)}>
+          <option value="">— Choose a client —</option>
+          {clients.map((c) => <option key={c.id} value={c.id}>{c.company || c.name} (ID {c.id})</option>)}
+        </select>
+      </Field>
+    );
+  }
+  // Fallback for a riv_manager (can't list every client) or if the list
+  // failed to load -- a plain numeric field, same as before this fix.
+  return (
+    <Field label={label} required={required} hint={hint || "Numeric client ID -- find it on the client's card under Manage Clients."}>
+      <input style={inputStyle} value={value} onChange={(e) => onChange(e.target.value)} inputMode="numeric" />
+    </Field>
+  );
+}
+
 function CreateProjectPanel({ onCreated }) {
   const [mode, setMode] = useState("manual");
   const [form, setForm] = useState({ type: "internal", title: "", description: "", clientId: "", targetEnd: "" });
@@ -1069,7 +1104,7 @@ function CreateProjectPanel({ onCreated }) {
             </Field>
             <Field label="Title" required><input style={inputStyle} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} /></Field>
             <Field label="Description"><textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} /></Field>
-            <Field label="Client ID" required hint="The RIOS client (leader) account this project belongs to."><input style={inputStyle} value={form.clientId} onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))} /></Field>
+            <ClientPicker label="Client" required hint="The RIOS client (leader) account this project belongs to." value={form.clientId} onChange={(v) => setForm((f) => ({ ...f, clientId: v }))} />
             <Field label="Target end date"><input type="date" style={inputStyle} value={form.targetEnd} onChange={(e) => setForm((f) => ({ ...f, targetEnd: e.target.value }))} /></Field>
           </>
         )}
@@ -1131,7 +1166,8 @@ function PeoplePanel() {
   const [pocs, setPocs] = useState([]);
   const [managers, setManagers] = useState([]);
   const [pocForm, setPocForm] = useState({ email: "", password: "", name: "", clientId: "" });
-  const [mgrForm, setMgrForm] = useState({ email: "", password: "", name: "", clientIds: "" });
+  const [mgrForm, setMgrForm] = useState({ email: "", password: "", name: "", clientIds: [] }); // array of client id strings
+  const mgrClients = useClientOptions();
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
 
@@ -1155,13 +1191,17 @@ function PeoplePanel() {
     e.preventDefault();
     setError(null); setNotice(null);
     try {
-      await api.createBuildManager({
-        ...mgrForm, clientIds: mgrForm.clientIds.split(",").map((s) => s.trim()).filter(Boolean),
-      });
-      setMgrForm({ email: "", password: "", name: "", clientIds: "" });
+      await api.createBuildManager(mgrForm); // clientIds is already an array of id strings
+      setMgrForm({ email: "", password: "", name: "", clientIds: [] });
       setNotice("RIV Manager login created.");
       load();
     } catch (e) { setError(e.message || "Couldn't create that login."); }
+  }
+  function toggleMgrClient(id) {
+    setMgrForm((f) => ({
+      ...f,
+      clientIds: f.clientIds.includes(id) ? f.clientIds.filter((x) => x !== id) : [...f.clientIds, id],
+    }));
   }
 
   return (
@@ -1172,7 +1212,7 @@ function PeoplePanel() {
           <Field label="Name" required><input style={inputStyle} value={pocForm.name} onChange={(e) => setPocForm((f) => ({ ...f, name: e.target.value }))} /></Field>
           <Field label="Email" required><input type="email" style={inputStyle} value={pocForm.email} onChange={(e) => setPocForm((f) => ({ ...f, email: e.target.value }))} /></Field>
           <Field label="Temporary password" required><input style={inputStyle} value={pocForm.password} onChange={(e) => setPocForm((f) => ({ ...f, password: e.target.value }))} /></Field>
-          <Field label="Client ID" required><input style={inputStyle} value={pocForm.clientId} onChange={(e) => setPocForm((f) => ({ ...f, clientId: e.target.value }))} /></Field>
+          <ClientPicker label="Client" required value={pocForm.clientId} onChange={(v) => setPocForm((f) => ({ ...f, clientId: v }))} />
           <PrimaryButton type="submit" icon={Plus}>Create login</PrimaryButton>
         </form>
         <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 6 }}>
@@ -1190,7 +1230,22 @@ function PeoplePanel() {
           <Field label="Name" required><input style={inputStyle} value={mgrForm.name} onChange={(e) => setMgrForm((f) => ({ ...f, name: e.target.value }))} /></Field>
           <Field label="Email" required><input type="email" style={inputStyle} value={mgrForm.email} onChange={(e) => setMgrForm((f) => ({ ...f, email: e.target.value }))} /></Field>
           <Field label="Temporary password" required><input style={inputStyle} value={mgrForm.password} onChange={(e) => setMgrForm((f) => ({ ...f, password: e.target.value }))} /></Field>
-          <Field label="Assigned client IDs" hint="Comma-separated"><input style={inputStyle} value={mgrForm.clientIds} onChange={(e) => setMgrForm((f) => ({ ...f, clientIds: e.target.value }))} /></Field>
+          {mgrClients && mgrClients.length ? (
+            <Field label="Assigned clients" hint="Which clients this RIV Manager can see Build projects for.">
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 140, overflowY: "auto", border: `1px solid ${BRAND.line}`, borderRadius: 9, padding: "8px 10px" }}>
+                {mgrClients.map((c) => (
+                  <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontSize: 12.5, color: BRAND.ink }}>
+                    <input type="checkbox" checked={mgrForm.clientIds.includes(String(c.id))} onChange={() => toggleMgrClient(String(c.id))} />
+                    {c.company || c.name} (ID {c.id})
+                  </label>
+                ))}
+              </div>
+            </Field>
+          ) : (
+            <Field label="Assigned client IDs" hint="Comma-separated numeric IDs -- find them on each client's card under Manage Clients.">
+              <input style={inputStyle} value={mgrForm.clientIds.join(",")} onChange={(e) => setMgrForm((f) => ({ ...f, clientIds: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) }))} />
+            </Field>
+          )}
           <PrimaryButton type="submit" icon={Plus}>Create login</PrimaryButton>
         </form>
         <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 6 }}>

@@ -587,7 +587,9 @@ function AdminView({ setView, setSelectedClient }) {
                 <div key={c.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 16, background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                   <div>
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14.5, color: BRAND.ink }}>{c.company || c.name}</div>
-                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#9B958F", marginTop: 2 }}>{c.name} · {c.email}</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#9B958F", marginTop: 2 }}>
+                      {c.name} · {c.email} · <span title="This client's numeric ID -- needed for Build's admin console fields" style={{ color: "#B7B2AE" }}>ID {c.id}</span>
+                    </div>
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: BRAND.coralDark, marginTop: 4, fontWeight: 600 }}>{c.answered} / 165 scored{c.audit_submitted_at ? <span style={{ marginLeft: 8, color: "#2E9E6B" }}>· Submitted {fmtDateTime(c.audit_submitted_at)}</span> : <span style={{ marginLeft: 8, color: "#9B958F", fontWeight: 500 }}>· In progress</span>}</div>
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
