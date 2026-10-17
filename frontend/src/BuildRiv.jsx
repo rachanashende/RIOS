@@ -532,19 +532,19 @@ function StageDetailsForm({ project, onSaved }) {
       </div>
       <form onSubmit={submit}>
         <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Requirements</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 0 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0 20px" }}>
           <Field label="Target end date"><input type="date" style={inputStyle} value={form.targetEnd} onChange={set("targetEnd")} /></Field>
         </div>
 
         <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Agreement</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 0 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0 20px" }}>
           <Field label="Agreement type"><input style={inputStyle} placeholder="e.g. MSA, Pilot agreement" value={form.agreementType} onChange={set("agreementType")} /></Field>
           <Field label="Signed date"><input type="date" style={inputStyle} value={form.agreementSignedAt} onChange={set("agreementSignedAt")} /></Field>
           <Field label="Pilot fee (USD)"><input type="number" style={inputStyle} value={form.pilotFee} onChange={set("pilotFee")} /></Field>
         </div>
 
         <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Design</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 0 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0 20px" }}>
           <Field label="Systems touched"><input style={inputStyle} value={form.systemsTouched} onChange={set("systemsTouched")} /></Field>
           <Field label="Data shared"><input style={inputStyle} value={form.dataShared} onChange={set("dataShared")} /></Field>
           <Field label="Risks"><input style={inputStyle} value={form.risks} onChange={set("risks")} /></Field>
@@ -560,12 +560,12 @@ function StageDetailsForm({ project, onSaved }) {
         </div>
 
         <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Build</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 0 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0 20px" }}>
           <Field label="Demo link or evidence"><input style={inputStyle} value={form.demoLink} onChange={set("demoLink")} /></Field>
         </div>
 
         <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Test</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 0 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0 20px" }}>
           <Field label="Test result">
             <select style={selectStyle} value={form.testResult} onChange={set("testResult")}>
               <option value="">—</option>
@@ -576,14 +576,14 @@ function StageDetailsForm({ project, onSaved }) {
         </div>
 
         <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Pilot</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 0 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0 20px" }}>
           <Field label="Pilot scope"><input style={inputStyle} value={form.pilotScope} onChange={set("pilotScope")} /></Field>
           <Field label="Pilot start date"><input type="date" style={inputStyle} value={form.pilotStart} onChange={set("pilotStart")} /></Field>
           <Field label="Pilot end date"><input type="date" style={inputStyle} value={form.pilotEnd} onChange={set("pilotEnd")} /></Field>
         </div>
 
         <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Scale</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 0 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0 20px" }}>
           <Field label="Rollout scope"><input style={inputStyle} value={form.rolloutScope} onChange={set("rolloutScope")} /></Field>
           {isStartup && (
             <Field label="Contract value (USD)"><input type="number" style={inputStyle} value={form.contractValue} onChange={set("contractValue")} /></Field>
