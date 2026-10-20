@@ -1345,9 +1345,9 @@ function ProjectDetailView({ projectId, session, onBack }) {
 
   const tabs = [
     { id: "overview", label: "Overview" },
-    { id: "updates", label: "Status updates" },
-    { id: "roi", label: "ROI" },
-    { id: "lessons", label: "Lessons learned" },
+    { id: "updates", label: "Updates" },
+    { id: "roi", label: "KPI & ROI" },
+    { id: "lessons", label: "Lessons" },
     { id: "files", label: "Files" },
     { id: "history", label: "History" },
   ];
