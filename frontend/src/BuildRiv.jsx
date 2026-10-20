@@ -124,6 +124,11 @@ const HEALTH_COLORS = {
   on_track: { bg: "#E7F5EF", fg: "#1B7A5A", label: "On track" },
   at_risk: { bg: "#FCEEE1", fg: BRAND.coralDark, label: "At risk" },
   off_track: { bg: "#FBEAEA", fg: "#C13B3B", label: "Off track" },
+  // Not a real value of build_projects.health (which defaults to on_track
+  // before anyone has posted a status update) -- the project list computes
+  // this client-side from hasUpdate so a never-touched project doesn't
+  // misleadingly show green.
+  no_update: { bg: "#EFEBE7", fg: "#9B958F", label: "No update yet" },
 };
 function HealthBadge({ health, size }) {
   const c = HEALTH_COLORS[health] || { bg: "#EFEBE7", fg: "#7A746F", label: health || "—" };
@@ -255,129 +260,270 @@ function LoginView({ onAuthed }) {
 }
 
 /* =========================================================================
-   PROJECT LIST (PRD 8.1)
+   PROJECT LIST -- Screen 1 of the Oct 2026 "Proposed Screens" redesign
+   (first of the five screens being rebuilt, per the user's own phasing
+   choice: one screen at a time, starting here since it's smallest).
+   Internal ideas / Startup pilots tabs (type='internal'/'startup', same
+   two values as before -- this just gives them the names + subtitles the
+   mockup uses), a Table/Board toggle, a filter bar (search, client, stage,
+   Product Owner), and a row of quick-filter pills that replace the old
+   plain Health/Status selects with the named buckets the mockup shows.
    ========================================================================= */
-// Projects splits into two sub-tabs, one per existing build_projects.type
-// value -- "Enterprise Innovation Management" (type='internal', RIV's own
-// Ideathon-sourced work) and "Open Innovation Management" (type='startup',
-// sourced from outside via Rise.RIV). No schema change: this just gives
-// the existing type field two names people recognize. The actual
-// "innovation management" calculation/metric for each tab is a
-// placeholder for now -- exact spec to follow.
+// Mirrors backend/lib/buildWorkflow.js's STAGES/STAGE_LABELS. Duplicated
+// here rather than imported -- frontend and backend are separate bundles --
+// so keep these two in sync by hand if the stage model changes again.
+const BUILD_STAGES = {
+  internal: ["requirements", "design", "build", "test", "pilot", "production", "closed"],
+  startup: ["requirements", "nda", "proposal", "purchase_order", "agreement", "design", "build", "test", "pilot", "production", "closed"],
+};
+const BUILD_STAGE_LABELS = {
+  requirements: "Requirements", nda: "NDA", proposal: "Proposal", purchase_order: "Purchase Order",
+  agreement: "Agreement", design: "Design", build: "Build", test: "Test", pilot: "Pilot",
+  production: "Production", closed: "Closed",
+};
+
 const INNOV_TABS = [
-  { id: "enterprise", label: "Enterprise Innovation Management", type: "internal" },
-  { id: "open", label: "Open Innovation Management", type: "startup" },
+  { id: "enterprise", label: "Internal ideas", subtitle: "Enterprise Innovation Management", type: "internal" },
+  { id: "open", label: "Startup pilots", subtitle: "Open Innovation Management", type: "startup" },
 ];
 
-function ProjectListView({ session, onOpen }) {
+// "Waiting on me" quick filter: a project assigned to the viewer (whichever
+// relationship their role carries) that isn't quietly on-track. Admin has
+// no personal assignment to check, so for admin this is just "anything
+// that needs a look" -- same red/amber/overdue test, without the
+// assigned-to-me narrowing the other roles get.
+function isWaitingOnMe(p, session) {
+  const needsAttention = p.health !== "on_track" || p.updateOverdue;
+  if (!needsAttention) return false;
+  if (session.role === "admin") return true;
+  if (session.role === "riv_manager") return Number(p.riv_manager_id) === Number(session.id);
+  if (session.role === "product_owner") return Number(p.product_owner_user_id) === Number(session.id);
+  if (session.role === "startup_poc") return Number(p.startup_poc_user_id) === Number(session.id);
+  return false;
+}
+
+function kpiCell(p) {
+  if (!p.kpi_name) return "Not set yet";
+  const fmt = (v) => (v == null ? "—" : Number(v).toLocaleString());
+  return `${p.kpi_name}: ${fmt(p.baseline)} → ${fmt(p.kpi_now)} → ${fmt(p.target)}`;
+}
+
+// The health badge shown is "No update yet" (not whatever build_projects.
+// health defaults to) until the project's first status update -- a brand
+// new project otherwise shows a misleadingly green "On track".
+function displayHealth(p) { return p.hasUpdate ? p.health : "no_update"; }
+
+function healthSubtext(p) {
+  if (!p.hasUpdate) return p.created_at ? `Created ${Math.max(0, Math.round((Date.now() - new Date(p.created_at)) / 86400000))} days ago` : null;
+  if (p.updateOverdue) return `Update ${p.days_since_update} days overdue`;
+  if (p.baseline != null && p.target != null && p.kpi_now != null && p.target !== p.baseline) {
+    const pct = Math.max(0, Math.min(100, Math.round(((p.kpi_now - p.baseline) / (p.target - p.baseline)) * 100)));
+    return `KPI ${pct}% of the way`;
+  }
+  return null;
+}
+
+const QUICK_FILTERS = [
+  ["all", "All"], ["waiting", "Waiting on me"], ["red_amber", "Red or amber"],
+  ["overdue", "Update overdue"], ["on_hold", "On hold"], ["closed", "Closed"],
+];
+
+function ProjectListView({ session, onOpen, onNewProject }) {
   const [innovTab, setInnovTab] = useState("enterprise");
+  const [mode, setMode] = useState("table"); // 'table' | 'board'
   const [projects, setProjects] = useState([]);
+  const [tabCounts, setTabCounts] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filters, setFilters] = useState({ stage: "", health: "", status: "", q: "", clientId: "" });
+  const [filters, setFilters] = useState({ stage: "", q: "", clientId: "", productOwnerId: "" });
+  const [quickFilter, setQuickFilter] = useState("all");
   // Backend only honours ?clientId= for admin and riv_manager (everyone else
   // is already scoped to one client, so a filter would be a no-op) -- only
   // show the picker where it actually does something.
   const showClientFilter = session.role === "admin" || session.role === "riv_manager";
   const clients = useClientOptions();
   const activeType = INNOV_TABS.find((t) => t.id === innovTab).type;
+  const stageOptions = BUILD_STAGES[activeType];
 
   useEffect(() => {
     setLoading(true);
-    api.listBuildProjects({ ...filters, type: activeType })
+    api.listBuildProjects({ q: filters.q, clientId: filters.clientId, stage: filters.stage, type: activeType })
       .then((d) => setProjects(d.projects || []))
       .catch((e) => setError(e.message || "Couldn't load projects."))
       .finally(() => setLoading(false));
-  }, [activeType, filters.stage, filters.health, filters.status, filters.q, filters.clientId]);
+  }, [activeType, filters.stage, filters.q, filters.clientId]);
 
-  const STAGE_OPTIONS = ["requirements", "agreement", "design", "build", "test", "pilot", "scale", "closed"];
+  // Tab badge counts (the mockup's "Internal ideas · 4" / "Startup pilots ·
+  // 2") -- independent of the Stage/Product-Owner filters and quick-filter
+  // pills, but scoped by whatever client filter and search are active so
+  // the count a tab shows matches what's there once it's opened.
+  useEffect(() => {
+    Promise.all(
+      INNOV_TABS.map((t) => api.listBuildProjects({ q: filters.q, clientId: filters.clientId, type: t.type }).then((d) => [t.id, (d.projects || []).length]))
+    ).then((pairs) => setTabCounts(Object.fromEntries(pairs))).catch(() => {});
+  }, [filters.q, filters.clientId]);
+
+  // Stage and Product Owner are per-tab (the Stage filter only offers the
+  // stages of the open tab, per the mockup's footnote) -- reset both, and
+  // the quick filter, on tab switch so they don't silently carry over.
+  useEffect(() => { setFilters((f) => ({ ...f, stage: "", productOwnerId: "" })); setQuickFilter("all"); }, [innovTab]);
+
+  const productOwners = useMemo(() => {
+    const seen = new Map();
+    for (const p of projects) if (p.product_owner_user_id && !seen.has(p.product_owner_user_id)) seen.set(p.product_owner_user_id, p.product_owner_name);
+    return [...seen.entries()].map(([id, name]) => ({ id, name }));
+  }, [projects]);
+
+  // Product Owner and the quick-filter pills are computed client-side over
+  // the already-fetched (type/stage/client/search-filtered) project list,
+  // rather than new backend query params -- there's no large-N concern here
+  // (a client's Build portfolio is small), and it keeps the pill counts and
+  // the visible rows trivially in sync with each other.
+  const withProductOwner = filters.productOwnerId
+    ? projects.filter((p) => String(p.product_owner_user_id) === String(filters.productOwnerId))
+    : projects;
+  const quickCounts = {
+    all: withProductOwner.length,
+    waiting: withProductOwner.filter((p) => isWaitingOnMe(p, session)).length,
+    red_amber: withProductOwner.filter((p) => p.health === "off_track" || p.health === "at_risk").length,
+    overdue: withProductOwner.filter((p) => p.updateOverdue).length,
+    on_hold: withProductOwner.filter((p) => p.status === "on_hold").length,
+    closed: withProductOwner.filter((p) => p.status === "closed").length,
+  };
+  const visible = withProductOwner.filter((p) => {
+    if (quickFilter === "waiting") return isWaitingOnMe(p, session);
+    if (quickFilter === "red_amber") return p.health === "off_track" || p.health === "at_risk";
+    if (quickFilter === "overdue") return p.updateOverdue;
+    if (quickFilter === "on_hold") return p.status === "on_hold";
+    if (quickFilter === "closed") return p.status === "closed";
+    return true;
+  });
+
+  const byStage = useMemo(() => {
+    const map = Object.fromEntries(stageOptions.map((s) => [s, []]));
+    for (const p of visible) if (map[p.stage]) map[p.stage].push(p);
+    return map;
+  }, [visible, stageOptions]);
 
   return (
-    <div style={{ maxWidth: 1180, margin: "0 auto", padding: "36px 24px 100px" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
+    <div style={{ maxWidth: 1240, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
         <div>
           <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink }}>Build projects</div>
-          <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginTop: 4 }}>Ideathon winners and startup pilots tracked from Requirements through to Closed.</div>
+          <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginTop: 4 }}>Every selected idea and startup, tracked from Requirements to Closed.</div>
+        </div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: `1px solid ${BRAND.ink}` }}>
+            {["table", "board"].map((m) => (
+              <button key={m} onClick={() => setMode(m)} style={{
+                fontFamily: FONT, fontSize: 12.5, fontWeight: 700, padding: "8px 16px", border: "none", cursor: "pointer",
+                background: mode === m ? BRAND.ink : "#fff", color: mode === m ? "#fff" : BRAND.ink,
+              }}>{m === "table" ? "Table" : "Board"}</button>
+            ))}
+          </div>
+          {onNewProject && <PrimaryButton icon={Plus} onClick={onNewProject}>New project</PrimaryButton>}
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, borderBottom: `1px solid ${BRAND.line}` }}>
+      <div style={{ display: "flex", gap: 28, marginBottom: 16, borderBottom: `1px solid ${BRAND.line}` }}>
         {INNOV_TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setInnovTab(t.id)}
-            style={{
-              fontFamily: FONT, fontWeight: 600, fontSize: 13, padding: "10px 4px", background: "none", border: "none",
-              borderBottom: innovTab === t.id ? `2px solid ${BRAND.coral}` : "2px solid transparent",
-              color: innovTab === t.id ? BRAND.ink : "#9B958F", cursor: "pointer", whiteSpace: "nowrap",
-            }}
-          >{t.label}</button>
+            style={{ fontFamily: FONT, padding: "8px 2px 10px", background: "none", border: "none", textAlign: "left", borderBottom: innovTab === t.id ? `2px solid ${BRAND.coral}` : "2px solid transparent", cursor: "pointer" }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 14.5, color: innovTab === t.id ? BRAND.ink : "#9B958F" }}>
+              {t.label} <span style={{ color: "#9B958F" }}>{tabCounts[t.id] ?? ""}</span>
+            </div>
+            <div style={{ fontSize: 11.5, color: "#9B958F", marginTop: 2 }}>{t.subtitle}</div>
+          </button>
         ))}
       </div>
 
-      <Card style={{ padding: 16, marginBottom: 20 }}>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <div style={{ position: "relative", flex: "1 1 220px", minWidth: 180 }}>
-            <Search size={14} color="#9B958F" style={{ position: "absolute", left: 11, top: 11 }} />
-            <input
-              placeholder="Search by code or title…" value={filters.q}
-              onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
-              style={{ ...inputStyle, paddingLeft: 32 }}
-            />
-          </div>
+      <Card style={{ padding: 16, marginBottom: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: showClientFilter ? "2fr 1fr 1fr 1fr" : "2fr 1fr 1fr", gap: 10 }}>
+          <Field label="Search">
+            <div style={{ position: "relative" }}>
+              <Search size={14} color="#9B958F" style={{ position: "absolute", left: 11, top: 11 }} />
+              <input
+                placeholder="Code, project or owner" value={filters.q}
+                onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
+                style={{ ...inputStyle, paddingLeft: 32 }}
+              />
+            </div>
+          </Field>
           {showClientFilter && (
-            <select style={{ ...selectStyle, flex: "0 1 170px" }} value={filters.clientId} onChange={(e) => setFilters((f) => ({ ...f, clientId: e.target.value }))}>
-              <option value="">All clients</option>
-              {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.company || c.name}</option>)}
-            </select>
+            <Field label="Client (RIV only)">
+              <select style={selectStyle} value={filters.clientId} onChange={(e) => setFilters((f) => ({ ...f, clientId: e.target.value }))}>
+                <option value="">All clients</option>
+                {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.company || c.name}</option>)}
+              </select>
+            </Field>
           )}
-          <select style={{ ...selectStyle, flex: "0 1 160px" }} value={filters.stage} onChange={(e) => setFilters((f) => ({ ...f, stage: e.target.value }))}>
-            <option value="">All stages</option>
-            {STAGE_OPTIONS.map((s) => <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>)}
-          </select>
-          <select style={{ ...selectStyle, flex: "0 1 140px" }} value={filters.health} onChange={(e) => setFilters((f) => ({ ...f, health: e.target.value }))}>
-            <option value="">All health</option>
-            <option value="on_track">On track</option>
-            <option value="at_risk">At risk</option>
-            <option value="off_track">Off track</option>
-          </select>
-          <select style={{ ...selectStyle, flex: "0 1 140px" }} value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}>
-            <option value="">All status</option>
-            <option value="active">Active</option>
-            <option value="on_hold">On hold</option>
-            <option value="stopped">Stopped</option>
-            <option value="closed">Closed</option>
-          </select>
+          <Field label="Stage">
+            <select style={selectStyle} value={filters.stage} onChange={(e) => setFilters((f) => ({ ...f, stage: e.target.value }))}>
+              <option value="">{`All ${activeType} stages`}</option>
+              {stageOptions.map((s) => <option key={s} value={s}>{BUILD_STAGE_LABELS[s]}</option>)}
+            </select>
+          </Field>
+          <Field label="Product Owner">
+            <select style={selectStyle} value={filters.productOwnerId} onChange={(e) => setFilters((f) => ({ ...f, productOwnerId: e.target.value }))}>
+              <option value="">Anyone</option>
+              {productOwners.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+          </Field>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 14 }}>
+          <span style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginRight: 2 }}>Quick filters</span>
+          {QUICK_FILTERS.map(([id, label]) => (
+            <button key={id} onClick={() => setQuickFilter(id)} style={{
+              fontFamily: FONT, fontSize: 12, fontWeight: 600, padding: "6px 12px", borderRadius: 999,
+              border: `1px solid ${BRAND.line}`, cursor: "pointer",
+              background: quickFilter === id ? BRAND.ink : "#fff", color: quickFilter === id ? "#fff" : BRAND.ink,
+            }}>{label} · {quickCounts[id] ?? 0}</button>
+          ))}
         </div>
       </Card>
 
       <ErrorBanner text={error} />
-      {loading ? <Spinner label="Loading projects…" /> : projects.length === 0 ? (
-        <EmptyState icon={Briefcase} title="No projects yet" text="Projects created from Ideathon winners, Startup pilots, or added manually by a RIV admin will show up here." />
-      ) : (
+      {loading ? <Spinner label="Loading projects…" /> : visible.length === 0 ? (
+        <EmptyState icon={Briefcase} title="No projects match" text="Try All in quick filters, or clear the search / stage / Product Owner filters above." />
+      ) : mode === "table" ? (
         <Card style={{ overflow: "hidden" }}>
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 880 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
               <thead>
                 <tr style={{ textAlign: "left", background: BRAND.cream }}>
-                  {["Code", "Title", "Type", "Client", "Stage", "Days in stage", "Health", "Status", "Product Owner", "Last update"].map((h) => (
-                    <th key={h} style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 700, color: "#7A746F", textTransform: "uppercase", letterSpacing: "0.03em", padding: "10px 14px", borderBottom: `1px solid ${BRAND.line}` }}>{h}</th>
+                  {["Code", "Project", "Stage", "Next step", "Health", "KPI (base → now → target)", "Product Owner", "Last update"].map((h) => (
+                    <th key={h} style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#7A746F", textTransform: "uppercase", letterSpacing: "0.03em", padding: "10px 14px", borderBottom: `1px solid ${BRAND.line}` }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {projects.map((p) => (
+                {visible.map((p) => (
                   <tr key={p.id} onClick={() => onOpen(p.id)} style={{ cursor: "pointer" }} className="build-row">
-                    <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, fontWeight: 700, color: BRAND.coralDark, borderBottom: `1px solid ${BRAND.line}` }}>{p.code}</td>
-                    <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 13, color: BRAND.ink, borderBottom: `1px solid ${BRAND.line}`, maxWidth: 260 }}>{p.title}</td>
-                    <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}`, textTransform: "capitalize" }}>{p.type}</td>
-                    <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{p.client_company || p.client_name || "—"}</td>
-                    <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, color: BRAND.ink, borderBottom: `1px solid ${BRAND.line}`, textTransform: "capitalize" }}>{p.stageLabel || p.stage}</td>
-                    <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, color: Number(p.days_in_stage) > 14 ? "#C13B3B" : "#7A746F", fontWeight: Number(p.days_in_stage) > 14 ? 700 : 400, borderBottom: `1px solid ${BRAND.line}` }}>{p.days_in_stage != null ? `${p.days_in_stage}d` : "—"}</td>
-                    <td style={{ padding: "12px 14px", borderBottom: `1px solid ${BRAND.line}` }}><HealthBadge health={p.health} size="sm" /></td>
-                    <td style={{ padding: "12px 14px", borderBottom: `1px solid ${BRAND.line}` }}><StatusBadge status={p.status} /></td>
+                    <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, fontWeight: 700, color: BRAND.coralDark, borderBottom: `1px solid ${BRAND.line}`, whiteSpace: "nowrap" }}>{p.code}</td>
+                    <td style={{ padding: "12px 14px", fontFamily: FONT, borderBottom: `1px solid ${BRAND.line}`, maxWidth: 220 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: BRAND.ink }}>{p.title}</div>
+                      <div style={{ fontSize: 11.5, color: "#9B958F", marginTop: 2 }}>{p.client_company || p.client_name || "—"}</div>
+                    </td>
+                    <td style={{ padding: "12px 14px", fontFamily: FONT, borderBottom: `1px solid ${BRAND.line}`, minWidth: 130 }}>
+                      <div style={{ fontSize: 12.5, color: BRAND.ink, fontWeight: 600 }}>{(p.stageLabel || p.stage)}{p.stagePosition ? ` · ${p.stagePosition} of ${p.stageCount}` : ""}</div>
+                      {p.stagePosition && p.stageCount && (
+                        <div style={{ height: 4, borderRadius: 2, background: BRAND.line, marginTop: 5, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${(p.stagePosition / p.stageCount) * 100}%`, background: p.health === "off_track" ? "#C13B3B" : BRAND.coral }} />
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}`, maxWidth: 220 }}>{p.nextStep || "—"}</td>
+                    <td style={{ padding: "12px 14px", borderBottom: `1px solid ${BRAND.line}` }}>
+                      <HealthBadge health={displayHealth(p)} size="sm" />
+                      {healthSubtext(p) && <div style={{ fontSize: 11, color: "#9B958F", marginTop: 4 }}>{healthSubtext(p)}</div>}
+                    </td>
+                    <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}`, maxWidth: 200 }}>{kpiCell(p)}</td>
                     <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{p.product_owner_name || "—"}</td>
-                    <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}`, color: p.updateOverdue ? "#C13B3B" : "#7A746F", fontWeight: p.updateOverdue ? 700 : 400 }}>
+                    <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}`, color: p.updateOverdue ? "#C13B3B" : "#7A746F", fontWeight: p.updateOverdue ? 700 : 400, whiteSpace: "nowrap" }}>
                       {p.updateOverdue ? "Overdue" : fmtDate(p.last_update_date)}
                     </td>
                   </tr>
@@ -386,6 +532,30 @@ function ProjectListView({ session, onOpen }) {
             </table>
           </div>
         </Card>
+      ) : (
+        <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 8 }}>
+          {stageOptions.map((s) => (
+            <div key={s} style={{ flex: "0 0 220px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: FONT, fontWeight: 700, fontSize: 12.5, color: BRAND.ink, padding: "0 4px 8px" }}>
+                <span>{BUILD_STAGE_LABELS[s]}</span><span style={{ color: "#9B958F" }}>{byStage[s].length}</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, minHeight: 60 }}>
+                {byStage[s].map((p) => (
+                  <div key={p.id} onClick={() => onOpen(p.id)} style={{ cursor: "pointer" }}>
+                    <Card style={{ padding: 12 }}>
+                      <div style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 700, color: BRAND.coralDark }}>{p.code}</div>
+                      <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: BRAND.ink, marginTop: 2 }}>{p.title}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: HEALTH_COLORS[displayHealth(p)]?.fg || "#9B958F", flexShrink: 0 }} />
+                        <span style={{ fontFamily: FONT, fontSize: 11.5, color: "#7A746F" }}>{p.product_owner_name || "Unassigned"} · {p.days_in_stage != null ? `${p.days_in_stage}d` : "new"}</span>
+                      </div>
+                    </Card>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -2043,7 +2213,7 @@ export default function BuildRivApp() {
       <BuildNavBar view={view} setView={goToView} session={session} onLogout={handleLogout} canSeeDashboard={canSeeDashboard} canSeeAdmin={canSeeAdmin} />
 
       {view === "projects" && !activeProjectId && (
-        <ProjectListView key={listKey} session={session} onOpen={(id) => setActiveProjectId(id)} />
+        <ProjectListView key={listKey} session={session} onOpen={(id) => setActiveProjectId(id)} onNewProject={canSeeAdmin ? () => goToView("admin") : null} />
       )}
       {view === "projects" && activeProjectId && (
         <ProjectDetailView projectId={activeProjectId} session={session} onBack={() => { setActiveProjectId(null); setListKey((k) => k + 1); }} />

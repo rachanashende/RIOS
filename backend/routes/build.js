@@ -208,6 +208,9 @@ router.get("/projects", async (req, res, next) => {
 
     const { rows } = await pool.query(
       `SELECT p.*, m.actual_cost, m.est_cost, m.realised_benefit, m.est_benefit, m.currency,
+              m.kpi_name, m.kpi_unit, m.baseline, m.target,
+              (SELECT k.value FROM build_kpi_readings k WHERE k.project_id = p.id ORDER BY k.reading_date DESC, k.id DESC LIMIT 1) AS kpi_now,
+              EXISTS(SELECT 1 FROM build_updates u2 WHERE u2.project_id = p.id) AS has_update,
               c.name AS client_name, c.company AS client_company,
               po.name AS product_owner_name,
               GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date) AS last_update_date,
@@ -223,16 +226,40 @@ router.get("/projects", async (req, res, next) => {
     );
 
     res.json({
-      projects: rows.map((r) => ({
-        ...r,
-        actual_cost: r.actual_cost != null ? Number(r.actual_cost) : null,
-        est_cost: r.est_cost != null ? Number(r.est_cost) : null,
-        realised_benefit: r.realised_benefit != null ? Number(r.realised_benefit) : null,
-        est_benefit: r.est_benefit != null ? Number(r.est_benefit) : null,
-        roi: computeRoi({ actual_cost: r.actual_cost, est_cost: r.est_cost, realised_benefit: r.realised_benefit, est_benefit: r.est_benefit }),
-        stageLabel: STAGE_LABELS[r.stage] || r.stage,
-        updateOverdue: Number(r.days_since_update) > 14 && r.status === "active",
-      })),
+      projects: rows.map((r) => {
+        const updateOverdue = Number(r.days_since_update) > 14 && r.status === "active";
+        const stageList = STAGES[r.type] || [];
+        const stageIndex = stageList.indexOf(r.stage);
+        const missing = r.stage !== "closed" ? missingFieldsForStage(r.type, r.stage, r, r) : [];
+        // A compact "what to do next" hint for the list row -- the full
+        // per-stage form lives on the project detail page; this is just
+        // enough to tell someone at a glance what's blocking the gate.
+        let nextStep;
+        if (r.status === "on_hold") nextStep = r.hold_reason ? `On hold: ${r.hold_reason}` : "On hold";
+        else if (r.status === "stopped") nextStep = "Stopped";
+        else if (r.stage === "closed") nextStep = null;
+        else if (!r.has_update) nextStep = "Post the first status update";
+        else if (r.stage === "pilot" && r.pilot_end) nextStep = `Pilot ends ${new Date(r.pilot_end).toLocaleDateString("en-US", { day: "numeric", month: "short" })}: record result and decision`;
+        else if (missing.length) nextStep = `Add ${missing[0]} · Product Owner`;
+        else nextStep = `Advance to ${STAGE_LABELS[nextStage(r.type, r.stage)] || "next stage"}`;
+        return {
+          ...r,
+          actual_cost: r.actual_cost != null ? Number(r.actual_cost) : null,
+          est_cost: r.est_cost != null ? Number(r.est_cost) : null,
+          realised_benefit: r.realised_benefit != null ? Number(r.realised_benefit) : null,
+          est_benefit: r.est_benefit != null ? Number(r.est_benefit) : null,
+          baseline: r.baseline != null ? Number(r.baseline) : null,
+          target: r.target != null ? Number(r.target) : null,
+          kpi_now: r.kpi_now != null ? Number(r.kpi_now) : null,
+          hasUpdate: !!r.has_update,
+          roi: computeRoi({ actual_cost: r.actual_cost, est_cost: r.est_cost, realised_benefit: r.realised_benefit, est_benefit: r.est_benefit }),
+          stageLabel: STAGE_LABELS[r.stage] || r.stage,
+          stagePosition: stageIndex >= 0 ? stageIndex + 1 : null,
+          stageCount: stageList.length || null,
+          updateOverdue,
+          nextStep,
+        };
+      }),
     });
   } catch (err) {
     next(err);
