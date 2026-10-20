@@ -18,11 +18,11 @@ import { BRAND } from "./brand.js";
 // BuildRivApp owns all routing beneath "/build" once mounted; the outer
 // App.jsx only knows every one of these maps to its single "build-riv"
 // container view (see OUTER_PATH_TO_VIEW in App.jsx).
-const BUILD_PATH_TO_VIEW = { "/build": "projects", "/build/projects": "projects", "/build/dashboard": "dashboard", "/build/admin": "admin" };
-const BUILD_VIEW_TO_PATH = { projects: "/build/projects", dashboard: "/build/dashboard", admin: "/build/admin" };
+const BUILD_PATH_TO_VIEW = { "/build": "my-work", "/build/my-work": "my-work", "/build/projects": "projects", "/build/dashboard": "dashboard", "/build/admin": "admin" };
+const BUILD_VIEW_TO_PATH = { "my-work": "/build/my-work", projects: "/build/projects", dashboard: "/build/dashboard", admin: "/build/admin" };
 function pathToBuildView(pathname) {
   const path = pathname.replace(/\/+$/, "") || "/build";
-  return BUILD_PATH_TO_VIEW[path] || "projects";
+  return BUILD_PATH_TO_VIEW[path] || "my-work";
 }
 
 const FONT = "'Poppins',sans-serif";
@@ -171,7 +171,9 @@ function fmtUSD(n) {
    NAV
    ========================================================================= */
 function BuildNavBar({ view, setView, session, onLogout, canSeeDashboard, canSeeAdmin }) {
-  const items = [{ id: "projects", label: "Projects" }];
+  const items = [];
+  if (session) items.push({ id: "my-work", label: "My work" });
+  items.push({ id: "projects", label: "Projects" });
   if (canSeeDashboard) items.push({ id: "dashboard", label: "Dashboard" });
   if (canSeeAdmin) items.push({ id: "admin", label: "Admin" });
 
@@ -2155,6 +2157,140 @@ function AdminConsoleView({ reload }) {
   );
 }
 
+/* =========================================================================
+   MY WORK -- Screen 5 of the Oct 2026 "Proposed Screens" redesign: a
+   personal homepage every logged-in Build role lands on. Backed by
+   GET /api/build/my-work, which scopes "my projects" narrower than the
+   Projects list does (personally assigned, not "my whole client's
+   portfolio") and derives next actions honestly from existing data --
+   see the route's own comments for what the mockup asked for that this
+   deliberately does NOT fabricate (no discrete "pending upload" events
+   exist in the schema, so there's no "review the uploaded NDA" action
+   type here, only "add a status update" / "complete the stage").
+   ========================================================================= */
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+}
+
+function MyWorkTile({ label, value, tone }) {
+  const fg = tone === "bad" ? "#C13B3B" : tone === "warn" ? BRAND.coralDark : BRAND.ink;
+  return (
+    <Card style={{ padding: "16px 18px", flex: 1, minWidth: 130 }}>
+      <div style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 600, color: "#9B958F", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: fg }}>{value}</div>
+    </Card>
+  );
+}
+
+function MyWorkActionRow({ a, onOpenProject }) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, padding: "14px 0", borderBottom: `1px solid ${BRAND.line}` }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 2 }}>{a.code} · {a.title}</div>
+        <div style={{ fontFamily: FONT, fontSize: 13.5, fontWeight: 700, color: BRAND.ink }}>{a.title2}</div>
+        <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A746F", marginTop: 3 }}>{a.detail}</div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+        {a.urgent && (
+          <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#C13B3B", background: "#FBEAEA", padding: "3px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>Overdue</span>
+        )}
+        <GhostButton onClick={() => onOpenProject(a.projectId)}>Review</GhostButton>
+      </div>
+    </div>
+  );
+}
+
+function MyWorkProjectCard({ p, onOpenProject }) {
+  const pct = p.stagePosition && p.stageCount ? Math.round((p.stagePosition / p.stageCount) * 100) : 0;
+  return (
+    <div onClick={() => onOpenProject(p.id)} style={{ cursor: "pointer", padding: "12px 0", borderBottom: `1px solid ${BRAND.line}` }} className="build-row">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: BRAND.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: HEALTH_COLORS[p.health]?.fg || "#9B958F", flexShrink: 0 }} />
+      </div>
+      <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 2 }}>
+        {p.code} · {p.type === "startup" ? "Startup" : "Internal"} · {p.stageLabel}{p.stagePosition ? ` · ${p.stagePosition} of ${p.stageCount}` : ""}
+      </div>
+      <div style={{ height: 5, borderRadius: 999, background: BRAND.cream, marginTop: 7, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${pct}%`, background: BRAND.coral, borderRadius: 999 }} />
+      </div>
+    </div>
+  );
+}
+
+function MyWorkView({ session, onOpenProject }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let live = true;
+    api.getMyWork().then((d) => { if (live) setData(d); }).catch((e) => { if (live) setError(e.message || "Couldn't load My work."); });
+    return () => { live = false; };
+  }, []);
+
+  if (error) {
+    return <div style={{ maxWidth: 1180, margin: "0 auto", padding: "32px 24px" }}><ErrorBanner text={error} /></div>;
+  }
+  if (!data) return <Spinner label="Loading your work…" />;
+
+  const { summary, nextActions, myProjects, recentlyChanged } = data;
+  const firstName = (session.name || "").split(" ")[0] || session.name;
+
+  return (
+    <div style={{ maxWidth: 1180, margin: "0 auto", padding: "32px 24px 100px" }}>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>{greeting()}, {firstName}</div>
+      <div style={{ fontFamily: FONT, fontSize: 13.5, color: "#9B958F", marginBottom: 22 }}>
+        {summary.toDo > 0 ? `${summary.toDo} thing${summary.toDo === 1 ? "" : "s"} need${summary.toDo === 1 ? "s" : ""} you this week.` : "Nothing urgent needs you right now."}
+      </div>
+
+      <div style={{ display: "flex", gap: 14, marginBottom: 24, flexWrap: "wrap" }}>
+        <MyWorkTile label="To do" value={summary.toDo} tone={summary.toDo > 0 ? "warn" : undefined} />
+        <MyWorkTile label="Update overdue" value={summary.updateOverdue} tone={summary.updateOverdue > 0 ? "bad" : undefined} />
+        <MyWorkTile label="Red or amber" value={summary.redAmber} tone={summary.redAmber > 0 ? "bad" : undefined} />
+        <MyWorkTile label="My projects" value={`${summary.myProjects} (${summary.internalCount} internal, ${summary.startupCount} startup)`} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, alignItems: "flex-start" }}>
+        <div>
+          <Card style={{ padding: 20, marginBottom: 20 }}>
+            <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink, marginBottom: 4 }}>Your next actions</div>
+            {nextActions.length === 0 ? (
+              <EmptyState icon={CheckCircle2} title="Nothing assigned to you yet" text="When a project needs an update from you, or has gaps in its current stage, it'll show up here." />
+            ) : (
+              <div>{nextActions.map((a, i) => <MyWorkActionRow key={i} a={a} onOpenProject={onOpenProject} />)}</div>
+            )}
+          </Card>
+
+          <Card style={{ padding: 20 }}>
+            <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink, marginBottom: 10 }}>Recently changed on your projects</div>
+            {(!recentlyChanged || recentlyChanged.length === 0) ? (
+              <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F" }}>Nothing yet.</div>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {recentlyChanged.map((f, i) => (
+                  <li key={i} style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A746F", marginBottom: 8, lineHeight: 1.5 }}>
+                    {f.text} <span style={{ color: "#B7B2AE" }}>· {fmtDate(f.at)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
+
+        <Card style={{ padding: 20 }}>
+          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink, marginBottom: 6 }}>My projects</div>
+          {myProjects.length === 0 ? (
+            <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F" }}>No projects assigned to you yet.</div>
+          ) : (
+            <div>{myProjects.map((p) => <MyWorkProjectCard key={p.id} p={p} onOpenProject={onOpenProject} />)}</div>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 /* =========================== ROOT =========================== */
 export default function BuildRivApp() {
   const [view, setView] = useState(() => pathToBuildView(window.location.pathname));
@@ -2212,6 +2348,16 @@ export default function BuildRivApp() {
       `}</style>
       <BuildNavBar view={view} setView={goToView} session={session} onLogout={handleLogout} canSeeDashboard={canSeeDashboard} canSeeAdmin={canSeeAdmin} />
 
+      {view === "my-work" && (
+        <MyWorkView
+          session={session}
+          onOpenProject={(id) => {
+            window.history.pushState(null, "", BUILD_VIEW_TO_PATH.projects);
+            setView("projects");
+            setActiveProjectId(id);
+          }}
+        />
+      )}
       {view === "projects" && !activeProjectId && (
         <ProjectListView key={listKey} session={session} onOpen={(id) => setActiveProjectId(id)} onNewProject={canSeeAdmin ? () => goToView("admin") : null} />
       )}

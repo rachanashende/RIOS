@@ -161,6 +161,168 @@ router.get("/my-reassess-links", async (req, res, next) => {
 });
 
 /* =========================================================================
+   MY WORK (Oct 2026 "Proposed Screens" -- new personal homepage, screen 5)
+   ========================================================================= */
+
+const ROLE_LABELS = {
+  admin: "RIV Admin", riv_manager: "RIV Client Partner", client: "Client Leader",
+  product_owner: "Product Owner", startup_poc: "Startup POC", junior_employee: "Employee",
+};
+
+// Narrower than GET /projects' list-scoping: "my projects" means personally
+// assigned (or, for admin/riv_manager, the clients they cover), not "every
+// project I'm allowed to view" -- a Product Owner's homepage shows their
+// own handful of projects, not their whole client's portfolio.
+async function myProjectWhere(req) {
+  const { role, id: userId } = req.user;
+  if (role === "admin") return { where: "TRUE", params: [] };
+  if (role === "riv_manager") {
+    const ids = await assignedClientIds(req.user);
+    return ids.length ? { where: "p.client_id = ANY($1::int[])", params: [ids] } : { where: "FALSE", params: [] };
+  }
+  if (role === "client") return { where: "p.client_id = $1", params: [userId] };
+  if (role === "product_owner") return { where: "p.product_owner_user_id = $1", params: [userId] };
+  if (role === "startup_poc") return { where: "p.startup_poc_user_id = $1", params: [userId] };
+  if (role === "junior_employee") {
+    const ids = await employeeProjectIds(req.user);
+    return ids.length ? { where: "p.id = ANY($1::int[])", params: [ids] } : { where: "FALSE", params: [] };
+  }
+  return { where: "FALSE", params: [] };
+}
+
+router.get("/my-work", async (req, res, next) => {
+  try {
+    const { where, params } = await myProjectWhere(req);
+    const { rows } = await pool.query(
+      `SELECT p.*, m.baseline, m.target,
+              (SELECT k.value FROM build_kpi_readings k WHERE k.project_id = p.id ORDER BY k.reading_date DESC, k.id DESC LIMIT 1) AS kpi_now,
+              EXISTS(SELECT 1 FROM build_updates u2 WHERE u2.project_id = p.id) AS has_update,
+              GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date) AS last_update_date,
+              (CURRENT_DATE - GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date)) AS days_since_update
+       FROM build_projects p
+       LEFT JOIN build_metrics m ON m.project_id = p.id
+       WHERE ${where}
+       ORDER BY p.created_at DESC`,
+      params
+    );
+
+    const projects = rows.map((r) => {
+      const updateOverdue = Number(r.days_since_update) > 14 && r.status === "active";
+      const stageList = STAGES[r.type] || [];
+      const stageIndex = stageList.indexOf(r.stage);
+      const missing = r.status === "active" && r.stage !== "closed" ? missingFieldsForStage(r.type, r.stage, r, r) : [];
+      return {
+        ...r, hasUpdate: !!r.has_update, updateOverdue, missing,
+        stageLabel: STAGE_LABELS[r.stage] || r.stage,
+        stagePosition: stageIndex >= 0 ? stageIndex + 1 : null,
+        stageCount: stageList.length || null,
+      };
+    });
+
+    const assigned = await assignedClientIds(req.user);
+    const actions = [];
+    for (const p of projects) {
+      if (p.status !== "active") continue;
+      const canAct = canAddUpdate(req.user, p, assigned, req.user.role === "junior_employee");
+      if (canAct && (p.updateOverdue || !p.hasUpdate)) {
+        actions.push({
+          projectId: p.id, code: p.code, title: p.title, kind: "update",
+          title2: "Add a status update",
+          detail: p.hasUpdate ? `Last update ${fmtActionDate(p.last_update_date)}. Over 21 days makes the project red and alerts the Client Leader.` : "No status update has been posted yet.",
+          urgent: p.updateOverdue, sortDate: p.last_update_date,
+        });
+      }
+      if (canEditDetails(req.user, p, assigned) && p.missing.length) {
+        actions.push({
+          projectId: p.id, code: p.code, title: p.title, kind: "stage",
+          title2: `Complete the ${p.stageLabel} stage`,
+          detail: `Missing: ${p.missing.join(", ")}.`,
+          urgent: false, sortDate: p.last_update_date,
+        });
+      }
+    }
+    actions.sort((a, b) => new Date(a.sortDate) - new Date(b.sortDate));
+
+    // "Recently changed" feed -- stage moves, status updates, and project
+    // creation, across "my projects", newest first. Pulls from the tables
+    // that already record each of these (no new schema), joined to users
+    // for a "Name (Role)" byline.
+    const projectIds = projects.map((p) => p.id);
+    let feed = [];
+    if (projectIds.length) {
+      const [historyRows, updateRows, createdRows] = await Promise.all([
+        pool.query(
+          `SELECT h.project_id, h.action, h.from_stage, h.to_stage, h.reason, h.at AS at, u.name AS by_name, u.role AS by_role
+           FROM build_stage_history h LEFT JOIN users u ON u.id = h.by_user_id
+           WHERE h.project_id = ANY($1::int[]) ORDER BY h.at DESC LIMIT 20`,
+          [projectIds]
+        ),
+        pool.query(
+          `SELECT up.project_id, up.health, up.created_at AS at, u.name AS by_name, u.role AS by_role
+           FROM build_updates up LEFT JOIN users u ON u.id = up.by_user_id
+           WHERE up.project_id = ANY($1::int[]) ORDER BY up.created_at DESC LIMIT 20`,
+          [projectIds]
+        ),
+        pool.query(
+          `SELECT p.id AS project_id, p.created_at AS at, u.name AS by_name, u.role AS by_role
+           FROM build_projects p LEFT JOIN users u ON u.id = p.created_by
+           WHERE p.id = ANY($1::int[])`,
+          [projectIds]
+        ),
+      ]);
+      const byId = Object.fromEntries(projects.map((p) => [p.id, p]));
+      for (const h of historyRows.rows) {
+        const code = byId[h.project_id]?.code;
+        const by = `${h.by_name || "Someone"} (${ROLE_LABELS[h.by_role] || h.by_role || "—"})`;
+        let text;
+        if (h.action === "advance") text = `${code} moved from ${STAGE_LABELS[h.from_stage] || h.from_stage} to ${STAGE_LABELS[h.to_stage] || h.to_stage}, approved by ${h.by_name || "someone"}`;
+        else if (h.action === "send_back") text = `${code} sent back to ${STAGE_LABELS[h.to_stage] || h.to_stage}${h.reason ? `: ${h.reason}` : ""}`;
+        else if (h.action === "hold") text = `${code} put on hold${h.reason ? `: ${h.reason}` : ""}`;
+        else if (h.action === "resume") text = `${code} resumed`;
+        else if (h.action === "stop") text = `${code} stopped${h.reason ? `: ${h.reason}` : ""}`;
+        else if (h.action === "close") text = `${code} closed${h.reason ? ` (${h.reason})` : ""}`;
+        else if (h.action === "iterate") text = `${code} sent back to iterate${h.reason ? `: ${h.reason}` : ""}`;
+        else text = `${code} updated`;
+        feed.push({ by, text, at: h.at });
+      }
+      for (const u of updateRows.rows) {
+        const code = byId[u.project_id]?.code;
+        const by = `${u.by_name || "Someone"} (${ROLE_LABELS[u.by_role] || u.by_role || "—"})`;
+        feed.push({ by, text: `${by.split(" (")[0]} added a status update to ${code}: ${(u.health || "").replace("_", " ")}`, at: u.at, skipByPrefix: true });
+      }
+      for (const c of createdRows.rows) {
+        const code = byId[c.project_id]?.code;
+        const by = `${c.by_name || "RIV"} (${ROLE_LABELS[c.by_role] || c.by_role || "—"})`;
+        feed.push({ by, text: `${code} created`, at: c.at, skipByPrefix: true });
+      }
+      feed = feed.filter((f) => f.at).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 10)
+        .map((f) => ({ text: f.skipByPrefix ? f.text : `${f.by} ${f.text}`, at: f.at }));
+    }
+
+    const active = projects.filter((p) => p.status === "active");
+    res.json({
+      summary: {
+        toDo: actions.length,
+        updateOverdue: active.filter((p) => p.updateOverdue).length,
+        redAmber: active.filter((p) => p.health === "off_track" || p.health === "at_risk").length,
+        myProjects: projects.length,
+        internalCount: projects.filter((p) => p.type === "internal").length,
+        startupCount: projects.filter((p) => p.type === "startup").length,
+      },
+      nextActions: actions.slice(0, 10),
+      myProjects: projects.slice(0, 8).map((p) => ({
+        id: p.id, code: p.code, title: p.title, type: p.type, stage: p.stage, stageLabel: p.stageLabel,
+        stagePosition: p.stagePosition, stageCount: p.stageCount, health: p.hasUpdate ? p.health : "no_update",
+      })),
+      recentlyChanged: feed,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+function fmtActionDate(d) { return d ? new Date(d).toLocaleDateString("en-US", { day: "numeric", month: "short" }) : "—"; }
+
+/* =========================================================================
    LIST / DETAIL
    ========================================================================= */
 

@@ -392,6 +392,7 @@ export const api = {
   getMyBuildPicksIdeas: () => ideasRequest("/build/my-picks"),
   getMyBuildPicksRise: () => riseRequest("/build/my-picks"),
   getMyReassessLinks: () => buildRequest("/build/my-reassess-links"),
+  getMyWork: () => buildRequest("/build/my-work"),
 
   // ---- Build.RIV's own isolated login (product_owner / riv_manager /
   // startup_poc), same shared /auth/login endpoint as every other module.
