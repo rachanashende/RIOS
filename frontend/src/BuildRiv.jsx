@@ -1326,14 +1326,22 @@ function ClientDashboard({ clientId }) {
     api.getBuildClientDashboard(clientId).then(setData).catch((e) => setError(e.message || "Couldn't load dashboard.")).finally(() => setLoading(false));
   }, [clientId]);
 
+  // useSortedRows itself calls hooks (useState/useMemo) -- it must run on
+  // every render of this component in the same order, so it's called here
+  // unconditionally (with a safe empty-array default before data loads)
+  // rather than after the early returns below. Calling a hook after a
+  // conditional return means the "loading" render and the "loaded" render
+  // call a different number of hooks, which is exactly React error #310
+  // ("Rendered more hooks than during the previous render").
+  const healthRank = { off_track: 0, at_risk: 1, on_track: 2 };
+  const rows = (data?.projects || []).map((p) => ({ ...p, roiPct: p.roi?.roiPct ?? null, healthRank: healthRank[p.health] ?? 3 }));
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(rows, "code");
+
   if (loading) return <Spinner label="Loading dashboard…" />;
   if (error) return <ErrorBanner text={error} />;
   if (!data) return null;
 
-  const { summary, needsAttention, projects, pipelineByStage, investmentVsBenefit, byType, recentLessons } = data;
-  const healthRank = { off_track: 0, at_risk: 1, on_track: 2 };
-  const rows = (projects || []).map((p) => ({ ...p, roiPct: p.roi?.roiPct ?? null, healthRank: healthRank[p.health] ?? 3 }));
-  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(rows, "code");
+  const { summary, needsAttention, pipelineByStage, investmentVsBenefit, byType, recentLessons } = data;
   const chartRows = (investmentVsBenefit || []).map((r) => ({ name: r.code, invested: r.actualCost || 0, benefit: r.realisedBenefit || 0 }));
 
   return (
@@ -1403,12 +1411,16 @@ function PortfolioDashboard() {
     api.getBuildPortfolioDashboard().then((d) => setClients(d.clients || [])).catch((e) => setError(e.message || "Couldn't load portfolio.")).finally(() => setLoading(false));
   }, []);
 
+  // Same reasoning as ClientDashboard above: useSortedRows must be called
+  // unconditionally, before the early returns, to avoid React error #310.
+  // clients defaults to [] via useState, so rows is always a safe array.
+  const rows = clients.map((c) => ({ ...c, displayName: c.company || c.name }));
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(rows, "displayName");
+
   if (loading) return <Spinner label="Loading portfolio…" />;
   if (error) return <ErrorBanner text={error} />;
   if (!clients.length) return <EmptyState icon={Building2} title="No clients with Build projects yet" text="Once a project exists for a client, their row will appear here." />;
 
-  const rows = clients.map((c) => ({ ...c, displayName: c.company || c.name }));
-  const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(rows, "displayName");
   const chartRows = rows.map((c) => ({ name: c.displayName, invested: c.invested || 0, benefit: c.benefit || 0 }));
 
   return (
