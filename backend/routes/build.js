@@ -160,6 +160,26 @@ router.get("/my-reassess-links", async (req, res, next) => {
   }
 });
 
+// GET /api/build/my-clients -- RIV Client Partner's own assigned-clients
+// roster (id/name/company), for the Leader dashboard's client picker. Was
+// missing entirely -- assignedClientIds() already computed this set for
+// permission checks, but nothing exposed it with names attached, so the
+// dashboard's riv_manager view showed a placeholder instead of a picker.
+router.get("/my-clients", async (req, res, next) => {
+  try {
+    if (req.user.role !== "riv_manager") return res.status(403).json({ error: "Not available for this role." });
+    const { rows } = await pool.query(
+      `SELECT c.id, c.name, c.company FROM build_manager_clients mc
+       JOIN users c ON c.id = mc.client_id
+       WHERE mc.manager_user_id = $1 ORDER BY COALESCE(c.company, c.name)`,
+      [req.user.id]
+    );
+    res.json({ clients: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /* =========================================================================
    MY WORK (Oct 2026 "Proposed Screens" -- new personal homepage, screen 5)
    ========================================================================= */

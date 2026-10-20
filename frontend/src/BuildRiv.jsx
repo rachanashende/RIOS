@@ -2061,10 +2061,26 @@ function PortfolioDashboard() {
   );
 }
 
+// RIV Client Partner's own assigned-clients picker (Leader dashboard) --
+// GET /build/my-clients was added specifically for this; before it existed
+// there was no way to fetch a riv_manager's assigned clients with names
+// attached, so this view showed a placeholder instead.
+function useMyClients(role) {
+  const [clients, setClients] = useState(null);
+  useEffect(() => {
+    if (role !== "riv_manager") return;
+    api.getMyClients().then((d) => setClients(d.clients || [])).catch(() => setClients([]));
+  }, [role]);
+  return clients;
+}
+
 function DashboardView({ session, onOpenProject }) {
   const [sub, setSub] = useState(session.role === "admin" ? "portfolio" : "client");
   const isAdmin = session.role === "admin";
   const isClientLike = ["client", "product_owner"].includes(session.role);
+  const isRivManager = session.role === "riv_manager";
+  const myClients = useMyClients(session.role);
+  const [pickedClientId, setPickedClientId] = useState(null);
 
   return (
     <div style={{ maxWidth: 1180, margin: "0 auto", padding: "36px 24px 100px" }}>
@@ -2078,10 +2094,28 @@ function DashboardView({ session, onOpenProject }) {
         </div>
       )}
 
+      {isRivManager && myClients && myClients.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <DashboardSelect
+            value={pickedClientId ?? ""}
+            onChange={(v) => setPickedClientId(v ? Number(v) : null)}
+            options={[{ value: "", label: "Choose a client…" }, ...myClients.map((c) => ({ value: String(c.id), label: c.company || c.name }))]}
+          />
+        </div>
+      )}
+
       {sub === "portfolio" ? <PortfolioDashboard /> : (
         isClientLike
           ? <ClientDashboard clientId={session.role === "client" ? session.id : session.client_id} onOpenProject={onOpenProject} />
-          : <EmptyState icon={Gauge} title="Pick a client" text="RIV Client Partner client-by-client view is coming soon — use the RIV portfolio for now, or open a project directly." />
+          : isRivManager
+            ? (myClients == null
+                ? <Spinner label="Loading your clients…" />
+                : myClients.length === 0
+                  ? <EmptyState icon={Gauge} title="No clients assigned yet" text="Ask an admin to assign you to a client from the admin console's Logins tab." />
+                  : pickedClientId
+                    ? <ClientDashboard clientId={pickedClientId} onOpenProject={onOpenProject} />
+                    : <EmptyState icon={Gauge} title="Pick a client" text="Choose one of your assigned clients above to see their dashboard." />)
+            : <EmptyState icon={Gauge} title="Pick a client" text="Open a project directly, or ask an admin for dashboard access." />
       )}
     </div>
   );
@@ -2160,10 +2194,11 @@ function CreateProjectPanel({ onCreated, prefill }) {
   // "Create the Startup POC login" (page 5 of the Oct 2026 mockup) -- only
   // offered for a manually-created startup project (the idea/application
   // paths don't collect this; a Startup POC can always be added afterward
-  // from the Logins tab). No email is actually sent (no infra for that
-  // anywhere in Build.RIV today -- other login types work the same way,
-  // admin shares the temp password directly), so this is labelled honestly
-  // rather than promising an invite email the backend doesn't send.
+  // from the Logins tab). An invite email is now attempted (same Resend
+  // path every other RIOS transactional email goes through) but it's
+  // best-effort -- if Resend isn't configured, or the send fails, the login
+  // still gets created, so the temp password is always also shown here to
+  // share manually as a backup.
   const [createPoc, setCreatePoc] = useState(false);
   const [pocForm, setPocForm] = useState({ name: "", email: "", password: "" });
   const [pocCreds, setPocCreds] = useState(null);
@@ -2182,7 +2217,7 @@ function CreateProjectPanel({ onCreated, prefill }) {
           }
           await api.createBuildStartupPoc({ ...pocForm, projectId: d.project.id });
           setPocCreds({ email: pocForm.email, password: pocForm.password });
-          noticeText += ` Startup POC login created for ${pocForm.email} -- share the temporary password with them yourself.`;
+          noticeText += ` Startup POC login created for ${pocForm.email} -- an invite email was attempted; the credentials are also shown below as a backup.`;
         }
         setNotice(noticeText);
         onCreated();
@@ -2261,7 +2296,7 @@ function CreateProjectPanel({ onCreated, prefill }) {
         {notice && <Notice text={notice} />}
         {pocCreds && (
           <div style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.ink, background: BRAND.cream, border: `1px solid ${BRAND.line}`, borderRadius: 9, padding: "10px 12px", marginBottom: 16 }}>
-            Startup POC credentials — email: <b>{pocCreds.email}</b>, temporary password: <b>{pocCreds.password}</b>. Share these with them directly; Build.RIV doesn't send login emails itself.
+            Startup POC credentials — email: <b>{pocCreds.email}</b>, temporary password: <b>{pocCreds.password}</b>. An invite email was attempted, but keep these as a backup in case it didn't land.
           </div>
         )}
         <ErrorBanner text={error} />
@@ -2450,7 +2485,7 @@ function PeoplePanel() {
     try {
       await api.createBuildPoc(pocForm);
       setPocForm({ email: "", password: "", name: "", clientId: "" });
-      setNotice("Client POC login created.");
+      setNotice(`Product Owner login created for ${pocForm.email}. An invite email was attempted; keep the temporary password handy as a backup.`);
       load();
     } catch (e) { setError(e.message || "Couldn't create that login."); }
   }
@@ -2460,7 +2495,7 @@ function PeoplePanel() {
     try {
       await api.createBuildManager(mgrForm); // clientIds is already an array of id strings
       setMgrForm({ email: "", password: "", name: "", clientIds: [] });
-      setNotice("RIV Client Partner login created.");
+      setNotice(`RIV Client Partner login created for ${mgrForm.email}. An invite email was attempted; keep the temporary password handy as a backup.`);
       load();
     } catch (e) { setError(e.message || "Couldn't create that login."); }
   }
@@ -2560,7 +2595,7 @@ function ManageBuildClientsPanel() {
     try {
       await api.createBuildClient(form);
       setForm({ name: "", email: "", password: "", company: "" });
-      setNotice(`Login created for ${form.name}${form.company ? ` (${form.company})` : ""}. Share the email and temporary password with the client.`);
+      setNotice(`Login created for ${form.name}${form.company ? ` (${form.company})` : ""}. An invite email was attempted; keep the temporary password handy as a backup.`);
       load();
     } catch (e) {
       setError(e.message || "Couldn't create that login.");

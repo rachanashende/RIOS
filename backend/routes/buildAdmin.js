@@ -10,6 +10,19 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { QUESTIONS } from "../lib/scoring.js";
 import { STAGES } from "../lib/buildWorkflow.js";
 import { notifyBuild, recipientsForProject } from "../lib/buildNotify.js";
+import { sendBuildLoginInviteEmail } from "../lib/email.js";
+
+// Fire-and-forget invite email for a freshly-created login. Never blocks or
+// fails the account-creation response -- if Resend isn't configured or the
+// send throws, the admin still sees the temp password on screen to share
+// manually, exactly as before this existed; this just adds an email on top
+// when it's available, using the same Resend path every other RIOS email
+// (verification, password reset) already goes through.
+function inviteLogin(email, name, roleLabel, tempPassword) {
+  sendBuildLoginInviteEmail(email, name, { roleLabel, tempPassword, loginPath: "/build" }).catch((err) => {
+    console.warn(`[build-admin] Invite email to ${email} failed (login still created):`, err.message || err);
+  });
+}
 
 const router = Router();
 // RIV Admin and RIV Manager both reach this console; individual routes
@@ -351,6 +364,7 @@ router.post("/poc", requireRole("admin"), async (req, res, next) => {
       "INSERT INTO users (email, password_hash, name, role, company, client_id, must_change_password) VALUES ($1,$2,$3,'product_owner',$4,$5,true) RETURNING id",
       [normalizedEmail, password_hash, String(name).trim(), clientRows[0].company || null, clientRows[0].id]
     );
+    inviteLogin(normalizedEmail, name, "Product Owner", password);
     res.status(201).json({ id: rows[0].id, email: normalizedEmail, name, role: "product_owner", clientId: clientRows[0].id });
   } catch (err) {
     next(err);
@@ -409,6 +423,7 @@ router.post("/startup-poc", requireRole("admin"), async (req, res, next) => {
       [normalizedEmail, password_hash, String(name).trim()]
     );
     await pool.query("UPDATE build_projects SET startup_poc_user_id = $1, updated_at = now() WHERE id = $2", [rows[0].id, projectId]);
+    inviteLogin(normalizedEmail, name, "Startup POC", password);
     res.status(201).json({ id: rows[0].id, email: normalizedEmail, name, role: "startup_poc", projectId });
   } catch (err) {
     next(err);
@@ -467,6 +482,7 @@ router.post("/clients", requireRole("admin"), async (req, res, next) => {
        VALUES ($1,$2,$3,'client',$4,true,true) RETURNING id`,
       [normalizedEmail, password_hash, String(name).trim(), clean(company)]
     );
+    inviteLogin(normalizedEmail, name, "Client Leader", password);
     res.status(201).json({ id: rows[0].id, email: normalizedEmail, name, company: clean(company) });
   } catch (err) {
     next(err);
@@ -529,6 +545,7 @@ router.post("/managers", requireRole("admin"), async (req, res, next) => {
       const values = clientIds.map((_, i) => `($1,$${i + 2})`).join(",");
       await pool.query(`INSERT INTO build_manager_clients (manager_user_id, client_id) VALUES ${values} ON CONFLICT DO NOTHING`, [managerId, ...clientIds]);
     }
+    inviteLogin(normalizedEmail, name, "RIV Client Partner", password);
     res.status(201).json({ id: managerId, email: normalizedEmail, name, role: "riv_manager" });
   } catch (err) {
     next(err);

@@ -81,6 +81,28 @@ function escapeHtml(s) {
 // red, overdue) all boil down to "here's what happened, here's the link" --
 // rather than a near-duplicate function per trigger.
 // ---------------------------------------------------------------------------
+// Login-invite email (Oct 2026 "Proposed Screens" page 5's "email the
+// invite" checkbox) -- reuses the same Resend send() path every other
+// transactional email here already goes through, including its honest
+// no-op when RESEND_API_KEY isn't set (the admin still sees the temp
+// password on screen to share manually either way). Covers all four
+// Build.RIV login types created from the admin console: Product Owner,
+// Startup POC, RIV Client Partner, and a build-scoped Client Leader.
+export async function sendBuildLoginInviteEmail(to, name, { roleLabel, tempPassword, loginPath }) {
+  const link = `${APP_URL}${loginPath || "/"}`;
+  const html = brandWrapper(`
+    <h2 style="font-size:20px; color:#272525; margin:0 0 12px;">Your RIOS Build.RIV login</h2>
+    <p style="font-size:14px; color:#272525; line-height:1.6;">Hi ${escapeHtml(name)},</p>
+    <p style="font-size:14px; color:#272525; line-height:1.6;">An account was created for you on RIOS as a <b>${escapeHtml(roleLabel)}</b>. Here's how to sign in:</p>
+    <p style="font-size:14px; color:#272525; line-height:1.6; background:#FBF9F6; border-radius:9px; padding:14px 16px; margin:14px 0;">
+      Email: <b>${escapeHtml(to)}</b><br>Temporary password: <b>${escapeHtml(tempPassword)}</b>
+    </p>
+    <a href="${link}" style="display:inline-block; margin-top:6px; background:#EF4C4F; color:#fff; text-decoration:none; font-weight:600; font-size:14px; padding:12px 22px; border-radius:9px;">Sign in to RIOS</a>
+    <p style="font-size:12px; color:#9B958F; margin-top:20px;">You'll be asked to set a new password the first time you sign in.</p>
+  `);
+  return send({ to, subject: "Your RIOS Build.RIV login", html });
+}
+
 export async function sendBuildNotificationEmail(to, name, { subject, heading, body, projectCode }) {
   const link = `${APP_URL}/?build=${encodeURIComponent(projectCode || "")}`;
   const html = brandWrapper(`

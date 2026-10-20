@@ -1253,7 +1253,7 @@ function EmptyCard({ text }) {
   return <div style={{ border: `1px dashed ${BRAND.line}`, borderRadius: 12, padding: 20, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F" }}>{text}</div>;
 }
 
-function OpportunityCard({ rank, q, tag, muted }) {
+function OpportunityCard({ rank, q, tag, muted, note }) {
   return (
     <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 16, background: "#fff", marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
@@ -1278,11 +1278,12 @@ function OpportunityCard({ rank, q, tag, muted }) {
         </div>
       )}
       {q.evidence && <div style={{ fontFamily: "'Newsreader',Georgia,serif", fontStyle: "italic", fontSize: 12.5, color: "#7A746F", marginTop: 8, borderTop: `1px solid ${BRAND.line}`, paddingTop: 8 }}>"{q.evidence}"</div>}
+      {note && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, color: "#1B7A5A", marginTop: 8 }}>✓ {note}</div>}
     </div>
   );
 }
 
-function DashboardView({ questions, modules, responses, setView, user, viewingClient }) {
+function DashboardView({ questions, modules, responses, setView, user, viewingClient, reassessLinks }) {
   const scores = useMemo(() => computeScores(questions, modules, responses), [questions, modules, responses]);
   const categoryScores = useMemo(() => computeCategoryScores(scores.moduleScores), [scores.moduleScores]);
   const tier = tierFor(scores.overallScore);
@@ -1421,7 +1422,7 @@ function DashboardView({ questions, modules, responses, setView, user, viewingCl
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}><TrendingUp size={17} color={BRAND.coral} /><div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 17, color: BRAND.ink }}>Top 5 Innovation Opportunities</div></div>
           {scores.opportunities.length === 0 ? <EmptyCard text="No ranked opportunities yet — score more questions with revenue/cost data attached." /> : scores.opportunities.map((o, i) => (
-            <OpportunityCard key={o.id} rank={i + 1} q={o} tag={fmtMoneyRange(o.revLow + o.costLow, o.revHigh + o.costHigh)} />
+            <OpportunityCard key={o.id} rank={i + 1} q={o} tag={fmtMoneyRange(o.revLow + o.costLow, o.revHigh + o.costHigh)} note={reassessLinks?.[o.id]} />
           ))}
         </div>
         <div>
@@ -1516,14 +1517,25 @@ export default function RiosApp() {
     api.getQuestions().then(({ questions, modules }) => { setQuestions(questions); setModules(modules); setReady(true); });
   }, []);
 
-  // Non-essential: a client's own "this was already addressed by a Build
-  // project" notes on the scorecard. Never blocks the audit if it fails.
+  // Non-essential: "this was already addressed by a Build project" notes on
+  // the scorecard. Never blocks the audit if it fails. A client sees its own
+  // (self-scoped GET); an admin reviewing a client's scorecard sees the same
+  // notes via the admin-only GET -- previously only the client's own view
+  // loaded this at all, so an admin reviewing a client's scorecard never saw
+  // "Addressed by BLD-xxxx" even though the same data was one call away.
   useEffect(() => {
-    if (!user || user.role !== "client" || user.buildScoped) { setReassessLinks({}); return; }
-    api.getMyReassessLinks()
-      .then((d) => setReassessLinks(Object.fromEntries((d.links || []).map((l) => [l.questionId, l.note]))))
-      .catch(() => setReassessLinks({}));
-  }, [user]);
+    if (user?.role === "client" && !user.buildScoped) {
+      api.getMyReassessLinks()
+        .then((d) => setReassessLinks(Object.fromEntries((d.links || []).map((l) => [l.questionId, l.note]))))
+        .catch(() => setReassessLinks({}));
+    } else if (user?.role === "admin" && viewingClient) {
+      api.getBuildReassessLinks(viewingClient.id)
+        .then((d) => setReassessLinks(Object.fromEntries((d.links || []).map((l) => [l.questionId, l.note]))))
+        .catch(() => setReassessLinks({}));
+    } else {
+      setReassessLinks({});
+    }
+  }, [user, viewingClient]);
 
   // Load the right responses set whenever identity/target changes
   useEffect(() => {
@@ -1758,7 +1770,7 @@ export default function RiosApp() {
       )}
       {view === "admin" && user?.role === "admin" && <AdminView setView={goToView} setSelectedClient={setViewingClient} />}
       {view === "dashboard" && user && !(user.role === "client" && user.buildScoped) && ready && (
-        <DashboardView questions={questions} modules={modules} responses={responses} setView={goToView} user={user} viewingClient={viewingClient} />
+        <DashboardView questions={questions} modules={modules} responses={responses} setView={goToView} user={user} viewingClient={viewingClient} reassessLinks={reassessLinks} />
       )}
       <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#B7B2AE", display: (view === "ideas-riv" || view === "rise-riv" || view === "r-index" || view === "build-riv") ? "none" : "block" }}>
         <div>Questions? Write to us at <a href="mailto:contact@retailinnovation.ventures" style={{ color: BRAND.coralDark }}>contact@retailinnovation.ventures</a></div>
