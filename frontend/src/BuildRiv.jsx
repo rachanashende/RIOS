@@ -6,7 +6,7 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown,
 } from "lucide-react";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell,
 } from "recharts";
 import {
   api, divertIfTemporaryPassword, getStoredBuildUser, getToken,
@@ -1576,6 +1576,40 @@ function LessonsLearnedPanel({ recentLessons }) {
   );
 }
 
+// Health donut (page_6 of the Oct 2026 mockup) -- a quick "how much of the
+// portfolio is fine vs. not" read, computed client-side from the same
+// per-project health values already in the table below (no new backend
+// field needed).
+const HEALTH_DONUT_ORDER = ["on_track", "at_risk", "off_track"];
+function HealthDonut({ projects }) {
+  const counts = { on_track: 0, at_risk: 0, off_track: 0 };
+  for (const p of projects || []) if (counts[p.health] != null) counts[p.health] += 1;
+  const total = counts.on_track + counts.at_risk + counts.off_track;
+  const data = HEALTH_DONUT_ORDER.map((k) => ({ name: HEALTH_COLORS[k].label, value: counts[k], key: k }));
+  return (
+    <Card style={{ padding: 18, flex: "1 1 200px", display: "flex", alignItems: "center", gap: 14 }}>
+      <div style={{ width: 80, height: 80, flexShrink: 0, position: "relative" }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={data} dataKey="value" innerRadius={26} outerRadius={38} paddingAngle={total ? 2 : 0}>
+              {data.map((d) => <Cell key={d.key} fill={HEALTH_COLORS[d.key].fg} />)}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontWeight: 700, fontSize: 16, color: BRAND.ink }}>{total}</div>
+      </div>
+      <div>
+        <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 6 }}>Health</div>
+        {HEALTH_DONUT_ORDER.map((k) => (
+          <div key={k} style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: FONT, fontSize: 11.5, color: "#7A746F", marginBottom: 2 }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: HEALTH_COLORS[k].fg }} /> {HEALTH_COLORS[k].label}: {counts[k]}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function SummaryStat({ label, value, sub, color }) {
   return (
     <Card style={{ padding: 18, flex: "1 1 160px" }}>
@@ -1586,7 +1620,7 @@ function SummaryStat({ label, value, sub, color }) {
   );
 }
 
-function ClientDashboard({ clientId }) {
+function ClientDashboard({ clientId, onOpenProject }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1624,6 +1658,7 @@ function ClientDashboard({ clientId }) {
         <SummaryStat label="Invested to date" value={summary.investedToDateFmt} />
         <SummaryStat label="Realised benefit" value={summary.realisedBenefitFmt} sub={summary.estimated ? "partly estimated" : undefined} />
         <SummaryStat label="Portfolio ROI" value={fmtPct(summary.portfolioRoi)} color={summary.portfolioRoi >= 0 ? "#1B7A5A" : "#C13B3B"} />
+        <HealthDonut projects={data.projects} />
       </div>
 
       <WorkflowBreakdown byType={byType} />
@@ -1636,9 +1671,16 @@ function ClientDashboard({ clientId }) {
           <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 10 }}>Needs attention</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {needsAttention.map((n) => (
-              <div key={n.projectId} style={{ display: "flex", justifyContent: "space-between", fontFamily: FONT, fontSize: 13 }}>
+              <div key={n.projectId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: FONT, fontSize: 13 }}>
                 <span><b style={{ color: BRAND.coralDark }}>{n.code}</b> {n.title}</span>
-                <span style={{ color: "#9B958F" }}>{n.reason}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ color: "#9B958F" }}>{n.reason}</span>
+                  {onOpenProject && (
+                    <button onClick={() => onOpenProject(n.projectId)} style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 700, color: BRAND.coral, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                      Review →
+                    </button>
+                  )}
+                </span>
               </div>
             ))}
           </div>
@@ -1655,7 +1697,7 @@ function ClientDashboard({ clientId }) {
             </tr></thead>
             <tbody>
               {sorted.map((p) => (
-                <tr key={p.id}>
+                <tr key={p.id} onClick={onOpenProject ? () => onOpenProject(p.id) : undefined} style={onOpenProject ? { cursor: "pointer" } : undefined} className={onOpenProject ? "build-row" : undefined}>
                   <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, fontWeight: 700, color: BRAND.coralDark, borderBottom: `1px solid ${BRAND.line}` }}>{p.code}</td>
                   <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 13, color: BRAND.ink, borderBottom: `1px solid ${BRAND.line}` }}>{p.title}</td>
                   <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 11.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{p.type === "internal" ? "Enterprise" : "Open"}</td>
@@ -1725,7 +1767,7 @@ function PortfolioDashboard() {
   );
 }
 
-function DashboardView({ session }) {
+function DashboardView({ session, onOpenProject }) {
   const [sub, setSub] = useState(session.role === "admin" ? "portfolio" : "client");
   const isAdmin = session.role === "admin";
   const isClientLike = ["client", "product_owner"].includes(session.role);
@@ -1744,7 +1786,7 @@ function DashboardView({ session }) {
 
       {sub === "portfolio" ? <PortfolioDashboard /> : (
         isClientLike
-          ? <ClientDashboard clientId={session.role === "client" ? session.id : session.client_id} />
+          ? <ClientDashboard clientId={session.role === "client" ? session.id : session.client_id} onOpenProject={onOpenProject} />
           : <EmptyState icon={Gauge} title="Pick a client" text="RIV Client Partner client-by-client view is coming soon — use the RIV portfolio for now, or open a project directly." />
       )}
     </div>
@@ -2456,7 +2498,16 @@ export default function BuildRivApp() {
       {view === "projects" && activeProjectId && (
         <ProjectDetailView projectId={activeProjectId} session={session} onBack={() => { setActiveProjectId(null); setListKey((k) => k + 1); }} />
       )}
-      {view === "dashboard" && canSeeDashboard && <DashboardView session={session} />}
+      {view === "dashboard" && canSeeDashboard && (
+        <DashboardView
+          session={session}
+          onOpenProject={(id) => {
+            window.history.pushState(null, "", BUILD_VIEW_TO_PATH.projects);
+            setView("projects");
+            setActiveProjectId(id);
+          }}
+        />
+      )}
       {view === "admin" && canSeeAdmin && <AdminConsoleView reload={() => setListKey((k) => k + 1)} />}
     </div>
   );
