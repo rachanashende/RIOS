@@ -38,6 +38,7 @@ const OUTER_PATH_TO_VIEW = {
   "/rindex/my-entries": "r-index",
   "/build": "build-riv",
   "/build/projects": "build-riv",
+  "/build/my-work": "build-riv",
   "/build/dashboard": "build-riv",
   "/build/admin": "build-riv",
 };
@@ -132,7 +133,7 @@ function NavBar({ view, setView, user, onLogout }) {
     ...publicItems,
     ...(user?.role === "junior_employee" || user?.role === "jury" ? [{ id: "ideas-riv", label: "Ideathon" }, { id: "build-riv", label: "Build" }] : []),
     ...(user?.role === "rise_jury" ? [{ id: "rise-riv", label: "Startup" }] : []),
-    ...(user?.role === "client_poc" || user?.role === "riv_manager" ? [{ id: "build-riv", label: "Build" }] : []),
+    ...(user?.role === "client_poc" || user?.role === "riv_manager" || user?.role === "startup_poc" ? [{ id: "build-riv", label: "Build" }] : []),
     ...(user?.role === "client" ? (user?.buildScoped ? buildScopedClientItems : clientItems) : []),
     ...(user?.role === "admin" ? adminItems : []),
   ];
@@ -1647,7 +1648,7 @@ export default function RiosApp() {
       // instead of showing its landing page as if logged out.
       setIndexSession(token, loggedInUser);
       path = "/rindex"; v = "r-index";
-    } else if (loggedInUser.role === "client_poc" || loggedInUser.role === "riv_manager") {
+    } else if (loggedInUser.role === "client_poc" || loggedInUser.role === "riv_manager" || loggedInUser.role === "startup_poc") {
       // Build.RIV's two brand-new login types (no other home in RIOS) --
       // same shared /auth/login endpoint, routed into Build's own
       // isolated session (see api.js's BUILD_TOKEN_KEY comment).

@@ -67,7 +67,11 @@ async function widenRoleConstraint(newRoles) {
 }
 
 export async function initBuildSchema() {
-  await widenRoleConstraint(["client_poc", "riv_manager"]);
+  // Workflow v2: client_poc is shown as "Product Owner", riv_manager as
+  // "RIV Client Partner", and startup_poc is new -- the startup's single
+  // point of contact on an Open Innovation project (own login, scoped to
+  // the projects they are named on).
+  await widenRoleConstraint(["client_poc", "riv_manager", "startup_poc"]);
 
   // The owner wants client logins created specifically for a Build/Transform
   // engagement to be scoped to Build.RIV only -- no access to the main RIOS
@@ -328,6 +332,57 @@ export async function initBuildSchema() {
       question_id INTEGER NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE(project_id, question_id)
+    );
+  `);
+
+  // ------------------------------------------------------------------
+  // Workflow v2 (Oct 2026): startup deal stages, stage timing for the
+  // automatic health rules, red-alert bookkeeping, Ready for Build
+  // decisions and Client Partner delete requests. All additive.
+  // ------------------------------------------------------------------
+  await pool.query(`
+    ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS nda_signed_at DATE;
+    ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS proposal_value NUMERIC;
+    ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS proposal_accepted_at DATE;
+    ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS po_number TEXT;
+    ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS po_value NUMERIC;
+    ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS po_date DATE;
+    ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS stage_entered_at TIMESTAMPTZ;
+    ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS stage_due DATE;
+    ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS last_alerted_health TEXT;
+  `);
+  await pool.query(`UPDATE build_projects SET stage_entered_at = COALESCE(updated_at, created_at) WHERE stage_entered_at IS NULL;`);
+  // "Scale" is now called Production (same place in the flow).
+  await pool.query(`UPDATE build_projects SET stage = 'production' WHERE stage = 'scale';`);
+
+  await pool.query(`
+    -- Ready for Build: "Not now" on a selected idea/application. 'defer'
+    -- keeps it on the list with a date; 'decline' takes it off.
+    CREATE TABLE IF NOT EXISTS build_ready_decisions (
+      id SERIAL PRIMARY KEY,
+      source_type TEXT NOT NULL CHECK (source_type IN ('idea','rise_application')),
+      source_id INTEGER NOT NULL,
+      action TEXT NOT NULL CHECK (action IN ('defer','decline')),
+      until_date DATE,
+      reason TEXT,
+      by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (source_type, source_id)
+    );
+
+    -- A RIV Client Partner can't delete anything; they ask, RIV Admin decides.
+    CREATE TABLE IF NOT EXISTS build_delete_requests (
+      id SERIAL PRIMARY KEY,
+      project_id INTEGER NOT NULL REFERENCES build_projects(id) ON DELETE CASCADE,
+      target_type TEXT NOT NULL CHECK (target_type IN ('file','update')),
+      target_id INTEGER NOT NULL,
+      target_label TEXT,
+      reason TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','declined')),
+      requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      decided_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      decided_at TIMESTAMPTZ
     );
   `);
 

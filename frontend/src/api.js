@@ -349,18 +349,31 @@ export const api = {
     a.remove();
     URL.revokeObjectURL(url);
   },
+  getBuildMyWork: () => buildRequest("/build/my-work"),
+  requestBuildDelete: (projectId, payload) => buildRequest(`/build/projects/${projectId}/delete-requests`, { method: "POST", body: payload }),
+  deleteBuildFile: (projectId, fileId) => buildRequest(`/build/projects/${projectId}/files/${fileId}`, { method: "DELETE" }),
+  deleteBuildUpdate: (updateId) => buildRequest(`/build/updates/${updateId}`, { method: "DELETE" }),
   listBuildNotifications: () => buildRequest("/build/notifications"),
   markBuildNotificationRead: (id) => buildRequest(`/build/notifications/${id}/read`, { method: "PUT" }),
 
   // ---- Build.RIV: Leader dashboard (backend/routes/buildDashboard.js)
   getBuildClientDashboard: (clientId, params) => buildRequest(`/build/dashboard/client/${clientId}${toQuery(params)}`),
   getBuildPortfolioDashboard: () => buildRequest("/build/dashboard/portfolio"),
+  getBuildDashboardClients: () => buildRequest("/build/dashboard/clients"),
 
   // ---- Build.RIV: admin + RIV Manager console (backend/routes/buildAdmin.js)
   createBuildProject: (payload) => buildRequest("/admin/build/projects", { method: "POST", body: payload }),
-  createBuildProjectFromIdea: (ideaId) => buildRequest(`/admin/build/from-idea/${ideaId}`, { method: "POST" }),
-  createBuildProjectFromApplication: (applicationId, clientId) =>
-    buildRequest(`/admin/build/from-application/${applicationId}`, { method: "POST", body: clientId ? { clientId } : {} }),
+  createBuildProjectFromIdea: (ideaId, payload) => buildRequest(`/admin/build/from-idea/${ideaId}`, { method: "POST", body: payload || {} }),
+  createBuildProjectFromApplication: (applicationId, payload) =>
+    buildRequest(`/admin/build/from-application/${applicationId}`, { method: "POST", body: payload || {} }),
+  // Workflow v2 (Oct 2026): Ready for Build, people pickers, delete requests.
+  getBuildReady: () => buildRequest("/admin/build/ready"),
+  notNowBuildReady: (sourceType, sourceId, payload) => buildRequest(`/admin/build/ready/${sourceType}/${sourceId}/not-now`, { method: "POST", body: payload }),
+  undoNotNowBuildReady: (sourceType, sourceId) => buildRequest(`/admin/build/ready/${sourceType}/${sourceId}/not-now`, { method: "DELETE" }),
+  getBuildPeople: (clientId) => buildRequest(`/admin/build/people${toQuery({ clientId })}`),
+  deleteBuildProject: (id) => buildRequest(`/admin/build/projects/${id}`, { method: "DELETE" }),
+  listBuildDeleteRequests: (status) => buildRequest(`/admin/build/delete-requests${toQuery({ status })}`),
+  decideBuildDeleteRequest: (id, decision) => buildRequest(`/admin/build/delete-requests/${id}`, { method: "PUT", body: { decision } }),
   assignBuildProject: (id, payload) => buildRequest(`/admin/build/projects/${id}/assign`, { method: "PUT", body: payload }),
   listBuildPocs: (clientId) => buildRequest(`/admin/build/poc${toQuery({ clientId })}`),
   createBuildPoc: (payload) => buildRequest("/admin/build/poc", { method: "POST", body: payload }),

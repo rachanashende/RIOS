@@ -1,8 +1,10 @@
-// Build.RIV -- admin + RIV Manager console: creating projects (manual, or
-// from a published Ideathon winner / shortlisted startup), issuing
-// client_poc and riv_manager logins, assigning people to a project, closing
-// the re-assess loop, and the overdue-update digest (PRD sections 6 "How a
-// project starts", 7 "How a project starts", 10.1, 10.3, 12.1).
+// Build.RIV -- RIV Admin console (workflow v2, Oct 2026): the Ready for
+// Build list, creating projects with their people, managing Product Owner
+// / RIV Client Partner / Startup POC logins, delete requests from Client
+// Partners, the re-assess loop and the overdue digest.
+//
+// RIV Admin only. A RIV Client Partner has no Admin menu and asks RIV
+// Admin for anything here (create, assign, delete).
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import pool from "../db.js";
@@ -12,20 +14,13 @@ import { STAGES } from "../lib/buildWorkflow.js";
 import { notifyBuild, recipientsForProject } from "../lib/buildNotify.js";
 
 const router = Router();
-// RIV Admin and RIV Manager both reach this console; individual routes
-// narrow further where the PRD's permission table says "RIV Admin only"
-// (e.g. closing stays in build.js, gated there).
-router.use(requireAuth, requireRole("admin", "riv_manager"));
+router.use(requireAuth, requireRole("admin"));
 
 const clean = (v) => (v == null || String(v).trim() === "" ? null : String(v).trim());
 
-// Every *Id/*Ids field below comes straight from request input, so its name
-// alone doesn't make it a number -- a non-numeric value (e.g. someone typing
-// "client 1" into the admin console's Client ID field instead of the actual
-// numeric id) used to reach pool.query() unvalidated and surface as a raw
-// Postgres "invalid input syntax for type integer" error. toId() turns
-// anything that isn't a clean positive integer into null so routes can
-// reject it with a normal 400 instead.
+// Every *Id field comes straight from request input; toId() turns anything
+// that isn't a clean positive integer into null so routes can reject it
+// with a normal 400 instead of a raw Postgres error.
 function toId(v) {
   if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
@@ -37,132 +32,305 @@ async function nextCode() {
   return `BLD-${String(rows[0].n).padStart(4, "0")}`;
 }
 
-async function assignedClientIds(user) {
-  if (user.role !== "riv_manager") return null; // null = no restriction (admin)
-  const { rows } = await pool.query("SELECT client_id FROM build_manager_clients WHERE manager_user_id = $1", [user.id]);
-  return rows.map((r) => r.client_id);
-}
-
-async function assertClientInScope(req, clientId) {
-  const ids = await assignedClientIds(req.user);
-  if (ids === null) return true; // admin
-  if (!ids.map(Number).includes(Number(clientId))) {
-    const err = new Error("That client isn't assigned to you.");
-    err.status = 403;
-    throw err;
-  }
+// Admin-only router, so every client is in scope. Kept as a function so
+// the re-assess routes below read the same as before.
+async function assertClientInScope() {
   return true;
 }
 
+function httpError(status, message) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
+
+// Checks the people picked for a project belong to that client and have
+// the right role. Returns the cleaned ids.
+async function validatePeople(clientId, { pocUserId, ownerUserId, rivManagerId }, ownerRole) {
+  if (pocUserId) {
+    const { rows } = await pool.query("SELECT id FROM users WHERE id = $1 AND role = 'client_poc' AND client_id = $2", [pocUserId, clientId]);
+    if (!rows.length) throw httpError(400, "The Product Owner must be a Product Owner login of this client.");
+  }
+  if (ownerUserId) {
+    const { rows } = await pool.query("SELECT id FROM users WHERE id = $1 AND role = $2 AND client_id = $3", [ownerUserId, ownerRole, clientId]);
+    if (!rows.length) throw httpError(400, ownerRole === "startup_poc" ? "The Startup POC must be a Startup POC login for this client." : "The Employee must be an employee login of this client.");
+  }
+  if (rivManagerId) {
+    const { rows } = await pool.query("SELECT id FROM users WHERE id = $1 AND role = 'riv_manager'", [rivManagerId]);
+    if (!rows.length) throw httpError(400, "The RIV Client Partner must be a RIV Client Partner login.");
+  }
+}
+
+// Creates a Startup POC login inline (from the Create project form).
+async function createStartupPocLogin(clientId, { name, email, password, company }) {
+  if (!name || !email || !password) throw httpError(400, "Startup POC name, email and a temporary password are required.");
+  if (String(password).length < 8) throw httpError(400, "The temporary password must be at least 8 characters.");
+  const normalizedEmail = String(email).toLowerCase().trim();
+  const { rows: existing } = await pool.query("SELECT id, role, client_id FROM users WHERE email = $1", [normalizedEmail]);
+  if (existing.length) {
+    if (existing[0].role === "startup_poc" && Number(existing[0].client_id) === Number(clientId)) return existing[0].id;
+    throw httpError(409, "A user with that email already exists.");
+  }
+  const { rows } = await pool.query(
+    `INSERT INTO users (email, password_hash, name, role, company, client_id, must_change_password)
+     VALUES ($1,$2,$3,'startup_poc',$4,$5,true) RETURNING id`,
+    [normalizedEmail, bcrypt.hashSync(password, 10), String(name).trim(), clean(company), clientId]
+  );
+  return rows[0].id;
+}
+
+async function insertProject({ code, type, title, description, clientId, ownerUserId, pocUserId, rivManagerId, targetEnd, createdBy }) {
+  const stage = STAGES[type][0];
+  const { rows } = await pool.query(
+    `INSERT INTO build_projects (code, type, title, description, client_id, owner_user_id, poc_user_id, riv_manager_id, stage, stage_entered_at, target_end, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now(),$10,$11) RETURNING *`,
+    [code, type, title, description, clientId, ownerUserId, pocUserId, rivManagerId, stage, targetEnd, createdBy]
+  );
+  const project = rows[0];
+  await pool.query(
+    `INSERT INTO build_stage_history (project_id, from_stage, to_stage, action, reason, by_user_id) VALUES ($1,NULL,$2,'advance','Project created',$3)`,
+    [project.id, stage, createdBy]
+  );
+  return project;
+}
+
+async function notifyCreated(project, sourceLine) {
+  const recipients = await recipientsForProject(project, ["owner", "poc", "riv_manager", "client"]);
+  await notifyBuild(recipients, {
+    projectId: project.id, projectCode: project.code, kind: "created",
+    message: `${project.code} "${project.title}" was created${sourceLine ? ` ${sourceLine}` : ""}. It starts in Requirements.`,
+    subject: `RIOS Build: ${project.code} created`,
+    heading: "A new Build project was created",
+    body: `${project.title} (${project.code}) was created${sourceLine ? ` ${sourceLine}` : ""} and starts in Requirements. Log in to RIOS Build to see your first steps.`,
+  });
+}
+
+function validateQuestion(questionId) {
+  const qid = toId(questionId);
+  if (!qid) return null;
+  if (!QUESTIONS.find((q) => q.id === qid)) throw httpError(400, "That audit question doesn't exist.");
+  return qid;
+}
+
 /* =========================================================================
-   PROJECT CREATION
+   PEOPLE PICKERS for the Create project form
    ========================================================================= */
 
-// POST /api/admin/build/projects -- manual creation, either workflow
-// (section 6/7: "The RIV Admin can also create an internal project by
-// hand" -- extended here to startup too, since the PRD leaves that open
-// (12.3) and there's no reason to block it for one workflow but not the
-// other).
-router.post("/projects", async (req, res, next) => {
+// GET /api/admin/build/people?clientId= -- Product Owners, Employees and
+// Startup POCs of a client, plus every RIV Client Partner.
+router.get("/people", async (req, res, next) => {
   try {
-    const { type, title, description, targetEnd } = req.body || {};
-    const clientId = toId(req.body?.clientId);
-    const ownerUserId = toId(req.body?.ownerUserId);
-    const pocUserId = toId(req.body?.pocUserId);
-    const rivManagerId = toId(req.body?.rivManagerId);
-    if (!["internal", "startup"].includes(type)) return res.status(400).json({ error: "type must be 'internal' or 'startup'." });
-    if (!title || !String(title).trim()) return res.status(400).json({ error: "Title is required." });
-    if (!clientId) return res.status(400).json({ error: "clientId must be a valid numeric client ID." });
-    await assertClientInScope(req, clientId);
-
-    const { rows: clientRows } = await pool.query("SELECT id FROM users WHERE id = $1 AND role = 'client'", [clientId]);
-    if (!clientRows.length) return res.status(404).json({ error: "That client account doesn't exist." });
-
-    const code = await nextCode();
-    const stage = STAGES[type][0]; // 'requirements'
+    const clientId = toId(req.query.clientId);
+    if (!clientId) return res.status(400).json({ error: "clientId is required." });
     const { rows } = await pool.query(
-      `INSERT INTO build_projects (code, type, title, description, client_id, owner_user_id, poc_user_id, riv_manager_id, stage, target_end, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [code, type, String(title).trim(), clean(description), clientId, ownerUserId, pocUserId,
-        rivManagerId || (req.user.role === "riv_manager" ? req.user.id : null), stage, clean(targetEnd), req.user.id]
+      `SELECT id, name, email, role FROM users
+       WHERE (client_id = $1 AND role IN ('client_poc','junior_employee','startup_poc')) OR role = 'riv_manager'
+       ORDER BY name`,
+      [clientId]
     );
-    const project = rows[0];
-    await pool.query(
-      "INSERT INTO build_project_sources (project_id, source_type, source_id) VALUES ($1,'manual',NULL)",
-      [project.id]
-    );
-    await pool.query(
-      `INSERT INTO build_stage_history (project_id, from_stage, to_stage, action, by_user_id) VALUES ($1,NULL,$2,'advance',$3)`,
-      [project.id, stage, req.user.id]
-    );
-
-    const recipients = await recipientsForProject(project, ["owner", "poc", "riv_manager"]);
-    await notifyBuild(recipients, {
-      projectId: project.id, projectCode: project.code, kind: "created",
-      message: `${project.code} was created.`, subject: `RIOS Build: ${project.code} created`,
-      heading: "A new Build project was created", body: `${project.title} (${project.code}) has been created and is now in ${stage}.`,
+    const { rows: leader } = await pool.query("SELECT id, name, email, company FROM users WHERE id = $1 AND role = 'client'", [clientId]);
+    res.json({
+      clientLeader: leader[0] || null,
+      productOwners: rows.filter((r) => r.role === "client_poc"),
+      employees: rows.filter((r) => r.role === "junior_employee"),
+      startupPocs: rows.filter((r) => r.role === "startup_poc"),
+      partners: rows.filter((r) => r.role === "riv_manager"),
     });
-
-    res.status(201).json({ project });
   } catch (err) {
     next(err);
   }
 });
 
-// POST /api/admin/build/from-idea/:ideaId  (BLD-AC01)
-// The idea must already be marked "Selected for Build" (PUT
-// /api/admin/ideas/:id/select-for-build in ideasAdmin.js -- R21).
+/* =========================================================================
+   READY FOR BUILD -- selected Ideathon winners and startups that aren't
+   projects yet. Filled automatically; nobody types an ID.
+   ========================================================================= */
+
+// GET /api/admin/build/ready
+router.get("/ready", async (req, res, next) => {
+  try {
+    const { rows: ideas } = await pool.query(`
+      SELECT i.id, i.title, i.description, i.question_id, i.selected_for_build_at AS selected_at,
+             i.submitted_by AS author_id, au.name AS author_name,
+             i.source_client_id AS client_id, c.company AS client_company, c.name AS client_name,
+             (SELECT AVG(score) FROM idea_ratings r WHERE r.idea_id = i.id) AS avg_score,
+             d.action AS decision, d.until_date, d.reason AS decision_reason
+      FROM ideas i
+      LEFT JOIN users au ON au.id = i.submitted_by
+      LEFT JOIN users c ON c.id = i.source_client_id
+      LEFT JOIN build_ready_decisions d ON d.source_type = 'idea' AND d.source_id = i.id
+      WHERE i.selected_for_build_at IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM build_project_sources s WHERE s.source_type = 'idea' AND s.source_id = i.id)
+        AND (d.action IS NULL OR d.action = 'defer')
+      ORDER BY i.selected_for_build_at ASC`);
+    const { rows: apps } = await pool.query(`
+      SELECT a.id, a.startup_name, a.founder_name, a.email, a.website, a.sector, a.stage AS startup_stage, a.pitch,
+             a.decided_at AS selected_at, o.client_id, c.company AS client_company, c.name AS client_name,
+             (SELECT AVG(total) FROM rise_scores r WHERE r.application_id = a.id) AS avg_score,
+             d.action AS decision, d.until_date, d.reason AS decision_reason
+      FROM rise_applications a
+      LEFT JOIN rise_opportunities o ON o.id = a.opportunity_id
+      LEFT JOIN users c ON c.id = o.client_id
+      LEFT JOIN build_ready_decisions d ON d.source_type = 'rise_application' AND d.source_id = a.id
+      WHERE a.decision = 'selected_for_pilot'
+        AND NOT EXISTS (SELECT 1 FROM build_project_sources s WHERE s.source_type = 'rise_application' AND s.source_id = a.id)
+        AND (d.action IS NULL OR d.action = 'defer')
+      ORDER BY a.decided_at ASC NULLS LAST`);
+
+    const days = (d) => (d ? Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86400000)) : null);
+    const items = [
+      ...ideas.map((i) => {
+        const q = QUESTIONS.find((x) => x.id === Number(i.question_id));
+        return {
+          sourceType: "idea", sourceId: i.id, workflow: "internal",
+          title: i.title, description: i.description, subtitle: `Idea by ${i.author_name || "an employee"}`,
+          authorId: i.author_id, authorName: i.author_name,
+          clientId: i.client_id, clientName: i.client_company || i.client_name,
+          selectedAt: i.selected_at, waitingDays: days(i.selected_at),
+          score: i.avg_score != null ? Number(Number(i.avg_score).toFixed(1)) : null,
+          questionId: i.question_id, questionLabel: q ? `${q.submodule} (${q.module})` : null,
+          deferredUntil: i.decision === "defer" ? i.until_date : null, deferReason: i.decision === "defer" ? i.decision_reason : null,
+        };
+      }),
+      ...apps.map((a) => ({
+        sourceType: "rise_application", sourceId: a.id, workflow: "startup",
+        title: a.startup_name, description: a.pitch, subtitle: `RISE-${String(a.id).padStart(5, "0")} · founder ${a.founder_name}`,
+        reference: `RISE-${String(a.id).padStart(5, "0")}`,
+        founderName: a.founder_name, founderEmail: a.email, sector: a.sector,
+        clientId: a.client_id, clientName: a.client_company || a.client_name,
+        selectedAt: a.selected_at, waitingDays: days(a.selected_at),
+        score: a.avg_score != null ? Number(Number(a.avg_score).toFixed(1)) : null,
+        deferredUntil: a.decision === "defer" ? a.until_date : null, deferReason: a.decision === "defer" ? a.decision_reason : null,
+      })),
+    ].sort((x, y) => (y.waitingDays || 0) - (x.waitingDays || 0));
+    res.json({ items });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/admin/build/ready/:sourceType/:sourceId/not-now { action: 'defer'|'decline', untilDate?, reason }
+router.post("/ready/:sourceType/:sourceId/not-now", async (req, res, next) => {
+  try {
+    const sourceType = req.params.sourceType;
+    const sourceId = toId(req.params.sourceId);
+    if (!["idea", "rise_application"].includes(sourceType) || !sourceId) return res.status(400).json({ error: "Unknown item." });
+    const { action, untilDate, reason } = req.body || {};
+    if (!["defer", "decline"].includes(action)) return res.status(400).json({ error: "Choose Defer or Decline." });
+    if (!clean(reason)) return res.status(400).json({ error: "Give a reason." });
+    if (action === "defer" && !untilDate) return res.status(400).json({ error: "Pick the date to come back to it." });
+    await pool.query(
+      `INSERT INTO build_ready_decisions (source_type, source_id, action, until_date, reason, by_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (source_type, source_id) DO UPDATE SET action = EXCLUDED.action, until_date = EXCLUDED.until_date,
+         reason = EXCLUDED.reason, by_user_id = EXCLUDED.by_user_id, at = now()`,
+      [sourceType, sourceId, action, action === "defer" ? untilDate : null, clean(reason), req.user.id]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/admin/build/ready/:sourceType/:sourceId/not-now -- undo a defer.
+router.delete("/ready/:sourceType/:sourceId/not-now", async (req, res, next) => {
+  try {
+    await pool.query("DELETE FROM build_ready_decisions WHERE source_type = $1 AND source_id = $2", [req.params.sourceType, toId(req.params.sourceId)]);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* =========================================================================
+   PROJECT CREATION -- always with its people.
+   Internal: Client Leader (the client account) + Product Owner + Employee
+   (+ RIV Client Partner). Startup: Client Leader + Product Owner + Startup
+   POC (+ RIV Client Partner).
+   ========================================================================= */
+
+// POST /api/admin/build/projects -- manual creation (an idea or startup
+// that didn't come through RIOS).
+//   { type, title, description?, clientId, pocUserId, ownerUserId?, rivManagerId?, targetEnd,
+//     questionId?, startupPoc?: { name, email, password, company } }
+router.post("/projects", async (req, res, next) => {
+  try {
+    const { type, title, description, targetEnd } = req.body || {};
+    const clientId = toId(req.body?.clientId);
+    const pocUserId = toId(req.body?.pocUserId);
+    let ownerUserId = toId(req.body?.ownerUserId);
+    const rivManagerId = toId(req.body?.rivManagerId);
+    if (!["internal", "startup"].includes(type)) return res.status(400).json({ error: "Choose Internal idea or Startup pilot." });
+    if (!clean(title)) return res.status(400).json({ error: "Title is required." });
+    if (!clientId) return res.status(400).json({ error: "Choose the client." });
+    if (!pocUserId) return res.status(400).json({ error: "Choose the Product Owner." });
+    if (!targetEnd) return res.status(400).json({ error: "Target end date is required." });
+    const { rows: clientRows } = await pool.query("SELECT id FROM users WHERE id = $1 AND role = 'client'", [clientId]);
+    if (!clientRows.length) return res.status(404).json({ error: "That client account doesn't exist." });
+    const questionId = validateQuestion(req.body?.questionId);
+
+    if (type === "startup" && !ownerUserId && req.body?.startupPoc) {
+      ownerUserId = await createStartupPocLogin(clientId, req.body.startupPoc);
+    }
+    await validatePeople(clientId, { pocUserId, ownerUserId, rivManagerId }, type === "startup" ? "startup_poc" : "junior_employee");
+
+    const project = await insertProject({
+      code: await nextCode(), type, title: clean(title), description: clean(description),
+      clientId, ownerUserId, pocUserId, rivManagerId, targetEnd, createdBy: req.user.id,
+    });
+    await pool.query("INSERT INTO build_project_sources (project_id, source_type, source_id, question_id) VALUES ($1,'manual',NULL,$2)", [project.id, questionId]);
+    await notifyCreated(project, "by RIV Admin");
+    res.status(201).json({ project });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+// POST /api/admin/build/from-idea/:ideaId
+//   { pocUserId, ownerUserId? (defaults to the idea's author), rivManagerId?, targetEnd, title?, questionId? }
 router.post("/from-idea/:ideaId", async (req, res, next) => {
   try {
     const { rows: ideaRows } = await pool.query("SELECT * FROM ideas WHERE id = $1", [req.params.ideaId]);
     const idea = ideaRows[0];
     if (!idea) return res.status(404).json({ error: "Idea not found." });
-    if (!idea.selected_for_build_at) return res.status(400).json({ error: "This idea hasn't been marked \"Selected for Build\" yet." });
+    if (!idea.selected_for_build_at) return res.status(400).json({ error: "This idea hasn't been selected for Build yet." });
     if (!idea.source_client_id) return res.status(400).json({ error: "This idea has no client to attach the project to." });
-    await assertClientInScope(req, idea.source_client_id);
-
     const { rows: existing } = await pool.query(
       "SELECT p.code FROM build_project_sources s JOIN build_projects p ON p.id = s.project_id WHERE s.source_type = 'idea' AND s.source_id = $1",
       [idea.id]
     );
     if (existing.length) return res.status(409).json({ error: `Already in Build as ${existing[0].code}.` });
 
-    const question = QUESTIONS.find((q) => q.id === Number(idea.question_id));
-    const code = await nextCode();
-    const stage = STAGES.internal[0];
-    const { rows } = await pool.query(
-      `INSERT INTO build_projects (code, type, title, description, client_id, owner_user_id, stage, created_by)
-       VALUES ($1,'internal',$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [code, idea.title, idea.description, idea.source_client_id, idea.submitted_by, stage, req.user.id]
-    );
-    const project = rows[0];
-    await pool.query(
-      "INSERT INTO build_project_sources (project_id, source_type, source_id, question_id) VALUES ($1,'idea',$2,$3)",
-      [project.id, idea.id, idea.question_id]
-    );
-    await pool.query(
-      `INSERT INTO build_stage_history (project_id, from_stage, to_stage, action, by_user_id) VALUES ($1,NULL,$2,'advance',$3)`,
-      [project.id, stage, req.user.id]
-    );
+    const clientId = idea.source_client_id;
+    const pocUserId = toId(req.body?.pocUserId);
+    const ownerUserId = toId(req.body?.ownerUserId) || idea.submitted_by;
+    const rivManagerId = toId(req.body?.rivManagerId);
+    const targetEnd = req.body?.targetEnd;
+    if (!pocUserId) return res.status(400).json({ error: "Choose the Product Owner." });
+    if (!targetEnd) return res.status(400).json({ error: "Target end date is required." });
+    // The idea's own author is always allowed as the Employee, even if their
+    // login predates per-client employee accounts (client_id not set).
+    await validatePeople(clientId, { pocUserId, ownerUserId: ownerUserId === idea.submitted_by ? null : ownerUserId, rivManagerId }, "junior_employee");
+    const questionId = validateQuestion(req.body?.questionId) || idea.question_id;
 
-    const recipients = await recipientsForProject(project, ["owner"]);
-    await notifyBuild(recipients, {
-      projectId: project.id, projectCode: project.code, kind: "created",
-      message: `${project.code} was created from your Ideathon win${question ? ` ("${question.text?.slice(0, 60) || ""}")` : ""}.`,
-      subject: `RIOS Build: ${project.code} created from your Ideathon win`,
-      heading: "Your idea is now a Build project",
-      body: `"${idea.title}" has been turned into a Build project (${project.code}). You're the project owner.`,
+    const project = await insertProject({
+      code: await nextCode(), type: "internal", title: clean(req.body?.title) || idea.title, description: idea.description,
+      clientId, ownerUserId, pocUserId, rivManagerId, targetEnd, createdBy: req.user.id,
     });
-
+    await pool.query("INSERT INTO build_project_sources (project_id, source_type, source_id, question_id) VALUES ($1,'idea',$2,$3)", [project.id, idea.id, questionId]);
+    await pool.query("DELETE FROM build_ready_decisions WHERE source_type = 'idea' AND source_id = $1", [idea.id]);
+    await notifyCreated(project, "from your Ideathon winner");
     res.status(201).json({ project });
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }
 });
 
-// POST /api/admin/build/from-application/:applicationId  (BLD-AC02)
-// The application must already be marked decision='selected_for_pilot'
-// (PUT /api/admin/rise/applications/:id/decision in riseAdmin.js -- R22).
+// POST /api/admin/build/from-application/:applicationId
+//   { pocUserId, rivManagerId?, targetEnd, title?, questionId?, clientId? (only if the call has none),
+//     ownerUserId? (existing Startup POC) | startupPoc?: { name, email, password } }
 router.post("/from-application/:applicationId", async (req, res, next) => {
   try {
     const { rows: appRows } = await pool.query(
@@ -173,43 +341,40 @@ router.post("/from-application/:applicationId", async (req, res, next) => {
     );
     const app = appRows[0];
     if (!app) return res.status(404).json({ error: "Application not found." });
-    if (app.decision !== "selected_for_pilot") return res.status(400).json({ error: "This application hasn't been marked \"Selected for Pilot\" yet." });
-    const clientId = toId(req.body?.clientId) || app.opportunity_client_id;
-    if (!clientId) return res.status(400).json({ error: "This call has no client attached -- pass a valid numeric clientId, or set one on the call first." });
-    await assertClientInScope(req, clientId);
-
+    if (app.decision !== "selected_for_pilot") return res.status(400).json({ error: "This application hasn't been selected for pilot yet." });
+    const clientId = app.opportunity_client_id || toId(req.body?.clientId);
+    if (!clientId) return res.status(400).json({ error: "This startup call has no client. Set the client on the call first." });
     const { rows: clientRows } = await pool.query("SELECT id FROM users WHERE id = $1 AND role = 'client'", [clientId]);
     if (!clientRows.length) return res.status(404).json({ error: "That client account doesn't exist." });
-
     const { rows: existing } = await pool.query(
       "SELECT p.code FROM build_project_sources s JOIN build_projects p ON p.id = s.project_id WHERE s.source_type = 'rise_application' AND s.source_id = $1",
       [app.id]
     );
     if (existing.length) return res.status(409).json({ error: `Already in Build as ${existing[0].code}.` });
 
-    // Average jury score, carried across for reference (section 7 "How a project starts").
-    const { rows: scoreRows } = await pool.query("SELECT AVG(total) AS avg_total FROM rise_scores WHERE application_id = $1", [app.id]);
-    const avgScore = scoreRows[0]?.avg_total != null ? Number(scoreRows[0].avg_total) : null;
+    const pocUserId = toId(req.body?.pocUserId);
+    const rivManagerId = toId(req.body?.rivManagerId);
+    const targetEnd = req.body?.targetEnd;
+    if (!pocUserId) return res.status(400).json({ error: "Choose the Product Owner." });
+    if (!targetEnd) return res.status(400).json({ error: "Target end date is required." });
+    let ownerUserId = toId(req.body?.ownerUserId);
+    if (!ownerUserId && req.body?.startupPoc) {
+      ownerUserId = await createStartupPocLogin(clientId, { company: app.startup_name, ...req.body.startupPoc });
+    }
+    if (!ownerUserId) return res.status(400).json({ error: "Add the Startup POC (create their login here or pick an existing one)." });
+    await validatePeople(clientId, { pocUserId, ownerUserId, rivManagerId }, "startup_poc");
+    const questionId = validateQuestion(req.body?.questionId);
 
-    const code = await nextCode();
-    const stage = STAGES.startup[0];
-    const { rows } = await pool.query(
-      `INSERT INTO build_projects (code, type, title, description, client_id, riv_manager_id, stage, created_by)
-       VALUES ($1,'startup',$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [code, `${app.startup_name} — Pilot`, app.pitch, clientId, req.user.role === "riv_manager" ? req.user.id : null, stage, req.user.id]
-    );
-    const project = rows[0];
-    await pool.query(
-      "INSERT INTO build_project_sources (project_id, source_type, source_id) VALUES ($1,'rise_application',$2)",
-      [project.id, app.id]
-    );
-    await pool.query(
-      `INSERT INTO build_stage_history (project_id, from_stage, to_stage, action, by_user_id) VALUES ($1,NULL,$2,'advance',$3)`,
-      [project.id, stage, req.user.id]
-    );
-
-    res.status(201).json({ project, startup: { name: app.startup_name, founder: app.founder_name, email: app.email, sector: app.sector, stage: app.stage, avgScore } });
+    const project = await insertProject({
+      code: await nextCode(), type: "startup", title: clean(req.body?.title) || `${app.startup_name}: pilot`, description: app.pitch,
+      clientId, ownerUserId, pocUserId, rivManagerId, targetEnd, createdBy: req.user.id,
+    });
+    await pool.query("INSERT INTO build_project_sources (project_id, source_type, source_id, question_id) VALUES ($1,'rise_application',$2,$3)", [project.id, app.id, questionId]);
+    await pool.query("DELETE FROM build_ready_decisions WHERE source_type = 'rise_application' AND source_id = $1", [app.id]);
+    await notifyCreated(project, `from startup call RISE-${String(app.id).padStart(5, "0")}`);
+    res.status(201).json({ project });
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }
 });
@@ -222,12 +387,11 @@ router.put("/projects/:id/assign", async (req, res, next) => {
     const { rows } = await pool.query("SELECT * FROM build_projects WHERE id = $1", [projectId]);
     const project = rows[0];
     if (!project) return res.status(404).json({ error: "Project not found." });
-    await assertClientInScope(req, project.client_id);
-
     const ownerUserId = toId(req.body?.ownerUserId);
     const pocUserId = toId(req.body?.pocUserId);
     const rivManagerId = toId(req.body?.rivManagerId);
-    const { rows: out } = await pool.query(
+    await validatePeople(project.client_id, { pocUserId, ownerUserId, rivManagerId }, project.type === "startup" ? "startup_poc" : "junior_employee");
+    const { rows: outRows } = await pool.query(
       `UPDATE build_projects SET
          owner_user_id = COALESCE($1, owner_user_id),
          poc_user_id = COALESCE($2, poc_user_id),
@@ -236,7 +400,88 @@ router.put("/projects/:id/assign", async (req, res, next) => {
        WHERE id = $4 RETURNING *`,
       [ownerUserId, pocUserId, rivManagerId, project.id]
     );
-    res.json({ project: out[0] });
+    const changed = outRows[0];
+    const newPeople = { owner_user_id: ownerUserId, poc_user_id: pocUserId, riv_manager_id: rivManagerId, client_id: null };
+    const recipients = await recipientsForProject(newPeople, ["owner", "poc", "riv_manager"]);
+    await notifyBuild(recipients, {
+      projectId: changed.id, projectCode: changed.code, kind: "assigned",
+      message: `You were added to ${changed.code} "${changed.title}".`,
+      subject: `RIOS Build: you were added to ${changed.code}`,
+      heading: "You were added to a Build project",
+      body: `RIV Admin added you to ${changed.title} (${changed.code}).`,
+    });
+    res.json({ project: changed });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+// DELETE /api/admin/build/projects/:id -- RIV Admin only, permanent.
+router.delete("/projects/:id", async (req, res, next) => {
+  try {
+    const projectId = toId(req.params.id);
+    if (!projectId) return res.status(400).json({ error: "Invalid project ID." });
+    const { rows } = await pool.query("DELETE FROM build_projects WHERE id = $1 RETURNING code", [projectId]);
+    if (!rows.length) return res.status(404).json({ error: "Project not found." });
+    res.json({ ok: true, code: rows[0].code });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* =========================================================================
+   DELETE REQUESTS from RIV Client Partners
+   ========================================================================= */
+
+// GET /api/admin/build/delete-requests?status=pending
+router.get("/delete-requests", async (req, res, next) => {
+  try {
+    const status = ["pending", "approved", "declined"].includes(req.query.status) ? req.query.status : "pending";
+    const { rows } = await pool.query(
+      `SELECT r.*, p.code AS project_code, p.title AS project_title, u.name AS requested_by_name, d.name AS decided_by_name
+       FROM build_delete_requests r
+       JOIN build_projects p ON p.id = r.project_id
+       LEFT JOIN users u ON u.id = r.requested_by
+       LEFT JOIN users d ON d.id = r.decided_by
+       WHERE r.status = $1 ORDER BY r.requested_at DESC LIMIT 100`,
+      [status]
+    );
+    res.json({ requests: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/admin/build/delete-requests/:id { decision: 'approve'|'decline' }
+router.put("/delete-requests/:id", async (req, res, next) => {
+  try {
+    const { rows } = await pool.query("SELECT * FROM build_delete_requests WHERE id = $1", [toId(req.params.id)]);
+    const request = rows[0];
+    if (!request) return res.status(404).json({ error: "Request not found." });
+    if (request.status !== "pending") return res.status(400).json({ error: "This request was already decided." });
+    const { decision } = req.body || {};
+    if (!["approve", "decline"].includes(decision)) return res.status(400).json({ error: "Approve or decline." });
+    if (decision === "approve") {
+      const table = request.target_type === "file" ? "build_files" : "build_updates";
+      await pool.query(`DELETE FROM ${table} WHERE id = $1 AND project_id = $2`, [request.target_id, request.project_id]);
+    }
+    await pool.query(
+      "UPDATE build_delete_requests SET status = $1, decided_by = $2, decided_at = now() WHERE id = $3",
+      [decision === "approve" ? "approved" : "declined", req.user.id, request.id]
+    );
+    if (request.requested_by) {
+      const { rows: who } = await pool.query("SELECT id, email, name FROM users WHERE id = $1", [request.requested_by]);
+      const { rows: proj } = await pool.query("SELECT code FROM build_projects WHERE id = $1", [request.project_id]);
+      await notifyBuild(who, {
+        projectId: request.project_id, projectCode: proj[0]?.code, kind: "delete_request",
+        message: `Your delete request for "${request.target_label}" was ${decision === "approve" ? "approved" : "declined"}.`,
+        subject: `RIOS Build: delete request ${decision === "approve" ? "approved" : "declined"}`,
+        heading: "Your delete request was decided",
+        body: `RIV Admin ${decision === "approve" ? "approved and deleted" : "declined"} "${request.target_label}" on ${proj[0]?.code || "the project"}.`,
+      });
+    }
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }
