@@ -368,6 +368,10 @@ export const api = {
   listBuildPocs: (clientId) => buildRequest(`/admin/build/poc${toQuery({ clientId })}`),
   createBuildPoc: (payload) => buildRequest("/admin/build/poc", { method: "POST", body: payload }),
   deleteBuildPoc: (id) => buildRequest(`/admin/build/poc/${id}`, { method: "DELETE" }),
+  listBuildStartupPocs: (projectId) => buildRequest(`/admin/build/startup-poc${toQuery({ projectId })}`),
+  createBuildStartupPoc: (payload) => buildRequest("/admin/build/startup-poc", { method: "POST", body: payload }),
+  deleteBuildStartupPoc: (id) => buildRequest(`/admin/build/startup-poc/${id}`, { method: "DELETE" }),
+  getReadyForBuild: () => buildRequest("/admin/build/ready-for-build"),
   // Build-scoped Client Leader logins -- separate from the main site's own
   // Manage Clients (api.listClients/createClient), which still creates
   // ordinary full-access clients. These are "client" role too, just flagged

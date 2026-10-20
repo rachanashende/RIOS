@@ -1833,14 +1833,26 @@ function ClientPicker({ value, onChange, required, label, hint }) {
   );
 }
 
-function CreateProjectPanel({ onCreated }) {
-  const [mode, setMode] = useState("manual");
-  const [form, setForm] = useState({ type: "internal", title: "", description: "", clientId: "", targetEnd: "", productOwnerUserId: "" });
-  const [ideaId, setIdeaId] = useState("");
-  const [applicationId, setApplicationId] = useState("");
+function CreateProjectPanel({ onCreated, prefill }) {
+  const [mode, setMode] = useState(prefill?.mode || "manual");
+  const [form, setForm] = useState({ type: "internal", title: "", description: "", clientId: prefill?.clientId || "", targetEnd: "", productOwnerUserId: "" });
+  const [ideaId, setIdeaId] = useState(prefill?.ideaId || "");
+  const [applicationId, setApplicationId] = useState(prefill?.applicationId || "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+
+  // A "Review & create" click from the Ready for Build queue pre-fills
+  // mode + the idea/application id (and clientId, for the manual form) --
+  // re-sync whenever a new prefill arrives (object identity changes each
+  // time the queue hands over a different row).
+  useEffect(() => {
+    if (!prefill) return;
+    setMode(prefill.mode || "manual");
+    if (prefill.ideaId) setIdeaId(prefill.ideaId);
+    if (prefill.applicationId) setApplicationId(prefill.applicationId);
+    if (prefill.clientId) setForm((f) => ({ ...f, clientId: prefill.clientId }));
+  }, [prefill]);
 
   // So a project doesn't have to go through the Assign tab afterward just
   // to get a POC on it -- when a client has POC logins already, offer them
@@ -1851,14 +1863,34 @@ function CreateProjectPanel({ onCreated }) {
     api.listBuildPocs(form.clientId).then((d) => setPocs(d.pocs || [])).catch(() => setPocs(null));
   }, [form.clientId]);
 
+  // "Create the Startup POC login" (page 5 of the Oct 2026 mockup) -- only
+  // offered for a manually-created startup project (the idea/application
+  // paths don't collect this; a Startup POC can always be added afterward
+  // from the Logins tab). No email is actually sent (no infra for that
+  // anywhere in Build.RIV today -- other login types work the same way,
+  // admin shares the temp password directly), so this is labelled honestly
+  // rather than promising an invite email the backend doesn't send.
+  const [createPoc, setCreatePoc] = useState(false);
+  const [pocForm, setPocForm] = useState({ name: "", email: "", password: "" });
+  const [pocCreds, setPocCreds] = useState(null);
+
   async function submit(e) {
     e.preventDefault();
-    setSubmitting(true); setError(null); setNotice(null);
+    setSubmitting(true); setError(null); setNotice(null); setPocCreds(null);
     try {
       if (mode === "manual") {
         if (!form.title.trim() || !form.clientId) throw new Error("Title and clientId are required.");
         const d = await api.createBuildProject(form);
-        setNotice(`Created ${d.project.code}.`);
+        let noticeText = `Created ${d.project.code}.`;
+        if (form.type === "startup" && createPoc) {
+          if (!pocForm.name.trim() || !pocForm.email.trim() || pocForm.password.length < 8) {
+            throw new Error(`${d.project.code} was created, but the Startup POC login needs a name, email, and an 8+ character temporary password.`);
+          }
+          await api.createBuildStartupPoc({ ...pocForm, projectId: d.project.id });
+          setPocCreds({ email: pocForm.email, password: pocForm.password });
+          noticeText += ` Startup POC login created for ${pocForm.email} -- share the temporary password with them yourself.`;
+        }
+        setNotice(noticeText);
         onCreated();
       } else if (mode === "idea") {
         const d = await api.createBuildProjectFromIdea(ideaId);
@@ -1904,6 +1936,22 @@ function CreateProjectPanel({ onCreated }) {
               </select>
             </Field>
             <Field label="Target end date"><input type="date" style={inputStyle} value={form.targetEnd} onChange={(e) => setForm((f) => ({ ...f, targetEnd: e.target.value }))} /></Field>
+
+            {form.type === "startup" && (
+              <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontSize: 13, fontWeight: 600, color: BRAND.ink, cursor: "pointer" }}>
+                  <input type="checkbox" checked={createPoc} onChange={(e) => setCreatePoc(e.target.checked)} />
+                  Create a Startup POC login for this pilot
+                </label>
+                {createPoc && (
+                  <div style={{ marginTop: 12 }}>
+                    <Field label="Startup POC name" required><input style={inputStyle} value={pocForm.name} onChange={(e) => setPocForm((f) => ({ ...f, name: e.target.value }))} /></Field>
+                    <Field label="Startup POC email" required><input type="email" style={inputStyle} value={pocForm.email} onChange={(e) => setPocForm((f) => ({ ...f, email: e.target.value }))} /></Field>
+                    <Field label="Temporary password" required hint="8+ characters. They'll be asked to change it on first login."><input style={inputStyle} value={pocForm.password} onChange={(e) => setPocForm((f) => ({ ...f, password: e.target.value }))} /></Field>
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
         {mode === "idea" && (
@@ -1917,9 +1965,71 @@ function CreateProjectPanel({ onCreated }) {
           </Field>
         )}
         {notice && <Notice text={notice} />}
+        {pocCreds && (
+          <div style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.ink, background: BRAND.cream, border: `1px solid ${BRAND.line}`, borderRadius: 9, padding: "10px 12px", marginBottom: 16 }}>
+            Startup POC credentials — email: <b>{pocCreds.email}</b>, temporary password: <b>{pocCreds.password}</b>. Share these with them directly; Build.RIV doesn't send login emails itself.
+          </div>
+        )}
         <ErrorBanner text={error} />
         <PrimaryButton type="submit" disabled={submitting} icon={submitting ? Loader2 : Plus}>{submitting ? "Creating…" : "Create project"}</PrimaryButton>
       </form>
+    </Card>
+  );
+}
+
+// "Ready for Build" queue (Oct 2026 "Proposed Screens" admin console,
+// page 5) -- ideas/applications that have cleared selection but have no
+// Build project yet, so an admin doesn't have to already know a numeric
+// idea/application ID to act on it. "Review & create" hands the row to
+// CreateProjectPanel via prefill. The mockup's "Not now" (defer/decline)
+// action is deliberately left out -- there's no backing schema for either
+// on an idea or application (no deferred-until date, no decline-reason
+// field), so it would have to be invented from nothing rather than wired
+// to real data; same reasoning as skipping the "Requests from Client
+// Partners" tab below.
+function ReadyForBuildPanel({ onReview }) {
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState(null);
+
+  function load() {
+    api.getReadyForBuild().then((d) => setItems(d.items || [])).catch((e) => setError(e.message || "Couldn't load the queue."));
+  }
+  useEffect(() => { load(); }, []);
+
+  if (error) return <ErrorBanner text={error} />;
+  if (!items) return <Spinner label="Loading queue…" />;
+  if (!items.length) return <EmptyState icon={CheckCircle2} title="Nothing waiting" text="Every selected idea and startup pilot already has a Build project." />;
+
+  return (
+    <Card style={{ padding: 0, overflow: "hidden" }}>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+          <thead><tr style={{ background: BRAND.cream, textAlign: "left" }}>
+            {["Source", "Item", "Client", "Selected", "Waiting", "Jury score", ""].map((h) => (
+              <th key={h} style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#7A746F", textTransform: "uppercase", padding: "10px 14px", borderBottom: `1px solid ${BRAND.line}`, whiteSpace: "nowrap" }}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {items.map((it) => (
+              <tr key={`${it.source}-${it.sourceId}`}>
+                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 11.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}`, whiteSpace: "nowrap" }}>
+                  {it.source === "idea" ? "Ideathon" : "Startup pilot"}
+                </td>
+                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 13, color: BRAND.ink, borderBottom: `1px solid ${BRAND.line}` }}>{it.title}</td>
+                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{it.clientName}</td>
+                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}`, whiteSpace: "nowrap" }}>{fmtDate(it.selectedAt)}</td>
+                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}`, color: it.waitingDays > 14 ? "#C13B3B" : "#7A746F", fontWeight: it.waitingDays > 14 ? 700 : 400, whiteSpace: "nowrap" }}>
+                  {it.waitingDays != null ? `${it.waitingDays}d` : "—"}
+                </td>
+                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{it.juryScore ?? "—"}</td>
+                <td style={{ padding: "10px 14px", borderBottom: `1px solid ${BRAND.line}`, whiteSpace: "nowrap" }}>
+                  <GhostButton onClick={() => onReview(it)}>Review & create</GhostButton>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 }
@@ -2261,18 +2371,30 @@ function OverdueDigestPanel() {
 }
 
 function AdminConsoleView({ reload }) {
-  const [tab, setTab] = useState("create");
+  const [tab, setTab] = useState("ready");
+  const [prefill, setPrefill] = useState(null);
   const tabs = [
+    { id: "ready", label: "Ready for Build" },
     { id: "create", label: "Create project" },
     { id: "assign", label: "Assign people" },
-    { id: "people", label: "POC / Manager logins" },
+    { id: "people", label: "Logins" },
     { id: "clients", label: "Manage Clients" },
     { id: "overdue", label: "Overdue digest" },
   ];
+  function reviewItem(it) {
+    setPrefill({
+      mode: it.source === "idea" ? "idea" : "application",
+      ideaId: it.source === "idea" ? it.sourceId : undefined,
+      applicationId: it.source === "rise_application" ? it.sourceId : undefined,
+      clientId: it.clientId || undefined,
+      key: `${it.source}-${it.sourceId}-${Date.now()}`,
+    });
+    setTab("create");
+  }
   return (
     <div style={{ maxWidth: 1180, margin: "0 auto", padding: "36px 24px 100px" }}>
       <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink, marginBottom: 4 }}>Build admin console</div>
-      <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 20 }}>Create and assign projects, and manage the two login types unique to Build.</div>
+      <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 20 }}>Create and assign projects, and manage the login types unique to Build.</div>
       <div style={{ display: "flex", gap: 4, borderBottom: `1px solid ${BRAND.line}`, marginBottom: 20, overflowX: "auto" }}>
         {tabs.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
@@ -2282,7 +2404,8 @@ function AdminConsoleView({ reload }) {
           }}>{t.label}</button>
         ))}
       </div>
-      {tab === "create" && <CreateProjectPanel onCreated={reload} />}
+      {tab === "ready" && <ReadyForBuildPanel onReview={reviewItem} />}
+      {tab === "create" && <CreateProjectPanel onCreated={reload} prefill={prefill} />}
       {tab === "assign" && <AssignPanel />}
       {tab === "people" && <PeoplePanel />}
       {tab === "clients" && <ManageBuildClientsPanel />}

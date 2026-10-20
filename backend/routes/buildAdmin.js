@@ -55,6 +55,67 @@ async function assertClientInScope(req, clientId) {
 }
 
 /* =========================================================================
+   READY FOR BUILD (Oct 2026 "Proposed Screens" -- admin console, screen 3)
+   ========================================================================= */
+
+// GET /api/admin/build/ready-for-build -- the queue of ideas/applications
+// that have cleared selection but have no Build project yet (page 5 of the
+// mockup). Built from the same "already selected, not yet converted" check
+// the from-idea/from-application routes already do one-at-a-time; this
+// just surfaces the list so an admin doesn't have to already know an idea
+// or application's numeric ID to act on it.
+router.get("/ready-for-build", async (req, res, next) => {
+  try {
+    const assigned = await assignedClientIds(req.user); // null = admin, no restriction
+    const clientParam = assigned === null ? [] : [assigned];
+    const clientClause = (col) => (assigned === null ? "" : `AND ${col} = ANY($1::int[])`);
+
+    const { rows: ideaRows } = await pool.query(
+      `SELECT i.id, i.title, i.selected_for_build_at AS selected_at, i.source_client_id AS client_id,
+              COALESCE(cl.company, cl.name) AS client_name
+       FROM ideas i
+       LEFT JOIN users cl ON cl.id = i.source_client_id
+       WHERE i.selected_for_build_at IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM build_project_sources s WHERE s.source_type = 'idea' AND s.source_id = i.id)
+         ${clientClause("i.source_client_id")}
+       ORDER BY i.selected_for_build_at ASC`,
+      clientParam
+    );
+    const { rows: appRows } = await pool.query(
+      `SELECT a.id, a.startup_name AS title, a.decided_at AS selected_at, o.client_id,
+              COALESCE(cl.company, cl.name) AS client_name,
+              (SELECT AVG(sc.total) FROM rise_scores sc WHERE sc.application_id = a.id) AS jury_score
+       FROM rise_applications a
+       LEFT JOIN rise_opportunities o ON o.id = a.opportunity_id
+       LEFT JOIN users cl ON cl.id = o.client_id
+       WHERE a.decision = 'selected_for_pilot'
+         AND NOT EXISTS (SELECT 1 FROM build_project_sources s WHERE s.source_type = 'rise_application' AND s.source_id = a.id)
+         ${clientClause("o.client_id")}
+       ORDER BY a.decided_at ASC`,
+      clientParam
+    );
+
+    const now = Date.now();
+    const waitingDays = (d) => (d ? Math.max(0, Math.round((now - new Date(d)) / 86400000)) : null);
+    const items = [
+      ...ideaRows.map((r) => ({
+        source: "idea", sourceId: r.id, title: r.title, clientId: r.client_id, clientName: r.client_name || "—",
+        selectedAt: r.selected_at, waitingDays: waitingDays(r.selected_at), juryScore: null,
+      })),
+      ...appRows.map((r) => ({
+        source: "rise_application", sourceId: r.id, title: r.title, clientId: r.client_id, clientName: r.client_name || "—",
+        selectedAt: r.selected_at, waitingDays: waitingDays(r.selected_at),
+        juryScore: r.jury_score != null ? Number(r.jury_score).toFixed(1) : null,
+      })),
+    ].sort((a, b) => new Date(a.selectedAt || 0) - new Date(b.selectedAt || 0));
+
+    res.json({ items });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* =========================================================================
    PROJECT CREATION
    ========================================================================= */
 
