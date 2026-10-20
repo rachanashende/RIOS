@@ -67,7 +67,15 @@ async function widenRoleConstraint(newRoles) {
 }
 
 export async function initBuildSchema() {
-  await widenRoleConstraint(["client_poc", "riv_manager"]);
+  // Oct 2026 "Proposed Screens" redesign: client_poc is renamed product_owner
+  // (same client-side co-owner of delivery, just the name the screens use),
+  // and startup_poc is new -- the external startup's own rep on a startup
+  // pilot project (uploads deal documents, posts updates), scoped to one
+  // project via build_projects.startup_poc_user_id below. riv_manager is
+  // unchanged as a role value -- only its on-screen label becomes "RIV
+  // Client Partner" (frontend-only).
+  await widenRoleConstraint(["product_owner", "riv_manager", "startup_poc"]);
+  await pool.query(`UPDATE users SET role = 'product_owner' WHERE role = 'client_poc';`);
 
   // The owner wants client logins created specifically for a Build/Transform
   // engagement to be scoped to Build.RIV only -- no access to the main RIOS
@@ -142,9 +150,9 @@ export async function initBuildSchema() {
       title TEXT NOT NULL,
       description TEXT,
       client_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-      poc_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      product_owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
       riv_manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      startup_poc_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
       stage TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','on_hold','stopped','closed')),
       health TEXT CHECK (health IN ('on_track','at_risk','off_track')),
@@ -330,6 +338,38 @@ export async function initBuildSchema() {
       UNIQUE(project_id, question_id)
     );
   `);
+
+  // Oct 2026 "Proposed Screens" redesign -- rename the two pre-existing
+  // relationship columns on an already-live build_projects table (the
+  // CREATE TABLE IF NOT EXISTS above only applies to a brand-new table).
+  // poc_user_id -> product_owner_user_id (role rename, see widenRoleConstraint
+  // call above); owner_user_id is retired outright (merged into Product
+  // Owner -- there is no longer a separate "project owner" relationship).
+  // Both steps are guarded so they're safe to run against a table that
+  // either still has the old columns (live deploy) or never did (fresh DB,
+  // where CREATE TABLE above already created product_owner_user_id/
+  // startup_poc_user_id directly and these are no-ops).
+  await pool.query(`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'build_projects' AND column_name = 'poc_user_id')
+         AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'build_projects' AND column_name = 'product_owner_user_id') THEN
+        ALTER TABLE build_projects RENAME COLUMN poc_user_id TO product_owner_user_id;
+      END IF;
+    END $$;
+  `);
+  await pool.query(`ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS product_owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
+  await pool.query(`ALTER TABLE build_projects DROP COLUMN IF EXISTS owner_user_id;`);
+  await pool.query(`ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS startup_poc_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
+
+  // New deal-stage fields (Startup pilot's Agreement stage split into NDA ->
+  // Proposal -> Purchase Order -> Agreement, per the proposed-screens deal
+  // summary panel). agreement_type/agreement_signed_at/pilot_fee already
+  // existed and keep covering the Agreement stage itself.
+  await pool.query(`ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS nda_signed_at DATE;`);
+  await pool.query(`ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS proposal_amount NUMERIC;`);
+  await pool.query(`ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS proposal_accepted_at DATE;`);
+  await pool.query(`ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS po_number TEXT;`);
+  await pool.query(`ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS po_raised_at DATE;`);
 
   // Idempotent backfill: a project created from an idea or application
   // inherits client_id from that source where it's missing (safe no-op

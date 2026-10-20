@@ -67,8 +67,7 @@ router.post("/projects", async (req, res, next) => {
   try {
     const { type, title, description, targetEnd } = req.body || {};
     const clientId = toId(req.body?.clientId);
-    const ownerUserId = toId(req.body?.ownerUserId);
-    const pocUserId = toId(req.body?.pocUserId);
+    const productOwnerUserId = toId(req.body?.productOwnerUserId);
     const rivManagerId = toId(req.body?.rivManagerId);
     if (!["internal", "startup"].includes(type)) return res.status(400).json({ error: "type must be 'internal' or 'startup'." });
     if (!title || !String(title).trim()) return res.status(400).json({ error: "Title is required." });
@@ -81,9 +80,9 @@ router.post("/projects", async (req, res, next) => {
     const code = await nextCode();
     const stage = STAGES[type][0]; // 'requirements'
     const { rows } = await pool.query(
-      `INSERT INTO build_projects (code, type, title, description, client_id, owner_user_id, poc_user_id, riv_manager_id, stage, target_end, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [code, type, String(title).trim(), clean(description), clientId, ownerUserId, pocUserId,
+      `INSERT INTO build_projects (code, type, title, description, client_id, product_owner_user_id, riv_manager_id, stage, target_end, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [code, type, String(title).trim(), clean(description), clientId, productOwnerUserId,
         rivManagerId || (req.user.role === "riv_manager" ? req.user.id : null), stage, clean(targetEnd), req.user.id]
     );
     const project = rows[0];
@@ -96,7 +95,7 @@ router.post("/projects", async (req, res, next) => {
       [project.id, stage, req.user.id]
     );
 
-    const recipients = await recipientsForProject(project, ["owner", "poc", "riv_manager"]);
+    const recipients = await recipientsForProject(project, ["poc", "riv_manager"]);
     await notifyBuild(recipients, {
       projectId: project.id, projectCode: project.code, kind: "created",
       message: `${project.code} was created.`, subject: `RIOS Build: ${project.code} created`,
@@ -131,9 +130,9 @@ router.post("/from-idea/:ideaId", async (req, res, next) => {
     const code = await nextCode();
     const stage = STAGES.internal[0];
     const { rows } = await pool.query(
-      `INSERT INTO build_projects (code, type, title, description, client_id, owner_user_id, stage, created_by)
-       VALUES ($1,'internal',$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [code, idea.title, idea.description, idea.source_client_id, idea.submitted_by, stage, req.user.id]
+      `INSERT INTO build_projects (code, type, title, description, client_id, stage, created_by)
+       VALUES ($1,'internal',$2,$3,$4,$5,$6) RETURNING *`,
+      [code, idea.title, idea.description, idea.source_client_id, stage, req.user.id]
     );
     const project = rows[0];
     await pool.query(
@@ -145,14 +144,21 @@ router.post("/from-idea/:ideaId", async (req, res, next) => {
       [project.id, stage, req.user.id]
     );
 
-    const recipients = await recipientsForProject(project, ["owner"]);
-    await notifyBuild(recipients, {
-      projectId: project.id, projectCode: project.code, kind: "created",
-      message: `${project.code} was created from your Ideathon win${question ? ` ("${question.text?.slice(0, 60) || ""}")` : ""}.`,
-      subject: `RIOS Build: ${project.code} created from your Ideathon win`,
-      heading: "Your idea is now a Build project",
-      body: `"${idea.title}" has been turned into a Build project (${project.code}). You're the project owner.`,
-    });
+    // The idea's own submitter isn't a column on build_projects (there's no
+    // separate "owner" relationship any more -- see buildPermissions.js);
+    // they're found via the source link just inserted, so notify them
+    // directly from the idea row already in hand rather than through
+    // recipientsForProject.
+    if (idea.submitted_by) {
+      const { rows: empRows } = await pool.query("SELECT id, email, name FROM users WHERE id = $1", [idea.submitted_by]);
+      await notifyBuild(empRows, {
+        projectId: project.id, projectCode: project.code, kind: "created",
+        message: `${project.code} was created from your Ideathon win${question ? ` ("${question.text?.slice(0, 60) || ""}")` : ""}.`,
+        subject: `RIOS Build: ${project.code} created from your Ideathon win`,
+        heading: "Your idea is now a Build project",
+        body: `"${idea.title}" has been turned into a Build project (${project.code}).`,
+      });
+    }
 
     res.status(201).json({ project });
   } catch (err) {
@@ -214,7 +220,7 @@ router.post("/from-application/:applicationId", async (req, res, next) => {
   }
 });
 
-// PUT /api/admin/build/projects/:id/assign { ownerUserId?, pocUserId?, rivManagerId? }
+// PUT /api/admin/build/projects/:id/assign { productOwnerUserId?, rivManagerId?, startupPocUserId? }
 router.put("/projects/:id/assign", async (req, res, next) => {
   try {
     const projectId = toId(req.params.id);
@@ -224,17 +230,17 @@ router.put("/projects/:id/assign", async (req, res, next) => {
     if (!project) return res.status(404).json({ error: "Project not found." });
     await assertClientInScope(req, project.client_id);
 
-    const ownerUserId = toId(req.body?.ownerUserId);
-    const pocUserId = toId(req.body?.pocUserId);
+    const productOwnerUserId = toId(req.body?.productOwnerUserId);
     const rivManagerId = toId(req.body?.rivManagerId);
+    const startupPocUserId = toId(req.body?.startupPocUserId);
     const { rows: out } = await pool.query(
       `UPDATE build_projects SET
-         owner_user_id = COALESCE($1, owner_user_id),
-         poc_user_id = COALESCE($2, poc_user_id),
-         riv_manager_id = COALESCE($3, riv_manager_id),
+         product_owner_user_id = COALESCE($1, product_owner_user_id),
+         riv_manager_id = COALESCE($2, riv_manager_id),
+         startup_poc_user_id = COALESCE($3, startup_poc_user_id),
          updated_at = now()
        WHERE id = $4 RETURNING *`,
-      [ownerUserId, pocUserId, rivManagerId, project.id]
+      [productOwnerUserId, rivManagerId, startupPocUserId, project.id]
     );
     res.json({ project: out[0] });
   } catch (err) {
@@ -243,13 +249,14 @@ router.put("/projects/:id/assign", async (req, res, next) => {
 });
 
 /* =========================================================================
-   CLIENT POC + RIV MANAGER LOGINS
+   PRODUCT OWNER + RIV CLIENT PARTNER (riv_manager) + STARTUP POC LOGINS
    ========================================================================= */
 
-// GET /api/admin/build/poc?clientId=
+// GET /api/admin/build/poc?clientId=  (role: product_owner -- the renamed
+// client_poc; "poc" kept as the URL/param name to avoid a wider churn)
 router.get("/poc", requireRole("admin"), async (req, res, next) => {
   try {
-    const where = ["u.role = 'client_poc'"];
+    const where = ["u.role = 'product_owner'"];
     const params = [];
     if (req.query.clientId) { params.push(Number(req.query.clientId)); where.push(`u.client_id = $${params.length}`); }
     const { rows } = await pool.query(
@@ -280,10 +287,10 @@ router.post("/poc", requireRole("admin"), async (req, res, next) => {
 
     const password_hash = bcrypt.hashSync(password, 10);
     const { rows } = await pool.query(
-      "INSERT INTO users (email, password_hash, name, role, company, client_id, must_change_password) VALUES ($1,$2,$3,'client_poc',$4,$5,true) RETURNING id",
+      "INSERT INTO users (email, password_hash, name, role, company, client_id, must_change_password) VALUES ($1,$2,$3,'product_owner',$4,$5,true) RETURNING id",
       [normalizedEmail, password_hash, String(name).trim(), clientRows[0].company || null, clientRows[0].id]
     );
-    res.status(201).json({ id: rows[0].id, email: normalizedEmail, name, role: "client_poc", clientId: clientRows[0].id });
+    res.status(201).json({ id: rows[0].id, email: normalizedEmail, name, role: "product_owner", clientId: clientRows[0].id });
   } catch (err) {
     next(err);
   }
@@ -291,7 +298,65 @@ router.post("/poc", requireRole("admin"), async (req, res, next) => {
 
 router.delete("/poc/:id", requireRole("admin"), async (req, res, next) => {
   try {
-    await pool.query("DELETE FROM users WHERE id = $1 AND role = 'client_poc'", [req.params.id]);
+    await pool.query("DELETE FROM users WHERE id = $1 AND role = 'product_owner'", [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/admin/build/startup-poc?projectId= -- roster of Startup POC
+// logins, each tied to exactly one startup-pilot project (not a whole
+// client -- a startup has no visibility beyond its own pilot).
+router.get("/startup-poc", requireRole("admin"), async (req, res, next) => {
+  try {
+    const where = ["u.role = 'startup_poc'"];
+    const params = [];
+    if (req.query.projectId) { params.push(toId(req.query.projectId)); where.push(`p.id = $${params.length}`); }
+    const { rows } = await pool.query(
+      `SELECT u.id, u.email, u.name, u.created_at, p.id AS project_id, p.code AS project_code, p.title AS project_title
+       FROM users u LEFT JOIN build_projects p ON p.startup_poc_user_id = u.id
+       WHERE ${where.join(" AND ")} ORDER BY u.created_at DESC`,
+      params
+    );
+    res.json({ startupPocs: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/admin/build/startup-poc { email, password, name, projectId } --
+// creates the login and assigns it to that startup-pilot project in one
+// step (the proposed-screens "Create project" form's "Create the Startup
+// POC login and email the invite" checkbox).
+router.post("/startup-poc", requireRole("admin"), async (req, res, next) => {
+  try {
+    const { email, password, name } = req.body || {};
+    const projectId = toId(req.body?.projectId);
+    if (!email || !password || !name || !projectId) return res.status(400).json({ error: "Name, email, temporary password, and a valid numeric projectId are required." });
+    if (String(password).length < 8) return res.status(400).json({ error: "The temporary password must be at least 8 characters." });
+    const { rows: projectRows } = await pool.query("SELECT id, type FROM build_projects WHERE id = $1", [projectId]);
+    if (!projectRows.length) return res.status(404).json({ error: "That project doesn't exist." });
+    if (projectRows[0].type !== "startup") return res.status(400).json({ error: "Startup POC logins are only for startup-pilot projects." });
+    const normalizedEmail = String(email).toLowerCase().trim();
+    const { rows: existing } = await pool.query("SELECT id FROM users WHERE email = $1", [normalizedEmail]);
+    if (existing.length) return res.status(409).json({ error: "A user with that email already exists." });
+
+    const password_hash = bcrypt.hashSync(password, 10);
+    const { rows } = await pool.query(
+      "INSERT INTO users (email, password_hash, name, role, must_change_password) VALUES ($1,$2,$3,'startup_poc',true) RETURNING id",
+      [normalizedEmail, password_hash, String(name).trim()]
+    );
+    await pool.query("UPDATE build_projects SET startup_poc_user_id = $1, updated_at = now() WHERE id = $2", [rows[0].id, projectId]);
+    res.status(201).json({ id: rows[0].id, email: normalizedEmail, name, role: "startup_poc", projectId });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/startup-poc/:id", requireRole("admin"), async (req, res, next) => {
+  try {
+    await pool.query("DELETE FROM users WHERE id = $1 AND role = 'startup_poc'", [req.params.id]);
     res.json({ ok: true });
   } catch (err) {
     next(err);

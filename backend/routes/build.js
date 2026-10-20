@@ -1,10 +1,11 @@
 // Build.RIV -- shared authenticated routes (project list/detail, status
 // updates, stage actions, ROI, lessons, files, notifications). Unlike
 // Ideas.RIV/Rise.RIV, Build has no single role that owns this router: an
-// admin, riv_manager, client (leader), client_poc, or a project's owner can
-// all reach it, each scoped to what they're allowed to see (PRD section
-// 10.2) -- so permission checks happen per-route via lib/buildPermissions.js
-// rather than one router.use(requireRole(...)) gate.
+// admin, riv_manager, client (leader), product_owner, startup_poc, or a
+// linked junior_employee can all reach it, each scoped to what they're
+// allowed to see (Oct 2026 "Proposed Screens" permission table) -- so
+// permission checks happen per-route via lib/buildPermissions.js rather
+// than one router.use(requireRole(...)) gate.
 import { Router } from "express";
 import multer from "multer";
 import pool from "../db.js";
@@ -14,7 +15,7 @@ import {
   gateApprovers, missingFieldsForStage, computeRoi,
 } from "../lib/buildWorkflow.js";
 import {
-  canSeeProject, canAddUpdate, canEditRoi, canHoldOrStop, canClose, canApproveGate, canSendBack,
+  canSeeProject, canAddUpdate, canEditDetails, canEditRoi, canHoldOrStop, canClose, canApproveGate, canSendBack,
 } from "../lib/buildPermissions.js";
 import { notifyBuild, recipientsForProject } from "../lib/buildNotify.js";
 
@@ -40,13 +41,29 @@ async function assignedClientIds(user) {
   return rows.map((r) => r.id ?? r.client_id);
 }
 
-// A client_poc login's own client_id -- not in the JWT, so canSeeProject
+// A product_owner login's own client_id -- not in the JWT, so canSeeProject
 // needs it looked up to scope viewing to "my client's projects", matching
 // GET /projects' own list-scoping query for this role (see buildPermissions.js).
 async function pocClientId(user) {
-  if (user.role !== "client_poc") return null;
+  if (user.role !== "product_owner") return null;
   const { rows } = await pool.query("SELECT client_id FROM users WHERE id = $1", [user.id]);
   return rows[0]?.client_id ?? null;
+}
+
+// A junior_employee only sees/acts on the project(s) built from the idea
+// THEY submitted (permission table: Employee -> "Own project"). Resolved
+// via build_project_sources (source_type='idea') joined to ideas.submitted_by,
+// since there's no column on build_projects itself for this -- an idea can
+// in principle feed more than one project, so this returns a set of ids.
+async function employeeProjectIds(user) {
+  if (user.role !== "junior_employee") return [];
+  const { rows } = await pool.query(
+    `SELECT s.project_id FROM build_project_sources s
+     JOIN ideas i ON i.id = s.source_id AND s.source_type = 'idea'
+     WHERE i.submitted_by = $1`,
+    [user.id]
+  );
+  return rows.map((r) => r.project_id);
 }
 
 async function loadProject(id) {
@@ -54,14 +71,14 @@ async function loadProject(id) {
     `SELECT p.*, m.kpi_name, m.kpi_unit, m.baseline, m.target, m.currency,
             m.est_cost, m.actual_cost, m.est_benefit, m.realised_benefit,
             c.name AS client_name, c.company AS client_company,
-            o.name AS owner_name, o.email AS owner_email,
-            poc.name AS poc_name, poc.email AS poc_email,
+            po.name AS product_owner_name, po.email AS product_owner_email,
+            sp.name AS startup_poc_name, sp.email AS startup_poc_email,
             rm.name AS riv_manager_name, rm.email AS riv_manager_email
      FROM build_projects p
      LEFT JOIN build_metrics m ON m.project_id = p.id
      LEFT JOIN users c ON c.id = p.client_id
-     LEFT JOIN users o ON o.id = p.owner_user_id
-     LEFT JOIN users poc ON poc.id = p.poc_user_id
+     LEFT JOIN users po ON po.id = p.product_owner_user_id
+     LEFT JOIN users sp ON sp.id = p.startup_poc_user_id
      LEFT JOIN users rm ON rm.id = p.riv_manager_id
      WHERE p.id = $1`,
     [Number(id)]
@@ -169,12 +186,18 @@ router.get("/projects", async (req, res, next) => {
       where.push(`p.client_id = ANY(${p(ids)}::int[])`);
     } else if (role === "client") {
       where.push(`p.client_id = ${p(userId)}`);
-    } else if (role === "client_poc") {
-      // A client_poc login's own client_id (set the same way junior_employee/jury's is, per I1's pattern).
+    } else if (role === "product_owner") {
+      // A product_owner login's own client_id (set the same way junior_employee/jury's is, per I1's pattern).
       where.push(`p.client_id = (SELECT client_id FROM users WHERE id = ${p(userId)})`);
+    } else if (role === "startup_poc") {
+      where.push(`p.startup_poc_user_id = ${p(userId)}`);
+    } else if (role === "junior_employee") {
+      // Own project only -- the idea this user submitted, per employeeProjectIds().
+      const ids = await employeeProjectIds(req.user);
+      if (!ids.length) return res.json({ projects: [] });
+      where.push(`p.id = ANY(${p(ids)}::int[])`);
     } else {
-      // project owner (e.g. junior_employee)
-      where.push(`p.owner_user_id = ${p(userId)}`);
+      return res.json({ projects: [] });
     }
 
     if (req.query.type) where.push(`p.type = ${p(req.query.type)}`);
@@ -186,14 +209,14 @@ router.get("/projects", async (req, res, next) => {
     const { rows } = await pool.query(
       `SELECT p.*, m.actual_cost, m.est_cost, m.realised_benefit, m.est_benefit, m.currency,
               c.name AS client_name, c.company AS client_company,
-              o.name AS owner_name,
+              po.name AS product_owner_name,
               GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date) AS last_update_date,
               (CURRENT_DATE - GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date)) AS days_since_update,
               (CURRENT_DATE - p.updated_at::date) AS days_in_stage
        FROM build_projects p
        LEFT JOIN build_metrics m ON m.project_id = p.id
        LEFT JOIN users c ON c.id = p.client_id
-       LEFT JOIN users o ON o.id = p.owner_user_id
+       LEFT JOIN users po ON po.id = p.product_owner_user_id
        ${where.length ? "WHERE " + where.join(" AND ") : ""}
        ORDER BY (p.health = 'off_track') DESC, (p.health = 'at_risk') DESC, p.created_at DESC`,
       params
@@ -224,7 +247,8 @@ router.get("/projects/:id", async (req, res, next) => {
     if (!project) return res.status(404).json({ error: "Project not found." });
     const assigned = await assignedClientIds(req.user);
     const pocClient = await pocClientId(req.user);
-    if (!canSeeProject(req.user, project, assigned, pocClient)) return res.status(403).json({ error: "You don't have access to this project." });
+    const isLinkedEmployee = req.user.role === "junior_employee" && (await employeeProjectIds(req.user)).includes(project.id);
+    if (!canSeeProject(req.user, project, assigned, pocClient, isLinkedEmployee)) return res.status(403).json({ error: "You don't have access to this project." });
 
     const [sources, history, updates, lessons, files, kpiReadings] = await Promise.all([
       pool.query("SELECT * FROM build_project_sources WHERE project_id = $1", [project.id]),
@@ -272,7 +296,8 @@ router.post("/projects/:id/updates", async (req, res, next) => {
     const project = await loadProject(req.params.id);
     if (!project) return res.status(404).json({ error: "Project not found." });
     const assigned = await assignedClientIds(req.user);
-    if (!canAddUpdate(req.user, project, assigned)) return res.status(403).json({ error: "You can't add an update to this project." });
+    const isLinkedEmployee = req.user.role === "junior_employee" && (await employeeProjectIds(req.user)).includes(project.id);
+    if (!canAddUpdate(req.user, project, assigned, isLinkedEmployee)) return res.status(403).json({ error: "You can't add an update to this project." });
 
     const { health, progress, nextSteps, blockers, needsHelp, pctComplete, agreedWithUserId, kpiActual } = req.body || {};
     if (!["on_track", "at_risk", "off_track"].includes(health)) return res.status(400).json({ error: "A valid health status is required." });
@@ -380,7 +405,7 @@ router.post("/projects/:id/advance", async (req, res, next) => {
     await pool.query("UPDATE build_projects SET stage = $1, updated_at = now() WHERE id = $2", [to, project.id]);
     await recordStageHistory(project.id, project.stage, to, "advance", req.body?.reason, req.user.id);
 
-    const recipients = await recipientsForProject(project, ["owner", "poc", "client", "riv_manager"]);
+    const recipients = await recipientsForProject(project, ["poc", "startup_poc", "client", "riv_manager"]);
     await notifyBuild(recipients, {
       projectId: project.id, projectCode: project.code, kind: "stage_changed",
       message: `${project.code} moved to ${STAGE_LABELS[to]}.`,
@@ -417,7 +442,7 @@ router.post("/projects/:id/send-back", async (req, res, next) => {
     await pool.query("UPDATE build_projects SET stage = $1, updated_at = now() WHERE id = $2", [target, project.id]);
     await recordStageHistory(project.id, project.stage, target, "send_back", reason, req.user.id);
 
-    const recipients = await recipientsForProject(project, ["owner", "poc", "client", "riv_manager"]);
+    const recipients = await recipientsForProject(project, ["poc", "startup_poc", "client", "riv_manager"]);
     await notifyBuild(recipients, {
       projectId: project.id, projectCode: project.code, kind: "stage_changed",
       message: `${project.code} sent back to ${STAGE_LABELS[target]}: ${reason}`,
@@ -442,7 +467,7 @@ router.post("/projects/:id/pilot-decision", async (req, res, next) => {
 
     const assigned = await assignedClientIds(req.user);
     if (!canApproveGate(req.user, project, gateApprovers(project.type, "pilot"), assigned)) {
-      return res.status(403).json({ error: "Only the Client Leader (or admin) can decide the Pilot gate." });
+      return res.status(403).json({ error: "Only the Product Owner (or admin) can decide the Pilot gate." });
     }
 
     const { decision, iterateTo, reason } = req.body || {};
@@ -451,7 +476,7 @@ router.post("/projects/:id/pilot-decision", async (req, res, next) => {
     if (decision === "scale") {
       const missing = missingFieldsForStage(project.type, "pilot", project, project);
       if (missing.length) return res.status(400).json({ error: `Fill in before moving on: ${missing.join(", ")}` });
-      const to = nextStage(project.type, "pilot"); // 'scale'
+      const to = nextStage(project.type, "pilot"); // 'production'
       await pool.query("UPDATE build_projects SET stage = $1, updated_at = now() WHERE id = $2", [to, project.id]);
       await recordStageHistory(project.id, "pilot", to, "advance", reason, req.user.id);
     } else if (decision === "iterate") {
@@ -464,7 +489,7 @@ router.post("/projects/:id/pilot-decision", async (req, res, next) => {
       await recordStageHistory(project.id, "pilot", "pilot", "stop", reason, req.user.id);
     }
 
-    const recipients = await recipientsForProject(project, ["owner", "poc", "client", "riv_manager", "admins"]);
+    const recipients = await recipientsForProject(project, ["poc", "startup_poc", "client", "riv_manager", "admins"]);
     await notifyBuild(recipients, {
       projectId: project.id, projectCode: project.code, kind: "stage_changed",
       message: `${project.code}: Pilot decision — ${decision}.`,
@@ -490,7 +515,7 @@ router.post("/projects/:id/hold", async (req, res, next) => {
     const { reason } = req.body || {};
     await pool.query("UPDATE build_projects SET status = 'on_hold', hold_reason = $1, updated_at = now() WHERE id = $2", [(reason || "").trim() || null, project.id]);
     await recordStageHistory(project.id, project.stage, project.stage, "hold", reason, req.user.id);
-    const recipients = await recipientsForProject(project, ["owner", "poc", "client", "riv_manager", "admins"]);
+    const recipients = await recipientsForProject(project, ["poc", "startup_poc", "client", "riv_manager", "admins"]);
     await notifyBuild(recipients, {
       projectId: project.id, projectCode: project.code, kind: "stage_changed",
       message: `${project.code} put on hold.`, subject: `RIOS Build: ${project.code} on hold`,
@@ -530,7 +555,7 @@ router.post("/projects/:id/stop", async (req, res, next) => {
     if (!reason || !String(reason).trim()) return res.status(400).json({ error: "A reason is required to stop a project." });
     await pool.query("UPDATE build_projects SET status = 'stopped', hold_reason = $1, updated_at = now() WHERE id = $2", [reason, project.id]);
     await recordStageHistory(project.id, project.stage, project.stage, "stop", reason, req.user.id);
-    const recipients = await recipientsForProject(project, ["owner", "poc", "client", "riv_manager", "admins"]);
+    const recipients = await recipientsForProject(project, ["poc", "startup_poc", "client", "riv_manager", "admins"]);
     await notifyBuild(recipients, {
       projectId: project.id, projectCode: project.code, kind: "stage_changed",
       message: `${project.code} stopped.`, subject: `RIOS Build: ${project.code} stopped`,
@@ -563,7 +588,7 @@ router.post("/projects/:id/close", async (req, res, next) => {
     );
     await recordStageHistory(project.id, project.stage, "closed", "close", `Closed as ${outcome}`, req.user.id);
 
-    const recipients = await recipientsForProject(project, ["owner", "poc", "client", "riv_manager"]);
+    const recipients = await recipientsForProject(project, ["poc", "startup_poc", "client", "riv_manager"]);
     await notifyBuild(recipients, {
       projectId: project.id, projectCode: project.code, kind: "closed",
       message: `${project.code} closed (${outcome}).`, subject: `RIOS Build: ${project.code} closed`,
@@ -593,7 +618,7 @@ router.put("/projects/:id/details", async (req, res, next) => {
     const project = await loadProject(req.params.id);
     if (!project) return res.status(404).json({ error: "Project not found." });
     const assigned = await assignedClientIds(req.user);
-    if (!canAddUpdate(req.user, project, assigned)) return res.status(403).json({ error: "You can't edit this project's details." });
+    if (!canEditDetails(req.user, project, assigned)) return res.status(403).json({ error: "You can't edit this project's details." });
 
     const body = req.body || {};
     const fields = {
@@ -682,7 +707,7 @@ router.put("/projects/:id/lessons", async (req, res, next) => {
     const project = await loadProject(req.params.id);
     if (!project) return res.status(404).json({ error: "Project not found." });
     const assigned = await assignedClientIds(req.user);
-    if (!canAddUpdate(req.user, project, assigned)) return res.status(403).json({ error: "You can't edit lessons learned for this project." });
+    if (!canEditDetails(req.user, project, assigned)) return res.status(403).json({ error: "You can't edit lessons learned for this project." });
 
     const { worked, notWorked, doDifferently, recommendation, tags } = req.body || {};
     if (recommendation && !["scale_to_others", "reuse_approach", "dont_repeat"].includes(recommendation)) {
@@ -713,7 +738,8 @@ router.post("/projects/:id/files", upload.single("file"), async (req, res, next)
     const project = await loadProject(req.params.id);
     if (!project) return res.status(404).json({ error: "Project not found." });
     const assigned = await assignedClientIds(req.user);
-    if (!canAddUpdate(req.user, project, assigned)) return res.status(403).json({ error: "You can't attach files to this project." });
+    const isLinkedEmployee = req.user.role === "junior_employee" && (await employeeProjectIds(req.user)).includes(project.id);
+    if (!canAddUpdate(req.user, project, assigned, isLinkedEmployee)) return res.status(403).json({ error: "You can't attach files to this project." });
     if (!req.file) return res.status(400).json({ error: "No file uploaded." });
     if (!ALLOWED_FILE_TYPES.has(req.file.mimetype)) {
       return res.status(400).json({ error: "Only PDF, DOCX, XLSX, PPTX, PNG, or JPG files are accepted." });
@@ -736,7 +762,8 @@ router.get("/projects/:id/files/:fileId", async (req, res, next) => {
     if (!project) return res.status(404).json({ error: "Project not found." });
     const assigned = await assignedClientIds(req.user);
     const pocClient = await pocClientId(req.user);
-    if (!canSeeProject(req.user, project, assigned, pocClient)) return res.status(403).json({ error: "You don't have access to this project." });
+    const isLinkedEmployee = req.user.role === "junior_employee" && (await employeeProjectIds(req.user)).includes(project.id);
+    if (!canSeeProject(req.user, project, assigned, pocClient, isLinkedEmployee)) return res.status(403).json({ error: "You don't have access to this project." });
     const { rows } = await pool.query("SELECT * FROM build_files WHERE id = $1 AND project_id = $2", [req.params.fileId, project.id]);
     const file = rows[0];
     if (!file) return res.status(404).json({ error: "File not found." });

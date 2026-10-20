@@ -44,14 +44,18 @@ export async function notifyBuild(recipients, { projectId, projectCode, kind, me
 }
 
 // Recipients helper: dedupes/loads the people who matter for a project row
-// (owner, POC, RIV manager, client leader, RIV admins) so routes don't each
-// re-derive this. `roles` narrows which of those relationships to include.
+// (Product Owner, RIV Client Partner, Client Leader, Startup POC, RIV
+// admins) so routes don't each re-derive this. `roles` narrows which of
+// those relationships to include. "poc" is kept as the token name callers
+// pass (matches the historical routes/build.js call sites) even though the
+// role itself is now 'product_owner' -- renaming every call site's string
+// literal wasn't worth the churn for an internal-only token.
 export async function recipientsForProject(project, roles) {
   const ids = [];
-  if (roles.includes("owner") && project.owner_user_id) ids.push(project.owner_user_id);
-  if (roles.includes("poc") && project.poc_user_id) ids.push(project.poc_user_id);
+  if (roles.includes("poc") && project.product_owner_user_id) ids.push(project.product_owner_user_id);
   if (roles.includes("riv_manager") && project.riv_manager_id) ids.push(project.riv_manager_id);
   if (roles.includes("client") && project.client_id) ids.push(project.client_id);
+  if (roles.includes("startup_poc") && project.startup_poc_user_id) ids.push(project.startup_poc_user_id);
 
   const people = [];
   if (ids.length) {

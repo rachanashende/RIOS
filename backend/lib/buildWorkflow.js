@@ -7,49 +7,50 @@
 // Saravana/Rachana settle the open questions in PRD section 12.3
 // differently than the defaults chosen here.
 
-// Workflow A -- Enterprise Innovation Management (internal ideas), PRD section 6.
-// Workflow B -- Open Innovation Management (startups), PRD section 7, with the
-// extra Agreement stage (NDA + pilot/POC contract) before Design.
+// Workflow A -- Enterprise Innovation Management (internal ideas), 7 stages.
+// Workflow B -- Open Innovation Management (startups), 11 stages: a 5-stage
+// "deal" track (Requirements through Agreement) ahead of the same 6-stage
+// "delivery" track internal projects use (Design through Closed). This is
+// the Oct 2026 "Proposed Screens" stage model -- it replaces the single
+// Agreement stage with 4 deal milestones, and renames Scale to Production
+// (both workflows). Changed with no live Build projects yet to migrate.
 export const STAGES = {
-  internal: ["requirements", "design", "build", "test", "pilot", "scale", "closed"],
-  startup: ["requirements", "agreement", "design", "build", "test", "pilot", "scale", "closed"],
+  internal: ["requirements", "design", "build", "test", "pilot", "production", "closed"],
+  startup: ["requirements", "nda", "proposal", "purchase_order", "agreement", "design", "build", "test", "pilot", "production", "closed"],
 };
 
 export const STAGE_LABELS = {
   requirements: "Requirements",
+  nda: "NDA",
+  proposal: "Proposal",
+  purchase_order: "Purchase Order",
   agreement: "Agreement",
   design: "Design",
   build: "Build",
   test: "Test",
   pilot: "Pilot",
-  scale: "Scale",
+  production: "Production",
   closed: "Closed",
 };
 
-// "Gate approved by" columns in PRD sections 6 and 7. 'admin' can always
-// also approve (permission table 10.2: RIV Admin = Yes on every row) --
-// callers should treat this as "one of these OR admin", not exhaustive.
-// Pilot's gate decides Scale / Iterate / Stop, not just advance -- handled
-// in the route, not here.
-const GATE_APPROVERS = {
-  internal: {
-    requirements: ["client_poc"],
-    design: ["client_poc"],
-    build: ["owner"], // "Project owner" -- whoever is build_projects.owner_user_id
-    test: ["client_poc"],
-    pilot: ["client"], // Client Leader
-    scale: ["client"],
-  },
-  startup: {
-    requirements: ["client_poc"],
-    agreement: ["client_poc", "riv_manager"],
-    design: ["client_poc"],
-    build: ["riv_manager"],
-    test: ["client_poc"],
-    pilot: ["client"],
-    scale: ["client"],
-  },
-};
+// Which stages are "deal" (pre-delivery, startup only) vs "delivery" --
+// the proposed screens show these as two labelled rows on the stage
+// stepper. Internal projects have no deal track at all.
+export const STARTUP_DEAL_STAGES = ["requirements", "nda", "proposal", "purchase_order", "agreement"];
+export const STARTUP_DELIVERY_STAGES = ["design", "build", "test", "pilot", "production", "closed"];
+
+// "Who can complete and approve a stage" (proposed-screens permission
+// table): RIV Admin and Product Owner, for every stage of both workflows --
+// Client Leader only "reviews" (comments, notified), never blocks. 'admin'
+// can always also approve regardless of what's listed here (callers treat
+// this as "one of these OR admin", not exhaustive). Pilot's gate decides
+// Production / Iterate / Stop, not just advance -- handled in the route.
+const GATE_APPROVERS = Object.fromEntries(
+  Object.entries(STAGES).map(([type, stages]) => [
+    type,
+    Object.fromEntries(stages.filter((s) => s !== "closed").map((s) => [s, ["product_owner"]])),
+  ])
+);
 
 export function nextStage(type, stage) {
   const list = STAGES[type];
@@ -70,9 +71,9 @@ export function isValidStage(type, stage) {
 }
 
 // Who can approve leaving `stage` for `type`. Returns an array of
-// role-or-relationship tokens: a literal role name, or 'owner'/'client_poc'/
-// 'riv_manager'/'client' meaning "whoever holds that relationship to this
-// project" (resolved against the project row by the caller).
+// relationship tokens ('product_owner' today) meaning "whoever holds that
+// relationship to this project" -- resolved against the project row by the
+// caller (lib/buildPermissions.js's canApproveGate).
 export function gateApprovers(type, stage) {
   return GATE_APPROVERS[type]?.[stage] || [];
 }
@@ -93,6 +94,17 @@ export function missingFieldsForStage(type, stage, project, metrics) {
       need(metrics?.est_cost != null, "Budget estimate");
       need(project.target_end, "Target end date");
       break;
+    case "nda":
+      need(project.nda_signed_at, "NDA signed date");
+      break;
+    case "proposal":
+      need(project.proposal_amount != null, "Proposal amount");
+      need(project.proposal_accepted_at, "Proposal accepted date");
+      break;
+    case "purchase_order":
+      need(project.po_number, "PO number");
+      need(project.po_raised_at, "PO raised date");
+      break;
     case "agreement":
       need(project.agreement_type, "Agreement type");
       need(project.agreement_signed_at, "Signed date");
@@ -112,7 +124,7 @@ export function missingFieldsForStage(type, stage, project, metrics) {
       need(project.pilot_start, "Pilot start date");
       need(project.pilot_end, "Pilot end date");
       break;
-    case "scale":
+    case "production":
       need(project.rollout_scope, "Rollout scope");
       need(metrics?.actual_cost != null, "Actual cost");
       if (type === "startup") need(project.contract_value != null, "Contract value");

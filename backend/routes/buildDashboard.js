@@ -38,10 +38,10 @@ router.get("/client/:clientId", async (req, res, next) => {
     const { rows: projects } = await pool.query(
       `SELECT p.*, m.actual_cost, m.est_cost, m.realised_benefit, m.est_benefit,
               GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date) AS last_update_date,
-              o.name AS owner_name
+              po.name AS product_owner_name
        FROM build_projects p
        LEFT JOIN build_metrics m ON m.project_id = p.id
-       LEFT JOIN users o ON o.id = p.owner_user_id
+       LEFT JOIN users po ON po.id = p.product_owner_user_id
        WHERE ${where}
        ORDER BY (p.health = 'off_track') DESC, (p.health = 'at_risk') DESC, p.created_at DESC`,
       params
@@ -114,7 +114,7 @@ router.get("/client/:clientId", async (req, res, next) => {
       investmentVsBenefit: active.map((p) => ({ code: p.code, title: p.title, actualCost: p.actual_cost, realisedBenefit: p.realised_benefit, estimated: p.realised_benefit == null })),
       projects: enriched.map((p) => ({
         id: p.id, code: p.code, title: p.title, type: p.type, stage: p.stage, status: p.status, health: p.health,
-        lastUpdateDate: p.last_update_date, ownerName: p.owner_name, roi: p.roi, overdue: p.overdue,
+        lastUpdateDate: p.last_update_date, productOwnerName: p.product_owner_name, roi: p.roi, overdue: p.overdue,
       })),
       byType,
       recentLessons: lessonRows.map((l) => ({
