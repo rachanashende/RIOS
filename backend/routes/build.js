@@ -12,7 +12,7 @@ import pool from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
   STAGES, STAGE_LABELS, nextStage, prevStage, isValidStage,
-  gateApprovers, missingFieldsForStage, computeRoi,
+  gateApprovers, missingFieldsForStage, computeRoi, computeAutoHealth,
 } from "../lib/buildWorkflow.js";
 import {
   canSeeProject, canAddUpdate, canEditDetails, canEditRoi, canHoldOrStop, canClose, canApproveGate, canSendBack,
@@ -194,9 +194,10 @@ router.get("/my-work", async (req, res, next) => {
   try {
     const { where, params } = await myProjectWhere(req);
     const { rows } = await pool.query(
-      `SELECT p.*, m.baseline, m.target,
+      `SELECT p.*, m.baseline, m.target, m.actual_cost, m.est_cost,
               (SELECT k.value FROM build_kpi_readings k WHERE k.project_id = p.id ORDER BY k.reading_date DESC, k.id DESC LIMIT 1) AS kpi_now,
               EXISTS(SELECT 1 FROM build_updates u2 WHERE u2.project_id = p.id) AS has_update,
+              (SELECT u3.needs_help FROM build_updates u3 WHERE u3.project_id = p.id ORDER BY u3.update_date DESC, u3.created_at DESC LIMIT 1) AS latest_needs_help,
               GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date) AS last_update_date,
               (CURRENT_DATE - GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date)) AS days_since_update
        FROM build_projects p
@@ -211,8 +212,16 @@ router.get("/my-work", async (req, res, next) => {
       const stageList = STAGES[r.type] || [];
       const stageIndex = stageList.indexOf(r.stage);
       const missing = r.status === "active" && r.stage !== "closed" ? missingFieldsForStage(r.type, r.stage, r, r) : [];
+      const auto = computeAutoHealth({
+        project: r, metrics: { actual_cost: r.actual_cost, est_cost: r.est_cost, baseline: r.baseline, target: r.target },
+        daysSinceUpdate: r.has_update ? Number(r.days_since_update) : null,
+        latestKpiValue: r.kpi_now, needsHelp: r.latest_needs_help,
+      });
+      const rank = { on_track: 0, at_risk: 1, off_track: 2 };
+      const effectiveHealth = rank[auto.health] > rank[r.health] ? auto.health : r.health;
       return {
-        ...r, hasUpdate: !!r.has_update, updateOverdue, missing,
+        ...r, hasUpdate: !!r.has_update, updateOverdue, missing, effectiveHealth,
+        healthReason: effectiveHealth === r.health ? null : auto.reason,
         stageLabel: STAGE_LABELS[r.stage] || r.stage,
         stagePosition: stageIndex >= 0 ? stageIndex + 1 : null,
         stageCount: stageList.length || null,
@@ -304,7 +313,7 @@ router.get("/my-work", async (req, res, next) => {
       summary: {
         toDo: actions.length,
         updateOverdue: active.filter((p) => p.updateOverdue).length,
-        redAmber: active.filter((p) => p.health === "off_track" || p.health === "at_risk").length,
+        redAmber: active.filter((p) => p.effectiveHealth === "off_track" || p.effectiveHealth === "at_risk").length,
         myProjects: projects.length,
         internalCount: projects.filter((p) => p.type === "internal").length,
         startupCount: projects.filter((p) => p.type === "startup").length,
@@ -312,7 +321,7 @@ router.get("/my-work", async (req, res, next) => {
       nextActions: actions.slice(0, 10),
       myProjects: projects.slice(0, 8).map((p) => ({
         id: p.id, code: p.code, title: p.title, type: p.type, stage: p.stage, stageLabel: p.stageLabel,
-        stagePosition: p.stagePosition, stageCount: p.stageCount, health: p.hasUpdate ? p.health : "no_update",
+        stagePosition: p.stagePosition, stageCount: p.stageCount, health: p.hasUpdate ? p.effectiveHealth : "no_update",
       })),
       recentlyChanged: feed,
     });
@@ -373,6 +382,7 @@ router.get("/projects", async (req, res, next) => {
               m.kpi_name, m.kpi_unit, m.baseline, m.target,
               (SELECT k.value FROM build_kpi_readings k WHERE k.project_id = p.id ORDER BY k.reading_date DESC, k.id DESC LIMIT 1) AS kpi_now,
               EXISTS(SELECT 1 FROM build_updates u2 WHERE u2.project_id = p.id) AS has_update,
+              (SELECT u3.needs_help FROM build_updates u3 WHERE u3.project_id = p.id ORDER BY u3.update_date DESC, u3.created_at DESC LIMIT 1) AS latest_needs_help,
               c.name AS client_name, c.company AS client_company,
               po.name AS product_owner_name,
               GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date) AS last_update_date,
@@ -404,6 +414,13 @@ router.get("/projects", async (req, res, next) => {
         else if (r.stage === "pilot" && r.pilot_end) nextStep = `Pilot ends ${new Date(r.pilot_end).toLocaleDateString("en-US", { day: "numeric", month: "short" })}: record result and decision`;
         else if (missing.length) nextStep = `Add ${missing[0]} · Product Owner`;
         else nextStep = `Advance to ${STAGE_LABELS[nextStage(r.type, r.stage)] || "next stage"}`;
+        const auto = computeAutoHealth({
+          project: r, metrics: { actual_cost: r.actual_cost, est_cost: r.est_cost, baseline: r.baseline, target: r.target },
+          daysSinceUpdate: r.has_update ? Number(r.days_since_update) : null,
+          latestKpiValue: r.kpi_now, needsHelp: r.latest_needs_help,
+        });
+        const rank = { on_track: 0, at_risk: 1, off_track: 2 };
+        const effectiveHealth = rank[auto.health] > rank[r.health] ? auto.health : r.health;
         return {
           ...r,
           actual_cost: r.actual_cost != null ? Number(r.actual_cost) : null,
@@ -420,6 +437,8 @@ router.get("/projects", async (req, res, next) => {
           stageCount: stageList.length || null,
           updateOverdue,
           nextStep,
+          effectiveHealth,
+          healthReason: effectiveHealth === r.health ? null : auto.reason,
         };
       }),
     });
@@ -457,8 +476,22 @@ router.get("/projects/:id", async (req, res, next) => {
       pool.query("SELECT * FROM build_kpi_readings WHERE project_id = $1 ORDER BY reading_date ASC", [project.id]),
     ]);
 
+    const latestUpdate = updates.rows[0] || null;
+    const lastActivity = latestUpdate?.update_date || project.started_at;
+    const daysSinceUpdate = lastActivity ? Math.max(0, Math.round((Date.now() - new Date(lastActivity).getTime()) / 86400000)) : null;
+    const latestKpiRow = kpiReadings.rows[kpiReadings.rows.length - 1];
+    const projOut = projectOut(project);
+    const auto = computeAutoHealth({
+      project, metrics: projOut.metrics,
+      daysSinceUpdate: latestUpdate ? daysSinceUpdate : null,
+      latestKpiValue: latestKpiRow ? Number(latestKpiRow.value) : null,
+      needsHelp: latestUpdate?.needs_help,
+    });
+    const rank = { on_track: 0, at_risk: 1, off_track: 2 };
+    const effectiveHealth = rank[auto.health] > rank[projOut.health] ? auto.health : projOut.health;
+
     res.json({
-      project: projectOut(project),
+      project: { ...projOut, effectiveHealth, healthReason: effectiveHealth === projOut.health ? null : auto.reason },
       sources: sources.rows,
       stageOrder: STAGES[project.type],
       stageLabels: STAGE_LABELS,
@@ -488,7 +521,7 @@ router.post("/projects/:id/updates", async (req, res, next) => {
     const isLinkedEmployee = req.user.role === "junior_employee" && (await employeeProjectIds(req.user)).includes(project.id);
     if (!canAddUpdate(req.user, project, assigned, isLinkedEmployee)) return res.status(403).json({ error: "You can't add an update to this project." });
 
-    const { health, progress, nextSteps, blockers, needsHelp, pctComplete, agreedWithUserId, kpiActual } = req.body || {};
+    const { health, progress, nextSteps, blockers, needsHelp, pctComplete, agreedWithUserId, kpiActual, actualCost } = req.body || {};
     if (!["on_track", "at_risk", "off_track"].includes(health)) return res.status(400).json({ error: "A valid health status is required." });
     if (!progress || !String(progress).trim()) return res.status(400).json({ error: "Progress since last update is required." });
     if (!nextSteps || !String(nextSteps).trim()) return res.status(400).json({ error: "Next steps is required." });
@@ -509,6 +542,17 @@ router.post("/projects/:id/updates", async (req, res, next) => {
       await pool.query(
         "INSERT INTO build_kpi_readings (project_id, value, update_id) VALUES ($1,$2,$3)",
         [project.id, Number(kpiActual), update.id]
+      );
+    }
+    // "Cost to date" (page 4 of the Oct 2026 mockup folds this into the same
+    // status-update form, rather than a separate ROI-tab edit). Whoever can
+    // post an update can record it -- same permission as the rest of this
+    // form, deliberately not the narrower canEditRoi gate on the ROI tab.
+    if (actualCost != null && actualCost !== "") {
+      await pool.query(
+        `INSERT INTO build_metrics (project_id, actual_cost) VALUES ($1,$2)
+         ON CONFLICT (project_id) DO UPDATE SET actual_cost = EXCLUDED.actual_cost`,
+        [project.id, Number(actualCost)]
       );
     }
 

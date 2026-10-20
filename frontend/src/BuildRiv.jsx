@@ -313,10 +313,14 @@ function kpiCell(p) {
 // The health badge shown is "No update yet" (not whatever build_projects.
 // health defaults to) until the project's first status update -- a brand
 // new project otherwise shows a misleadingly green "On track".
-function displayHealth(p) { return p.hasUpdate ? p.health : "no_update"; }
+function displayHealth(p) { return p.hasUpdate ? (p.effectiveHealth || p.health) : "no_update"; }
 
 function healthSubtext(p) {
   if (!p.hasUpdate) return p.created_at ? `Created ${Math.max(0, Math.round((Date.now() - new Date(p.created_at)) / 86400000))} days ago` : null;
+  // An auto health rule (page 7's "when a project turns amber or red") can
+  // override the posted health -- when it did, its reason is the most
+  // useful subtext to show, ahead of the generic overdue/KPI hints below.
+  if (p.healthReason) return p.healthReason;
   if (p.updateOverdue) return `Update ${p.days_since_update} days overdue`;
   if (p.baseline != null && p.target != null && p.kpi_now != null && p.target !== p.baseline) {
     const pct = Math.max(0, Math.min(100, Math.round(((p.kpi_now - p.baseline) / (p.target - p.baseline)) * 100)));
@@ -1366,9 +1370,14 @@ function ProjectDetailView({ projectId, session, onBack }) {
             {project.type} · {project.stageLabel || project.stage}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <HealthBadge health={project.health} />
-          <StatusBadge status={project.status} />
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <HealthBadge health={project.effectiveHealth || project.health} />
+            <StatusBadge status={project.status} />
+          </div>
+          {project.healthReason && (
+            <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F", maxWidth: 260, textAlign: "right" }}>{project.healthReason}</div>
+          )}
         </div>
       </div>
 

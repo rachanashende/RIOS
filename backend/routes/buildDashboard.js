@@ -4,7 +4,7 @@
 import { Router } from "express";
 import pool from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
-import { computeRoi, fmtUSD } from "../lib/buildWorkflow.js";
+import { computeRoi, fmtUSD, computeAutoHealth } from "../lib/buildWorkflow.js";
 import { canSeeClientDashboard, canSeePortfolioDashboard } from "../lib/buildPermissions.js";
 import { QUESTIONS, computeScores } from "../lib/scoring.js";
 
@@ -36,7 +36,9 @@ router.get("/client/:clientId", async (req, res, next) => {
     if (typeFilter) { params.push(typeFilter); where += ` AND p.type = $${params.length}`; }
 
     const { rows: projects } = await pool.query(
-      `SELECT p.*, m.actual_cost, m.est_cost, m.realised_benefit, m.est_benefit,
+      `SELECT p.*, m.actual_cost, m.est_cost, m.realised_benefit, m.est_benefit, m.baseline, m.target,
+              (SELECT k.value FROM build_kpi_readings k WHERE k.project_id = p.id ORDER BY k.reading_date DESC, k.id DESC LIMIT 1) AS kpi_now,
+              (SELECT u3.needs_help FROM build_updates u3 WHERE u3.project_id = p.id ORDER BY u3.update_date DESC, u3.created_at DESC LIMIT 1) AS latest_needs_help,
               GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date) AS last_update_date,
               po.name AS product_owner_name
        FROM build_projects p
@@ -47,15 +49,22 @@ router.get("/client/:clientId", async (req, res, next) => {
       params
     );
 
+    const healthRank = { on_track: 0, at_risk: 1, off_track: 2 };
     const enriched = projects.map((p) => {
       const metrics = { actual_cost: num(p.actual_cost), est_cost: num(p.est_cost), realised_benefit: num(p.realised_benefit), est_benefit: num(p.est_benefit) };
       const roi = computeRoi(metrics);
       const overdue = p.status === "active" && (new Date() - new Date(p.last_update_date)) / 86400000 > 14;
-      return { ...p, ...metrics, roi, overdue };
+      const auto = computeAutoHealth({
+        project: p, metrics: { actual_cost: p.actual_cost, est_cost: p.est_cost, baseline: p.baseline, target: p.target },
+        daysSinceUpdate: Math.round((new Date() - new Date(p.last_update_date)) / 86400000),
+        latestKpiValue: p.kpi_now, needsHelp: p.latest_needs_help,
+      });
+      const effectiveHealth = healthRank[auto.health] > healthRank[p.health] ? auto.health : p.health;
+      return { ...p, ...metrics, roi, overdue, effectiveHealth, healthReason: effectiveHealth === p.health ? null : auto.reason };
     });
 
     const active = enriched.filter((p) => ["active", "on_hold"].includes(p.status));
-    const redAmber = active.filter((p) => p.health === "off_track" || p.health === "at_risk");
+    const redAmber = active.filter((p) => p.effectiveHealth === "off_track" || p.effectiveHealth === "at_risk");
     const overdue = active.filter((p) => p.overdue);
     const investedToDate = active.reduce((s, p) => s + (p.actual_cost || 0), 0);
     const realisedBenefit = active.reduce((s, p) => s + (p.realised_benefit || 0), 0);
@@ -66,7 +75,10 @@ router.get("/client/:clientId", async (req, res, next) => {
     for (const p of active) stageCounts[p.stage] = (stageCounts[p.stage] || 0) + 1;
 
     const needsAttention = [
-      ...redAmber.map((p) => ({ projectId: p.id, code: p.code, title: p.title, reason: p.health === "off_track" ? "Off track" : "At risk" })),
+      ...redAmber.map((p) => ({
+        projectId: p.id, code: p.code, title: p.title,
+        reason: (p.healthReason || (p.effectiveHealth === "off_track" ? "Off track" : "At risk")),
+      })),
       ...overdue.filter((p) => !redAmber.includes(p)).map((p) => ({ projectId: p.id, code: p.code, title: p.title, reason: "Update overdue" })),
     ];
 
@@ -113,7 +125,7 @@ router.get("/client/:clientId", async (req, res, next) => {
       needsAttention,
       investmentVsBenefit: active.map((p) => ({ code: p.code, title: p.title, actualCost: p.actual_cost, realisedBenefit: p.realised_benefit, estimated: p.realised_benefit == null })),
       projects: enriched.map((p) => ({
-        id: p.id, code: p.code, title: p.title, type: p.type, stage: p.stage, status: p.status, health: p.health,
+        id: p.id, code: p.code, title: p.title, type: p.type, stage: p.stage, status: p.status, health: p.effectiveHealth,
         lastUpdateDate: p.last_update_date, productOwnerName: p.product_owner_name, roi: p.roi, overdue: p.overdue,
       })),
       byType,

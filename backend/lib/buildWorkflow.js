@@ -151,6 +151,65 @@ export function computeRoi(metrics) {
   return { roiPct, paybackMonths, estimated };
 }
 
+// Automated red/amber health rules (Oct 2026 "Proposed Screens" page 7,
+// "When a project turns amber or red"). Before this, `health` was purely
+// whatever value the last status update picked -- no automatic override.
+// This computes the worst rule-triggered health alongside the posted one;
+// callers display whichever is worse, with that rule's reason, per the
+// mockup's "if an automatic rule is worse than the health you pick, the
+// worse one shows, with its reason" note.
+//
+// Deliberately NOT implemented: the mockup's "Stage running late" rule
+// (<=14 days late = amber, >14 days = red). That needs an *expected*
+// duration per stage to measure lateness against, and no such field
+// exists anywhere in the schema (build_projects has no per-stage target
+// date, only one overall target_end) -- inventing a duration would be a
+// fabricated threshold, not a derived one, so this rule is left out
+// rather than faked.
+const RANK = { on_track: 0, at_risk: 1, off_track: 2 };
+function worse(a, b) { return RANK[a.health] >= RANK[b.health] ? a : b; }
+
+export function computeAutoHealth({ project, metrics, daysSinceUpdate, latestKpiValue, needsHelp }) {
+  let result = { health: "on_track", reason: null };
+
+  // Status update not done.
+  if (daysSinceUpdate != null) {
+    if (daysSinceUpdate > 21) result = worse(result, { health: "off_track", reason: `No status update in ${daysSinceUpdate} days (>21).` });
+    else if (daysSinceUpdate > 14) result = worse(result, { health: "at_risk", reason: `No status update in ${daysSinceUpdate} days (15-21).` });
+  }
+
+  // Target end date, once a target exists and the project isn't done.
+  if (project.target_end && project.stage !== "production" && project.stage !== "closed") {
+    const daysPast = Math.round((Date.now() - new Date(project.target_end).getTime()) / 86400000);
+    if (daysPast > 0) result = worse(result, { health: "off_track", reason: `Target end date (${new Date(project.target_end).toLocaleDateString("en-US", { day: "numeric", month: "short" })}) has passed and the project isn't closed.` });
+    else if (daysPast > -14) result = worse(result, { health: "at_risk", reason: "Target end date is within 14 days." });
+  }
+
+  // Budget: actual cost vs. estimate.
+  if (metrics?.actual_cost != null && metrics?.est_cost != null && Number(metrics.est_cost) > 0) {
+    const overPct = ((Number(metrics.actual_cost) - Number(metrics.est_cost)) / Number(metrics.est_cost)) * 100;
+    if (overPct > 20) result = worse(result, { health: "off_track", reason: `Actual cost is ${overPct.toFixed(0)}% over budget (>20%).` });
+    else if (overPct > 10) result = worse(result, { health: "at_risk", reason: `Actual cost is ${overPct.toFixed(0)}% over budget (10-20%).` });
+  }
+
+  // KPI movement during Pilot only (the mockup's rule is explicitly
+  // pilot-scoped -- KPI isn't expected to have moved yet at earlier stages).
+  if (project.stage === "pilot" && latestKpiValue != null && metrics?.baseline != null && metrics?.target != null) {
+    const baseline = Number(metrics.baseline), target = Number(metrics.target), now = Number(latestKpiValue);
+    const span = target - baseline;
+    if (span !== 0) {
+      const progressFrac = (now - baseline) / span;
+      if (progressFrac < 0) result = worse(result, { health: "off_track", reason: "Latest KPI reading is worse than baseline during Pilot." });
+      else if (progressFrac < 0.5) result = worse(result, { health: "at_risk", reason: "Latest KPI reading is under halfway to target during Pilot." });
+    }
+  }
+
+  // Product Owner's "Needs leadership help" flag on the latest update.
+  if (needsHelp) result = worse(result, { health: "off_track", reason: "The Product Owner flagged this project as needing leadership help." });
+
+  return result;
+}
+
 export function fmtUSD(n) {
   if (n == null || isNaN(n)) return null;
   const sign = n < 0 ? "-" : "";
