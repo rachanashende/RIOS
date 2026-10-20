@@ -1651,7 +1651,7 @@ function DashboardView({ session }) {
       {sub === "portfolio" ? <PortfolioDashboard /> : (
         isClientLike
           ? <ClientDashboard clientId={session.role === "client" ? session.id : session.client_id} />
-          : <EmptyState icon={Gauge} title="Pick a client" text="RIV Manager client-by-client view is coming soon — use the RIV portfolio for now, or open a project directly." />
+          : <EmptyState icon={Gauge} title="Pick a client" text="RIV Client Partner client-by-client view is coming soon — use the RIV portfolio for now, or open a project directly." />
       )}
     </div>
   );
@@ -1662,7 +1662,7 @@ function DashboardView({ session }) {
    (manual / from an Ideathon winner / from a selected startup), assign
    people, and manage product_owner + riv_manager + startup_poc logins.
    ========================================================================= */
-// Admin and RIV Manager both reach the Build admin console, but only admin
+// Admin and RIV Client Partner both reach the Build admin console, but only admin
 // can list every client (GET /api/admin/clients is admin-only). So this
 // tries to fetch the list -- which lets admin pick a client by name instead
 // of having to go find and type its numeric ID -- and if it 403s (a
@@ -1789,13 +1789,13 @@ function CreateProjectPanel({ onCreated }) {
 }
 
 // Previously every field here was a raw numeric-ID text box -- Project ID,
-// Owner user ID, Client POC user ID, RIV Manager user ID -- none of which
+// Owner user ID, Client POC user ID, RIV Client Partner user ID -- none of which
 // were ever shown anywhere in the app. In practice that meant projects got
 // created with no POC assigned at all (CreateProjectPanel doesn't collect
 // one either), so a product_owner login would see a project in its list
 // but have no way to post updates on it, with no way for an admin to
 // notice or fix it short of a database query. Now: pick the project from
-// a dropdown (code + title), and Product Owner/RIV Manager from dropdowns
+// a dropdown (code + title), and Product Owner/RIV Client Partner from dropdowns
 // of the real logins that exist for that project's client -- the numeric
 // IDs still travel underneath, they're just never something a person has
 // to find or type. The old "project owner" relationship (owner_user_id)
@@ -1870,14 +1870,14 @@ function AssignPanel() {
           </Field>
         )}
 
-        <Field label="RIV Manager">
+        <Field label="RIV Client Partner">
           {managers && managers.length ? (
             <select style={selectStyle} value={form.rivManagerId} onChange={(e) => setForm((f) => ({ ...f, rivManagerId: e.target.value }))}>
               <option value="">— No change —</option>
               {managers.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.email})</option>)}
             </select>
           ) : (
-            <input style={inputStyle} value={form.rivManagerId} onChange={(e) => setForm((f) => ({ ...f, rivManagerId: e.target.value }))} placeholder="Numeric RIV Manager user ID" />
+            <input style={inputStyle} value={form.rivManagerId} onChange={(e) => setForm((f) => ({ ...f, rivManagerId: e.target.value }))} placeholder="Numeric RIV Client Partner user ID" />
           )}
         </Field>
 
@@ -1920,7 +1920,7 @@ function PeoplePanel() {
     try {
       await api.createBuildManager(mgrForm); // clientIds is already an array of id strings
       setMgrForm({ email: "", password: "", name: "", clientIds: [] });
-      setNotice("RIV Manager login created.");
+      setNotice("RIV Client Partner login created.");
       load();
     } catch (e) { setError(e.message || "Couldn't create that login."); }
   }
@@ -1952,13 +1952,13 @@ function PeoplePanel() {
         </div>
       </Card>
       <Card style={{ padding: 20 }}>
-        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}><Briefcase size={14} style={{ marginRight: 6, verticalAlign: -2 }} />RIV Manager logins</div>
+        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}><Briefcase size={14} style={{ marginRight: 6, verticalAlign: -2 }} />RIV Client Partner logins</div>
         <form onSubmit={createManager}>
           <Field label="Name" required><input style={inputStyle} value={mgrForm.name} onChange={(e) => setMgrForm((f) => ({ ...f, name: e.target.value }))} /></Field>
           <Field label="Email" required><input type="email" style={inputStyle} value={mgrForm.email} onChange={(e) => setMgrForm((f) => ({ ...f, email: e.target.value }))} /></Field>
           <Field label="Temporary password" required><input style={inputStyle} value={mgrForm.password} onChange={(e) => setMgrForm((f) => ({ ...f, password: e.target.value }))} /></Field>
           {mgrClients && mgrClients.length ? (
-            <Field label="Assigned clients" hint="Which clients this RIV Manager can see Build projects for.">
+            <Field label="Assigned clients" hint="Which clients this RIV Client Partner can see Build projects for.">
               <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 140, overflowY: "auto", border: `1px solid ${BRAND.line}`, borderRadius: 9, padding: "8px 10px" }}>
                 {mgrClients.map((c) => (
                   <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontSize: 12.5, color: BRAND.ink }}>
@@ -1999,7 +1999,7 @@ function PeoplePanel() {
 // Laid out the same way the main site's own Manage Clients page is
 // (App.jsx's AdminView) -- a prominent list of bordered client cards on
 // the left, the create form as a compact sidebar on the right -- rather
-// than the smaller roster treatment PeoplePanel uses for POC/RIV Manager
+// than the smaller roster treatment PeoplePanel uses for POC/RIV Client Partner
 // logins. These are full client accounts (same weight as a regular
 // client), just scoped to Build, so they read as such.
 function ManageBuildClientsPanel() {
@@ -2114,7 +2114,7 @@ function OverdueDigestPanel() {
     <Card style={{ padding: 20 }}>
       <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 8 }}>Overdue-update digest</div>
       <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginBottom: 12, lineHeight: 1.6 }}>
-        Notifies each overdue project's POC and RIV Manager, and sends admins one digest. This isn't scheduled automatically yet —
+        Notifies each overdue project's POC and RIV Client Partner, and sends admins one digest. This isn't scheduled automatically yet —
         run it manually here, or point a daily scheduled task at this action.
       </div>
       {result && <Notice text={`${result.overdueCount} project(s) overdue${result.codes?.length ? `: ${result.codes.join(", ")}` : "."}`} />}
