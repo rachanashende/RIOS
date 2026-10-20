@@ -85,14 +85,15 @@ export function clearIndexSession() {
   localStorage.removeItem(INDEX_USER_KEY);
 }
 
-// ---- Build.RIV session (client_poc / riv_manager) — fully separate from
-// the above. Build.RIV is the one module that's shared ground between the
-// main site's existing logins (client leader, admin — they keep using their
-// main-site session, see buildRequest() below) and two brand-new login
-// types that have no other home in RIOS: client_poc and riv_manager. Those
-// two get their own isolated token/user pair, same as Ideas/Rise/Index, so
-// e.g. an admin testing the module and a client_poc can both be logged in
-// in the same browser tab without clobbering each other.
+// ---- Build.RIV session (product_owner / riv_manager / startup_poc) —
+// fully separate from the above. Build.RIV is the one module that's shared
+// ground between the main site's existing logins (client leader, admin —
+// they keep using their main-site session, see buildRequest() below) and
+// login types that have no other home in RIOS: product_owner (the Oct 2026
+// "Proposed Screens" rename of client_poc), riv_manager, and startup_poc.
+// Those get their own isolated token/user pair, same as Ideas/Rise/Index,
+// so e.g. an admin testing the module and a product_owner can both be
+// logged in in the same browser tab without clobbering each other.
 export function getBuildToken() { return localStorage.getItem(BUILD_TOKEN_KEY); }
 export function getStoredBuildUser() {
   try { return JSON.parse(localStorage.getItem(BUILD_USER_KEY)); } catch { return null; }
@@ -145,11 +146,12 @@ function ideasRequest(path, opts) { return requestWithToken(path, opts, getIdeas
 function riseRequest(path, opts) { return requestWithToken(path, opts, getRiseToken()); }
 // R-Index calls (index_respondent) attach R-Index's own token instead.
 function indexRequest(path, opts) { return requestWithToken(path, opts, getIndexToken()); }
-// Build.RIV calls: project owners can be any existing user (admin, a
-// client leader, or an internal RIOS teammate) as well as the two new
-// client_poc/riv_manager logins, so — unlike the other modules — this
-// falls back to the main site's token when no Build-specific session is
-// active, rather than requiring everyone to log in twice.
+// Build.RIV calls: a project's Product Owner can be any existing user
+// (admin, a client leader, or an internal RIOS teammate) as well as the
+// product_owner/riv_manager/startup_poc logins, so — unlike the other
+// modules — this falls back to the main site's token when no Build-
+// specific session is active, rather than requiring everyone to log in
+// twice.
 function buildRequest(path, opts) { return requestWithToken(path, opts, getBuildToken() || getToken()); }
 
 // O17: the login reply says whether the password is a temporary one; keep that on the user object.
@@ -295,7 +297,8 @@ export const api = {
   getIndexCampaignReportAdmin: (campaignId) => indexRequest(`/admin/index/campaigns/${campaignId}/report`),
 
   // ---- Build.RIV: shared routes (backend/routes/build.js). Reachable by
-  // admin, riv_manager, client, client_poc, or a project's owner -- see
+  // admin, riv_manager, client, product_owner, startup_poc, or a linked
+  // junior_employee -- see
   // buildRequest() above for why this attaches the Build session token
   // when there is one, falling back to the main site's otherwise.
   listBuildProjects: (params) => buildRequest(`/build/projects${toQuery(params)}`),
@@ -390,7 +393,7 @@ export const api = {
   getMyBuildPicksRise: () => riseRequest("/build/my-picks"),
   getMyReassessLinks: () => buildRequest("/build/my-reassess-links"),
 
-  // ---- Build.RIV's own isolated login (client_poc / riv_manager), same
-  // shared /auth/login endpoint as every other module.
+  // ---- Build.RIV's own isolated login (product_owner / riv_manager /
+  // startup_poc), same shared /auth/login endpoint as every other module.
   buildLogin: (email, password) => loginRequest(email, password),
 };

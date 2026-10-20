@@ -132,7 +132,7 @@ function NavBar({ view, setView, user, onLogout }) {
     ...publicItems,
     ...(user?.role === "junior_employee" || user?.role === "jury" ? [{ id: "ideas-riv", label: "Ideathon" }, { id: "build-riv", label: "Build" }] : []),
     ...(user?.role === "rise_jury" ? [{ id: "rise-riv", label: "Startup" }] : []),
-    ...(user?.role === "client_poc" || user?.role === "riv_manager" ? [{ id: "build-riv", label: "Build" }] : []),
+    ...(["product_owner", "riv_manager", "startup_poc"].includes(user?.role) ? [{ id: "build-riv", label: "Build" }] : []),
     ...(user?.role === "client" ? (user?.buildScoped ? buildScopedClientItems : clientItems) : []),
     ...(user?.role === "admin" ? adminItems : []),
   ];
@@ -1647,17 +1647,18 @@ export default function RiosApp() {
       // instead of showing its landing page as if logged out.
       setIndexSession(token, loggedInUser);
       path = "/rindex"; v = "r-index";
-    } else if (loggedInUser.role === "client_poc" || loggedInUser.role === "riv_manager") {
-      // Build.RIV's two brand-new login types (no other home in RIOS) --
-      // same shared /auth/login endpoint, routed into Build's own
-      // isolated session (see api.js's BUILD_TOKEN_KEY comment).
+    } else if (["product_owner", "riv_manager", "startup_poc"].includes(loggedInUser.role)) {
+      // Build.RIV's login types with no other home in RIOS -- same shared
+      // /auth/login endpoint, routed into Build's own isolated session
+      // (see api.js's BUILD_TOKEN_KEY comment). product_owner is the Oct
+      // 2026 "Proposed Screens" rename of client_poc; startup_poc is new.
       setBuildSession(token, loggedInUser);
       path = "/build"; v = "build-riv";
     } else if (loggedInUser.role === "client" && loggedInUser.buildScoped) {
       // A client login created specifically for a Build engagement (see
       // db.build.js's build_scoped column) -- same redirect-into-Build
-      // treatment as client_poc/riv_manager above, instead of the
-      // "/audit" a regular client lands on just below.
+      // treatment as product_owner/riv_manager/startup_poc above, instead
+      // of the "/audit" a regular client lands on just below.
       setBuildSession(token, loggedInUser);
       path = "/build"; v = "build-riv";
     } else {

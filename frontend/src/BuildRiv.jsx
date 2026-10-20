@@ -206,11 +206,11 @@ function BuildNavBar({ view, setView, session, onLogout, canSeeDashboard, canSee
 }
 
 /* =========================================================================
-   LOGIN -- for client_poc / riv_manager (Build.RIV's two new login types,
-   same top-down-issued-login convention as every other role in RIOS). A
-   client leader or admin arriving here is normally already authenticated
-   through the main site (App.jsx seeds Build's session on the way in), so
-   this screen is mostly what client_poc/riv_manager actually see.
+   LOGIN -- for product_owner / riv_manager / startup_poc (Build.RIV's own
+   login types, same top-down-issued-login convention as every other role
+   in RIOS). A client leader or admin arriving here is normally already
+   authenticated through the main site (App.jsx seeds Build's session on
+   the way in), so this screen is mostly what those three roles see.
    ========================================================================= */
 function LoginView({ onAuthed }) {
   const [email, setEmail] = useState("");
@@ -1066,12 +1066,19 @@ function ProjectDetailView({ projectId, session, onBack }) {
 
   const { project, sources, history, updates, lessons, files } = data;
   // These only toggle what's shown -- lib/buildPermissions.js on the
-  // backend is the real gate (PRD 10.2); a frontend slip here just hides a
-  // button a server call would reject anyway, never grants extra access.
-  const isOwner = Number(session.id) === Number(project.owner_user_id);
+  // backend is the real gate (Oct 2026 "Proposed Screens" permission
+  // table); a frontend slip here just hides a button a server call would
+  // reject anyway, never grants extra access. isOwner/owner_user_id was
+  // retired -- Product Owner is now the sole non-admin gate approver.
+  const isProductOwner = session.role === "product_owner" && Number(session.id) === Number(project.product_owner_user_id);
+  const isStartupPoc = session.role === "startup_poc" && Number(session.id) === Number(project.startup_poc_user_id);
   const isClientLeader = session.role === "client" && Number(session.id) === Number(project.client_id);
-  const canAddUpdate = session.role === "admin" || session.role === "riv_manager" || session.role === "client_poc" || isOwner;
-  const canEditRoi = canAddUpdate || isClientLeader;
+  // canEditDetails mirrors the backend's narrower check (no Employee/Startup
+  // POC) for the Overview/ROI "edit" affordances; canAddUpdate (status
+  // updates, files, lessons) stays broader and also includes Startup POC.
+  const canEditDetails = session.role === "admin" || session.role === "riv_manager" || isProductOwner;
+  const canAddUpdate = canEditDetails || isStartupPoc || session.role === "junior_employee";
+  const canEditRoi = canEditDetails || isClientLeader;
   const canUpload = canAddUpdate;
 
   const tabs = [
@@ -1122,10 +1129,10 @@ function ProjectDetailView({ projectId, session, onBack }) {
         ))}
       </div>
 
-      {tab === "overview" && <OverviewTab project={project} sources={sources} canEdit={canAddUpdate} onSaved={load} session={session} />}
+      {tab === "overview" && <OverviewTab project={project} sources={sources} canEdit={canEditDetails} onSaved={load} session={session} />}
       {tab === "updates" && <UpdatesTab project={project} updates={updates} canAdd={canAddUpdate} onAdded={load} />}
-      {tab === "roi" && <RoiTab project={project} canEdit={canEditRoi} isClientLeader={isClientLeader && !canAddUpdate} onSaved={load} />}
-      {tab === "lessons" && <LessonsTab project={project} lessons={lessons} canEdit={canAddUpdate} onSaved={load} />}
+      {tab === "roi" && <RoiTab project={project} canEdit={canEditRoi} isClientLeader={isClientLeader && !canEditDetails} onSaved={load} />}
+      {tab === "lessons" && <LessonsTab project={project} lessons={lessons} canEdit={canEditDetails} onSaved={load} />}
       {tab === "files" && <FilesTab project={project} files={files} canUpload={canUpload} onUploaded={load} />}
       {tab === "history" && <HistoryTab history={history} />}
     </div>
@@ -1134,7 +1141,7 @@ function ProjectDetailView({ projectId, session, onBack }) {
 
 /* =========================================================================
    LEADER DASHBOARD (PRD 9) -- Client Leader view (own client) + RIV
-   portfolio view (admin, every client). A client_poc sees their client's
+   portfolio view (admin, every client). A product_owner sees their client's
    dashboard too; a riv_manager sees the clients assigned to them via the
    same client-dashboard endpoint, one client at a time, from a picker.
    ========================================================================= */
@@ -1457,7 +1464,7 @@ function PortfolioDashboard() {
 function DashboardView({ session }) {
   const [sub, setSub] = useState(session.role === "admin" ? "portfolio" : "client");
   const isAdmin = session.role === "admin";
-  const isClientLike = ["client", "client_poc"].includes(session.role);
+  const isClientLike = ["client", "product_owner"].includes(session.role);
 
   return (
     <div style={{ maxWidth: 1180, margin: "0 auto", padding: "36px 24px 100px" }}>
@@ -1483,7 +1490,7 @@ function DashboardView({ session }) {
 /* =========================================================================
    ADMIN CONSOLE (PRD 6/7 "How a project starts", 10.1) -- create projects
    (manual / from an Ideathon winner / from a selected startup), assign
-   people, and manage client_poc + riv_manager logins.
+   people, and manage product_owner + riv_manager + startup_poc logins.
    ========================================================================= */
 // Admin and RIV Manager both reach the Build admin console, but only admin
 // can list every client (GET /api/admin/clients is admin-only). So this
@@ -1522,7 +1529,7 @@ function ClientPicker({ value, onChange, required, label, hint }) {
 
 function CreateProjectPanel({ onCreated }) {
   const [mode, setMode] = useState("manual");
-  const [form, setForm] = useState({ type: "internal", title: "", description: "", clientId: "", targetEnd: "", pocUserId: "" });
+  const [form, setForm] = useState({ type: "internal", title: "", description: "", clientId: "", targetEnd: "", productOwnerUserId: "" });
   const [ideaId, setIdeaId] = useState("");
   const [applicationId, setApplicationId] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -1584,8 +1591,8 @@ function CreateProjectPanel({ onCreated }) {
             <Field label="Title" required><input style={inputStyle} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} /></Field>
             <Field label="Description"><textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} /></Field>
             <ClientPicker label="Client" required hint="The RIOS client (leader) account this project belongs to." value={form.clientId} onChange={(v) => setForm((f) => ({ ...f, clientId: v }))} />
-            <Field label="Client POC" hint={!form.clientId ? "Choose a client first." : pocs && !pocs.length ? "This client has no POC logins yet -- create one under POC / Manager logins, or assign later." : "Optional -- can also be set later from Assign people."}>
-              <select style={selectStyle} value={form.pocUserId} onChange={(e) => setForm((f) => ({ ...f, pocUserId: e.target.value }))} disabled={!pocs || !pocs.length}>
+            <Field label="Product Owner" hint={!form.clientId ? "Choose a client first." : pocs && !pocs.length ? "This client has no Product Owner logins yet -- create one under Logins, or assign later." : "Optional -- can also be set later from Assign people."}>
+              <select style={selectStyle} value={form.productOwnerUserId} onChange={(e) => setForm((f) => ({ ...f, productOwnerUserId: e.target.value }))} disabled={!pocs || !pocs.length}>
                 <option value="">— None yet —</option>
                 {(pocs || []).map((p) => <option key={p.id} value={p.id}>{p.name} ({p.email})</option>)}
               </select>
@@ -1615,18 +1622,21 @@ function CreateProjectPanel({ onCreated }) {
 // Owner user ID, Client POC user ID, RIV Manager user ID -- none of which
 // were ever shown anywhere in the app. In practice that meant projects got
 // created with no POC assigned at all (CreateProjectPanel doesn't collect
-// one either), so a client_poc login would see a project in its list but
-// have no way to post updates on it, with no way for an admin to notice or
-// fix it short of a database query. Now: pick the project from a dropdown
-// (code + title), and POC/RIV Manager from dropdowns of the real logins
-// that exist for that project's client -- the numeric IDs still travel
-// underneath, they're just never something a person has to find or type.
-// Owner stays a numeric field: Build.RIV has no listing of candidate
-// "owner" accounts anywhere in the app to build a picker from.
+// one either), so a product_owner login would see a project in its list
+// but have no way to post updates on it, with no way for an admin to
+// notice or fix it short of a database query. Now: pick the project from
+// a dropdown (code + title), and Product Owner/RIV Manager from dropdowns
+// of the real logins that exist for that project's client -- the numeric
+// IDs still travel underneath, they're just never something a person has
+// to find or type. The old "project owner" relationship (owner_user_id)
+// was retired in the Oct 2026 "Proposed Screens" redesign -- merged into
+// Product Owner -- so that field is gone. Startup POC stays a numeric
+// field for now (no listing/picker built for it yet; it's also only ever
+// used for startup-type projects).
 function AssignPanel() {
   const [projects, setProjects] = useState(null);
   const [projectId, setProjectId] = useState("");
-  const [form, setForm] = useState({ ownerUserId: "", pocUserId: "", rivManagerId: "" });
+  const [form, setForm] = useState({ productOwnerUserId: "", rivManagerId: "", startupPocUserId: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -1649,7 +1659,8 @@ function AssignPanel() {
     setSubmitting(true); setError(null); setNotice(null);
     try {
       await api.assignBuildProject(projectId, {
-        ownerUserId: form.ownerUserId || undefined, pocUserId: form.pocUserId || undefined, rivManagerId: form.rivManagerId || undefined,
+        productOwnerUserId: form.productOwnerUserId || undefined, rivManagerId: form.rivManagerId || undefined,
+        startupPocUserId: form.startupPocUserId || undefined,
       });
       setNotice("Assignment saved.");
     } catch (e) {
@@ -1672,20 +1683,22 @@ function AssignPanel() {
           )}
         </Field>
 
-        <Field label="Owner user ID" hint="No picker for this one yet -- there's no listing of candidate owner accounts in the app.">
-          <input style={inputStyle} value={form.ownerUserId} onChange={(e) => setForm((f) => ({ ...f, ownerUserId: e.target.value }))} />
-        </Field>
-
-        <Field label="Client POC" hint={selectedProject ? undefined : "Choose a project first."}>
+        <Field label="Product Owner" hint={selectedProject ? undefined : "Choose a project first."}>
           {pocs && pocs.length ? (
-            <select style={selectStyle} value={form.pocUserId} onChange={(e) => setForm((f) => ({ ...f, pocUserId: e.target.value }))}>
+            <select style={selectStyle} value={form.productOwnerUserId} onChange={(e) => setForm((f) => ({ ...f, productOwnerUserId: e.target.value }))}>
               <option value="">— No change —</option>
               {pocs.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.email})</option>)}
             </select>
           ) : (
-            <input style={inputStyle} value={form.pocUserId} onChange={(e) => setForm((f) => ({ ...f, pocUserId: e.target.value }))} placeholder={selectedProject ? "This client has no POC logins yet -- create one under POC / Manager logins." : "Numeric POC user ID"} />
+            <input style={inputStyle} value={form.productOwnerUserId} onChange={(e) => setForm((f) => ({ ...f, productOwnerUserId: e.target.value }))} placeholder={selectedProject ? "This client has no Product Owner logins yet -- create one under Logins." : "Numeric Product Owner user ID"} />
           )}
         </Field>
+
+        {selectedProject?.type === "startup" && (
+          <Field label="Startup POC" hint="No picker for this one yet -- there's no listing of candidate Startup POC accounts in the app.">
+            <input style={inputStyle} value={form.startupPocUserId} onChange={(e) => setForm((f) => ({ ...f, startupPocUserId: e.target.value }))} placeholder="Numeric Startup POC user ID" />
+          </Field>
+        )}
 
         <Field label="RIV Manager">
           {managers && managers.length ? (
@@ -2004,13 +2017,13 @@ export default function BuildRivApp() {
     setActiveProjectId(null);
   }
 
-  const canSeeDashboard = session && ["admin", "client", "client_poc", "riv_manager"].includes(session.role);
+  const canSeeDashboard = session && ["admin", "client", "product_owner", "riv_manager"].includes(session.role);
   const canSeeAdmin = session && ["admin", "riv_manager"].includes(session.role);
 
   // Build spans roles with no login of their own here (client leader,
-  // admin -- App.jsx seeds their session on the way in) and the two new
-  // ones that do (client_poc, riv_manager). No session at all means the
-  // person hasn't authenticated through either path yet.
+  // admin -- App.jsx seeds their session on the way in) and the ones that
+  // do (product_owner, riv_manager, startup_poc). No session at all means
+  // the person hasn't authenticated through either path yet.
   if (!session) {
     return (
       <div style={{ fontFamily: FONT, background: BRAND.cream, minHeight: "100vh" }}>
