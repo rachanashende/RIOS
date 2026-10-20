@@ -602,8 +602,8 @@ function StageActions({ project, missing, gateApprovers, session, onAction, busy
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         {project.stage === "pilot" ? (
           <>
-            <PrimaryButton disabled={busy || missing?.length > 0} onClick={() => onAction("pilotDecision", { decision: "scale" })}>Scale</PrimaryButton>
-            <GhostButton disabled={busy} onClick={() => setReasonModal("pilot-iterate")}>Iterate</GhostButton>
+            <PrimaryButton disabled={busy || missing?.length > 0} onClick={() => onAction("pilotDecision", { decision: "scale" })}>Scale → Production</PrimaryButton>
+            <GhostButton disabled={busy} onClick={() => setReasonModal("pilot-iterate")}>Iterate → back to Build</GhostButton>
             <GhostButton disabled={busy} onClick={() => setReasonModal("pilot-stop")}>Stop</GhostButton>
           </>
         ) : project.stage !== "closed" ? (
@@ -626,7 +626,7 @@ function StageActions({ project, missing, gateApprovers, session, onAction, busy
             <Field
               label="Outcome"
               required
-              hint={project.stage !== "closed" ? "\"Scaled\" isn't available yet -- the project hasn't reached the Closed stage (after Scale). Choose \"Stopped\" to close it now." : undefined}
+              hint={project.stage !== "closed" ? "\"Scaled\" isn't available yet -- the project hasn't reached the Closed stage (after Production). Choose \"Stopped\" to close it now." : undefined}
             >
               <select style={selectStyle} value={outcome} onChange={(e) => setOutcome(e.target.value)}>
                 <option value="scaled" disabled={project.stage !== "closed"}>Scaled{project.stage !== "closed" ? " (reach Closed stage first)" : ""}</option>
@@ -775,6 +775,11 @@ function OverviewTab({ project, sources, canEdit, onSaved, session }) {
 function StageDetailsForm({ project, onSaved }) {
   const [form, setForm] = useState({
     targetEnd: project.target_end ? project.target_end.slice(0, 10) : "",
+    ndaSignedAt: project.nda_signed_at ? project.nda_signed_at.slice(0, 10) : "",
+    proposalAmount: project.proposal_amount ?? "",
+    proposalAcceptedAt: project.proposal_accepted_at ? project.proposal_accepted_at.slice(0, 10) : "",
+    poNumber: project.po_number || "",
+    poRaisedAt: project.po_raised_at ? project.po_raised_at.slice(0, 10) : "",
     agreementType: project.agreement_type || "",
     agreementSignedAt: project.agreement_signed_at ? project.agreement_signed_at.slice(0, 10) : "",
     pilotFee: project.pilot_fee ?? "",
@@ -801,6 +806,11 @@ function StageDetailsForm({ project, onSaved }) {
     try {
       const payload = {
         targetEnd: form.targetEnd || null,
+        ndaSignedAt: form.ndaSignedAt || null,
+        proposalAmount: form.proposalAmount === "" ? null : Number(form.proposalAmount),
+        proposalAcceptedAt: form.proposalAcceptedAt || null,
+        poNumber: form.poNumber || null,
+        poRaisedAt: form.poRaisedAt || null,
         agreementType: form.agreementType || null,
         agreementSignedAt: form.agreementSignedAt || null,
         pilotFee: form.pilotFee === "" ? null : Number(form.pilotFee),
@@ -837,6 +847,27 @@ function StageDetailsForm({ project, onSaved }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0 20px" }}>
           <Field label="Target end date"><input type="date" style={inputStyle} value={form.targetEnd} onChange={set("targetEnd")} /></Field>
         </div>
+
+        {isStartup && (
+          <>
+            <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>NDA</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0 20px" }}>
+              <Field label="NDA signed date"><input type="date" style={inputStyle} value={form.ndaSignedAt} onChange={set("ndaSignedAt")} /></Field>
+            </div>
+
+            <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Proposal</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0 20px" }}>
+              <Field label="Proposal amount (USD)"><input type="number" style={inputStyle} value={form.proposalAmount} onChange={set("proposalAmount")} /></Field>
+              <Field label="Proposal accepted date"><input type="date" style={inputStyle} value={form.proposalAcceptedAt} onChange={set("proposalAcceptedAt")} /></Field>
+            </div>
+
+            <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Purchase Order</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0 20px" }}>
+              <Field label="PO number"><input style={inputStyle} value={form.poNumber} onChange={set("poNumber")} /></Field>
+              <Field label="PO raised date"><input type="date" style={inputStyle} value={form.poRaisedAt} onChange={set("poRaisedAt")} /></Field>
+            </div>
+          </>
+        )}
 
         <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Agreement</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0 20px" }}>
@@ -884,7 +915,7 @@ function StageDetailsForm({ project, onSaved }) {
           <Field label="Pilot end date"><input type="date" style={inputStyle} value={form.pilotEnd} onChange={set("pilotEnd")} /></Field>
         </div>
 
-        <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Scale</div>
+        <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Production</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0 20px" }}>
           <Field label="Rollout scope"><input style={inputStyle} value={form.rolloutScope} onChange={set("rolloutScope")} /></Field>
           {isStartup && (
@@ -1204,6 +1235,65 @@ function HistoryTab({ history }) {
   );
 }
 
+// Two-row stage stepper (Oct 2026 "Proposed Screens" page_3) -- a DEAL row
+// (startup-only: NDA/Proposal/Purchase Order/Agreement, the "selling" part
+// before any delivery work starts) and a DELIVERY row shared by both
+// workflows (Design through Closed). Internal projects never show a DEAL
+// row since BUILD_STAGES.internal has no deal stages at all.
+const DEAL_STAGES = ["requirements", "nda", "proposal", "purchase_order", "agreement"];
+function StageStepperRow({ label, stages, currentStage }) {
+  const stageList = BUILD_STAGES.startup; // full ordered list, for index comparison
+  const curIdx = stageList.indexOf(currentStage);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+      {label && <div style={{ fontFamily: FONT, fontSize: 10.5, fontWeight: 700, color: "#9B958F", textTransform: "uppercase", letterSpacing: "0.04em", width: 62, flexShrink: 0 }}>{label}</div>}
+      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
+        {stages.map((s, i) => {
+          const idx = stageList.indexOf(s);
+          const done = idx < curIdx;
+          const active = s === currentStage;
+          const bg = active ? BRAND.coral : done ? "#1B7A5A" : "#EFEBE7";
+          const fg = active || done ? "#fff" : "#9B958F";
+          return (
+            <React.Fragment key={s}>
+              {i > 0 && <div style={{ width: 14, height: 1, background: BRAND.line }} />}
+              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <div style={{
+                  width: 20, height: 20, borderRadius: "50%", background: bg, color: fg,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontFamily: FONT, fontSize: 10.5, fontWeight: 700, flexShrink: 0,
+                }}>
+                  {done ? <CheckCircle2 size={11} /> : i + 1}
+                </div>
+                <span style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: active ? 700 : 500, color: active ? BRAND.ink : "#7A746F", whiteSpace: "nowrap" }}>
+                  {BUILD_STAGE_LABELS[s]}
+                </span>
+              </div>
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+const STARTUP_DELIVERY_STAGES = ["design", "build", "test", "pilot", "production", "closed"];
+function StageStepper({ project }) {
+  if (project.stage === "closed" && project.status === "closed") return null;
+  const isStartup = project.type === "startup";
+  return (
+    <Card style={{ padding: "14px 18px", marginBottom: 16 }}>
+      {isStartup ? (
+        <>
+          <StageStepperRow label="Deal" stages={DEAL_STAGES} currentStage={project.stage} />
+          <StageStepperRow label="Delivery" stages={STARTUP_DELIVERY_STAGES} currentStage={project.stage} />
+        </>
+      ) : (
+        <StageStepperRow stages={BUILD_STAGES.internal} currentStage={project.stage} />
+      )}
+    </Card>
+  );
+}
+
 function ProjectDetailView({ projectId, session, onBack }) {
   const [data, setData] = useState(null);
   const [tab, setTab] = useState("overview");
@@ -1281,6 +1371,8 @@ function ProjectDetailView({ projectId, session, onBack }) {
           <StatusBadge status={project.status} />
         </div>
       </div>
+
+      <StageStepper project={project} />
 
       <ErrorBanner text={error} />
 

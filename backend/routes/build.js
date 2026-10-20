@@ -813,6 +813,11 @@ router.put("/projects/:id/details", async (req, res, next) => {
     const fields = {
       target_end: body.targetEnd,
       kpi_baseline_note: body.kpiBaselineNote,
+      nda_signed_at: body.ndaSignedAt,
+      proposal_amount: body.proposalAmount,
+      proposal_accepted_at: body.proposalAcceptedAt,
+      po_number: body.poNumber,
+      po_raised_at: body.poRaisedAt,
       agreement_type: body.agreementType,
       agreement_signed_at: body.agreementSignedAt,
       pilot_fee: body.pilotFee,
