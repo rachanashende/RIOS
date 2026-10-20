@@ -491,7 +491,10 @@ router.get("/projects/:id", async (req, res, next) => {
     const effectiveHealth = rank[auto.health] > rank[projOut.health] ? auto.health : projOut.health;
 
     res.json({
-      project: { ...projOut, effectiveHealth, healthReason: effectiveHealth === projOut.health ? null : auto.reason },
+      project: {
+        ...projOut, effectiveHealth, healthReason: effectiveHealth === projOut.health ? null : auto.reason,
+        kpi_now: latestKpiRow ? Number(latestKpiRow.value) : null,
+      },
       sources: sources.rows,
       stageOrder: STAGES[project.type],
       stageLabels: STAGE_LABELS,

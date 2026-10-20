@@ -935,56 +935,112 @@ function StageDetailsForm({ project, onSaved }) {
   );
 }
 
+// "Agreed with" picker (page 4 of the mockup) -- the backend already
+// accepts agreedWithUserId, but nothing in the UI ever offered a person to
+// pick; this builds the options from the people already on the project
+// (no new lookup needed).
+function agreedWithOptions(project) {
+  const opts = [];
+  if (project.product_owner_user_id) opts.push({ id: project.product_owner_user_id, label: `${project.product_owner_name || "Product Owner"} (Product Owner)` });
+  if (project.riv_manager_id) opts.push({ id: project.riv_manager_id, label: `${project.riv_manager_name || "RIV Client Partner"} (RIV Client Partner)` });
+  if (project.startup_poc_user_id) opts.push({ id: project.startup_poc_user_id, label: `${project.startup_poc_name || "Startup POC"} (Startup POC)` });
+  if (project.client_id) opts.push({ id: project.client_id, label: `${project.client_name || "Client Leader"} (Client Leader)` });
+  return opts;
+}
+
+const HEALTH_OPTIONS = [
+  ["on_track", "On track", "#1B7A5A"], ["at_risk", "At risk", BRAND.coralDark], ["off_track", "Off track", "#C13B3B"],
+];
+
 function UpdatesTab({ project, updates, canAdd, onAdded }) {
-  const [form, setForm] = useState({ health: "on_track", progress: "", nextSteps: "", blockers: "", needsHelp: false, pctComplete: "" });
+  const [form, setForm] = useState({
+    health: "on_track", progress: "", nextSteps: "", blockers: "", needsHelp: false, pctComplete: "",
+    kpiActual: "", actualCost: "", agreedWithUserId: "",
+  });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
   async function submit(e) {
     e.preventDefault();
-    if (!form.progress.trim() || !form.nextSteps.trim()) { setError("Progress and next steps are required."); return; }
+    if (!form.progress.trim() || !form.nextSteps.trim()) { setError("What moved and next steps are required."); return; }
     setSubmitting(true); setError(null);
     try {
       await api.addBuildUpdate(project.id, {
         health: form.health, progress: form.progress, nextSteps: form.nextSteps, blockers: form.blockers,
         needsHelp: form.needsHelp, pctComplete: form.pctComplete === "" ? null : Number(form.pctComplete),
+        kpiActual: form.kpiActual === "" ? null : Number(form.kpiActual),
+        actualCost: form.actualCost === "" ? null : Number(form.actualCost),
+        agreedWithUserId: form.agreedWithUserId || null,
       });
-      setForm({ health: "on_track", progress: "", nextSteps: "", blockers: "", needsHelp: false, pctComplete: "" });
+      setForm({ health: "on_track", progress: "", nextSteps: "", blockers: "", needsHelp: false, pctComplete: "", kpiActual: "", actualCost: "", agreedWithUserId: "" });
       onAdded();
     } catch (e) {
       setError(e.message || "Couldn't save update.");
     } finally { setSubmitting(false); }
   }
 
+  const m = project.metrics || {};
+  const agreedOptions = agreedWithOptions(project);
+
   return (
     <div>
       {canAdd && (
         <Card style={{ padding: 20, marginBottom: 20 }}>
-          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}>Post a status update</div>
+          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}>Add status update</div>
           <form onSubmit={submit}>
             <Field label="Health" required>
-              <select style={selectStyle} value={form.health} onChange={(e) => setForm((f) => ({ ...f, health: e.target.value }))}>
-                <option value="on_track">On track</option>
-                <option value="at_risk">At risk</option>
-                <option value="off_track">Off track</option>
-              </select>
+              <div style={{ display: "flex", gap: 8, marginBottom: 2 }}>
+                {HEALTH_OPTIONS.map(([val, label, color]) => (
+                  <button key={val} type="button" onClick={() => setForm((f) => ({ ...f, health: val }))} style={{
+                    flex: 1, fontFamily: FONT, fontSize: 12.5, fontWeight: 700, padding: "9px 10px", borderRadius: 9, cursor: "pointer",
+                    border: `1.5px solid ${form.health === val ? color : BRAND.line}`,
+                    background: form.health === val ? color : "#fff", color: form.health === val ? "#fff" : color,
+                  }}>{label}</button>
+                ))}
+              </div>
             </Field>
-            <Field label="Progress since last update" required>
+            <Field label="What moved since the last update" required>
               <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical" }} value={form.progress} onChange={(e) => setForm((f) => ({ ...f, progress: e.target.value }))} />
             </Field>
             <Field label="Next steps" required>
               <textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} value={form.nextSteps} onChange={(e) => setForm((f) => ({ ...f, nextSteps: e.target.value }))} />
             </Field>
-            <Field label="Blockers">
+            <Field label="Blockers (optional)">
               <textarea style={{ ...inputStyle, minHeight: 50, resize: "vertical" }} value={form.blockers} onChange={(e) => setForm((f) => ({ ...f, blockers: e.target.value }))} />
-            </Field>
-            <Field label="% complete">
-              <input type="number" min="0" max="100" style={inputStyle} value={form.pctComplete} onChange={(e) => setForm((f) => ({ ...f, pctComplete: e.target.value }))} />
             </Field>
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontSize: 13, color: BRAND.ink, marginBottom: 16 }}>
               <input type="checkbox" checked={form.needsHelp} onChange={(e) => setForm((f) => ({ ...f, needsHelp: e.target.checked }))} />
-              This project needs leadership help
+              Needs leadership help
             </label>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: "0 20px" }}>
+              <Field label="KPI now" hint={m.kpi_name ? `Baseline ${m.baseline ?? "—"} · target ${m.target ?? "—"}` : "No KPI set yet -- see Overview."}>
+                <input type="number" style={inputStyle} value={form.kpiActual} onChange={(e) => setForm((f) => ({ ...f, kpiActual: e.target.value }))} />
+              </Field>
+              <Field label="Cost to date (USD)" hint={m.est_cost != null ? `Budget ${fmtUSD(m.est_cost)}` : "No budget estimate set yet."}>
+                <input type="number" style={inputStyle} value={form.actualCost} onChange={(e) => setForm((f) => ({ ...f, actualCost: e.target.value }))} />
+              </Field>
+              <Field label="% complete">
+                <input type="number" min="0" max="100" style={inputStyle} value={form.pctComplete} onChange={(e) => setForm((f) => ({ ...f, pctComplete: e.target.value }))} />
+              </Field>
+            </div>
+
+            {agreedOptions.length > 0 && (
+              <Field label="Agreed with" hint="Who on the project signed off on this update, if anyone.">
+                <select style={selectStyle} value={form.agreedWithUserId} onChange={(e) => setForm((f) => ({ ...f, agreedWithUserId: e.target.value }))}>
+                  <option value="">— None —</option>
+                  {agreedOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                </select>
+              </Field>
+            )}
+
+            <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", background: BRAND.cream, border: `1px solid ${BRAND.line}`, borderRadius: 9, padding: "10px 12px", marginBottom: 16 }}>
+              <b style={{ color: BRAND.ink }}>RIOS health check.</b> Budget, target date, KPI-during-Pilot progress, and the leadership-help flag are checked automatically.
+              {project.healthReason
+                ? ` Right now the worse of those checks reads: "${project.healthReason}" -- if that's still worse than the health you pick above after this update, it's what shows.`
+                : " None of them currently read worse than the health you pick."}
+            </div>
+
             <ErrorBanner text={error} />
             <PrimaryButton type="submit" disabled={submitting}>{submitting ? "Saving…" : "Post update"}</PrimaryButton>
           </form>
@@ -1298,6 +1354,95 @@ function StageStepper({ project }) {
   );
 }
 
+// Right-rail side panels (page 3 of the Oct 2026 mockup) -- People, "KPI &
+// value", "Deal summary" (startup only), and "Where it came from". All
+// built from fields the detail payload already carries (project join
+// fields, sources array) -- no new endpoints needed for these.
+function SidePanel({ title, children }) {
+  return (
+    <Card style={{ padding: 18, marginBottom: 16 }}>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: BRAND.ink, marginBottom: 12 }}>{title}</div>
+      {children}
+    </Card>
+  );
+}
+function SideRow({ label, value }) {
+  if (!value) return null;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#9B958F", textTransform: "uppercase", letterSpacing: "0.03em" }}>{label}</div>
+      <div style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.ink, marginTop: 2 }}>{value}</div>
+    </div>
+  );
+}
+function PeoplePanel2({ project }) {
+  return (
+    <SidePanel title="People">
+      <SideRow label="Client" value={project.client_company || project.client_name} />
+      <SideRow label="Product Owner" value={project.product_owner_name} />
+      <SideRow label="RIV Client Partner" value={project.riv_manager_name} />
+      {project.type === "startup" && <SideRow label="Startup POC" value={project.startup_poc_name} />}
+    </SidePanel>
+  );
+}
+function KpiValuePanel({ project }) {
+  const m = project.metrics || {};
+  if (!m.kpi_name && m.est_cost == null && m.actual_cost == null) return null;
+  const pct = m.baseline != null && m.target != null && project.kpi_now != null && m.target !== m.baseline
+    ? Math.max(0, Math.min(100, Math.round(((project.kpi_now - m.baseline) / (m.target - m.baseline)) * 100)))
+    : null;
+  return (
+    <SidePanel title="KPI & value">
+      {m.kpi_name && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#9B958F", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 4 }}>{m.kpi_name}</div>
+          <div style={{ height: 6, borderRadius: 999, background: BRAND.cream, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${pct ?? 0}%`, background: BRAND.coral, borderRadius: 999 }} />
+          </div>
+          <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#7A746F", marginTop: 4 }}>
+            {m.baseline ?? "—"} → {project.kpi_now ?? "—"} → {m.target ?? "—"}{pct != null ? ` (${pct}%)` : ""}
+          </div>
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 14 }}>
+        <div>
+          <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#9B958F", textTransform: "uppercase" }}>Cost to date</div>
+          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink }}>{fmtUSD(m.actual_cost) || "—"}</div>
+        </div>
+        <div>
+          <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#9B958F", textTransform: "uppercase" }}>Benefit/yr</div>
+          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink }}>{fmtUSD(m.realised_benefit ?? m.est_benefit) || "—"}</div>
+        </div>
+      </div>
+    </SidePanel>
+  );
+}
+function DealSummaryPanel({ project }) {
+  if (project.type !== "startup") return null;
+  return (
+    <SidePanel title="Deal summary">
+      <SideRow label="NDA signed" value={fmtDate(project.nda_signed_at)} />
+      <SideRow label="Proposal" value={project.proposal_amount != null ? `${fmtUSD(project.proposal_amount)}${project.proposal_accepted_at ? ` · accepted ${fmtDate(project.proposal_accepted_at)}` : ""}` : null} />
+      <SideRow label="Purchase order" value={project.po_number ? `${project.po_number}${project.po_raised_at ? ` · raised ${fmtDate(project.po_raised_at)}` : ""}` : null} />
+      <SideRow label="Agreement" value={project.agreement_type ? `${project.agreement_type}${project.agreement_signed_at ? ` · signed ${fmtDate(project.agreement_signed_at)}` : ""}` : null} />
+      {!project.nda_signed_at && !project.proposal_amount && !project.po_number && !project.agreement_type && (
+        <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F" }}>Nothing recorded yet -- fill these in from the Overview tab's "Project details" form.</div>
+      )}
+    </SidePanel>
+  );
+}
+const SOURCE_LABEL = { idea: "Ideathon idea", rise_application: "Startup pilot application", manual: "Created manually" };
+function WhereFromPanel({ sources }) {
+  const s = sources?.[0];
+  if (!s) return null;
+  return (
+    <SidePanel title="Where it came from">
+      <div style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.ink }}>{SOURCE_LABEL[s.source_type] || s.source_type}</div>
+      {s.source_id && <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 2 }}>#{s.source_id}</div>}
+    </SidePanel>
+  );
+}
+
 function ProjectDetailView({ projectId, session, onBack }) {
   const [data, setData] = useState(null);
   const [tab, setTab] = useState("overview");
@@ -1347,17 +1492,20 @@ function ProjectDetailView({ projectId, session, onBack }) {
   const canEditRoi = canEditDetails || isClientLeader;
   const canUpload = canAddUpdate;
 
+  const isStartupProject = project.type === "startup";
+  const dealFiles = isStartupProject ? files.filter((f) => DEAL_STAGES.includes(f.stage)) : [];
   const tabs = [
     { id: "overview", label: "Overview" },
     { id: "updates", label: "Updates" },
     { id: "roi", label: "KPI & ROI" },
     { id: "lessons", label: "Lessons" },
     { id: "files", label: "Files" },
+    ...(isStartupProject ? [{ id: "dealdocs", label: "Deal documents" }] : []),
     { id: "history", label: "History" },
   ];
 
   return (
-    <div style={{ maxWidth: 1020, margin: "0 auto", padding: "32px 24px 100px" }}>
+    <div style={{ maxWidth: 1180, margin: "0 auto", padding: "32px 24px 100px" }}>
       <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: FONT, fontSize: 12.5, color: "#9B958F", background: "none", border: "none", cursor: "pointer", marginBottom: 18 }}>
         <ChevronLeft size={14} /> All projects
       </button>
@@ -1392,22 +1540,38 @@ function ProjectDetailView({ projectId, session, onBack }) {
         />
       )}
 
-      <div style={{ display: "flex", gap: 4, borderBottom: `1px solid ${BRAND.line}`, marginBottom: 20, overflowX: "auto" }}>
-        {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
-            fontFamily: FONT, fontSize: 13, fontWeight: 600, padding: "10px 14px", background: "none", border: "none",
-            borderBottom: tab === t.id ? `2px solid ${BRAND.coral}` : "2px solid transparent",
-            color: tab === t.id ? BRAND.ink : "#9B958F", cursor: "pointer", whiteSpace: "nowrap",
-          }}>{t.label}</button>
-        ))}
-      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(220px, 1fr)", gap: 24, alignItems: "flex-start" }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", gap: 4, borderBottom: `1px solid ${BRAND.line}`, marginBottom: 20, overflowX: "auto" }}>
+            {tabs.map((t) => (
+              <button key={t.id} onClick={() => setTab(t.id)} style={{
+                fontFamily: FONT, fontSize: 13, fontWeight: 600, padding: "10px 14px", background: "none", border: "none",
+                borderBottom: tab === t.id ? `2px solid ${BRAND.coral}` : "2px solid transparent",
+                color: tab === t.id ? BRAND.ink : "#9B958F", cursor: "pointer", whiteSpace: "nowrap",
+              }}>{t.label}</button>
+            ))}
+          </div>
 
-      {tab === "overview" && <OverviewTab project={project} sources={sources} canEdit={canEditDetails} onSaved={load} session={session} />}
-      {tab === "updates" && <UpdatesTab project={project} updates={updates} canAdd={canAddUpdate} onAdded={load} />}
-      {tab === "roi" && <RoiTab project={project} canEdit={canEditRoi} isClientLeader={isClientLeader && !canEditDetails} onSaved={load} />}
-      {tab === "lessons" && <LessonsTab project={project} lessons={lessons} canEdit={canEditDetails} onSaved={load} />}
-      {tab === "files" && <FilesTab project={project} files={files} canUpload={canUpload} onUploaded={load} />}
-      {tab === "history" && <HistoryTab history={history} />}
+          {tab === "overview" && <OverviewTab project={project} sources={sources} canEdit={canEditDetails} onSaved={load} session={session} />}
+          {tab === "updates" && <UpdatesTab project={project} updates={updates} canAdd={canAddUpdate} onAdded={load} />}
+          {tab === "roi" && <RoiTab project={project} canEdit={canEditRoi} isClientLeader={isClientLeader && !canEditDetails} onSaved={load} />}
+          {tab === "lessons" && <LessonsTab project={project} lessons={lessons} canEdit={canEditDetails} onSaved={load} />}
+          {tab === "files" && <FilesTab project={project} files={files} canUpload={canUpload} onUploaded={load} />}
+          {tab === "dealdocs" && (
+            dealFiles.length === 0
+              ? <EmptyState icon={Paperclip} title="No deal documents yet" text="Files uploaded during Requirements, NDA, Proposal, Purchase Order or Agreement show up here automatically, filtered from the Files tab by stage." />
+              : <FilesTab project={project} files={dealFiles} canUpload={canUpload} onUploaded={load} />
+          )}
+          {tab === "history" && <HistoryTab history={history} />}
+        </div>
+
+        <div>
+          <PeoplePanel2 project={project} />
+          <KpiValuePanel project={project} />
+          <DealSummaryPanel project={project} />
+          <WhereFromPanel sources={sources} />
+        </div>
+      </div>
     </div>
   );
 }
