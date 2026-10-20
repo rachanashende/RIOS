@@ -178,7 +178,7 @@ function BuildNavBar({ view, setView, session, onLogout, canSeeDashboard, canSee
   if (canSeeAdmin) items.push({ id: "admin", label: "Admin" });
 
   return (
-    <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(251,249,246,0.95)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${BRAND.line}` }}>
+    <div className="build-nav" style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(251,249,246,0.95)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${BRAND.line}` }}>
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink }}>
@@ -1714,6 +1714,94 @@ function WorkflowBreakdown({ byType }) {
   );
 }
 
+// Stage-by-workflow stacked bars (page_6 of the Oct 2026 mockup, "Internal
+// vs Startup" split) -- data.stageCountsByType is { internal: {stage:
+// count}, startup: {stage: count} } from GET /dashboard/client/:clientId,
+// already split server-side; this just lays it out as one stacked bar per
+// stage across both workflows' stage lists (internal has no deal stages).
+function StageByWorkflowChart({ stageCountsByType }) {
+  if (!stageCountsByType) return null;
+  const allStages = [...new Set([...Object.keys(stageCountsByType.internal || {}), ...Object.keys(stageCountsByType.startup || {})])];
+  if (!allStages.length) return null;
+  const ordered = [...BUILD_STAGE_ORDER.filter((k) => allStages.includes(k)), ...allStages.filter((k) => !BUILD_STAGE_ORDER.includes(k))];
+  const rows = ordered.map((stage) => ({
+    stage: BUILD_STAGE_LABELS[stage] || stage.replace(/_/g, " "),
+    Internal: stageCountsByType.internal?.[stage] || 0,
+    Startup: stageCountsByType.startup?.[stage] || 0,
+  }));
+  return (
+    <Card style={{ padding: 18, marginBottom: 20 }}>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}>Active projects by stage, by workflow</div>
+      <ResponsiveContainer width="100%" height={240}>
+        <BarChart data={rows} margin={{ left: 0, right: 16, top: 4, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={BRAND.line} vertical={false} />
+          <XAxis dataKey="stage" tick={{ fontFamily: FONT, fontSize: 11, fill: "#7A746F" }} />
+          <YAxis allowDecimals={false} tick={{ fontFamily: FONT, fontSize: 11, fill: "#7A746F" }} />
+          <Tooltip contentStyle={{ fontFamily: FONT, fontSize: 12, borderRadius: 8, border: `1px solid ${BRAND.line}` }} />
+          <Legend wrapperStyle={{ fontFamily: FONT, fontSize: 11 }} />
+          <Bar dataKey="Internal" stackId="s" fill={BRAND.coral} radius={[0, 0, 0, 0]} />
+          <Bar dataKey="Startup" stackId="s" fill="#6B8CA3" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </Card>
+  );
+}
+
+// "From audit to impact" (page_6) -- this client's top $-value audit
+// opportunities against whether a Build project has addressed them yet.
+// See the backend comment in buildDashboard.js for why only
+// addressed/not-addressed is shown, not the mockup's richer per-item
+// in-flight status.
+function AuditToImpactPanel({ auditToImpact }) {
+  if (!auditToImpact || !auditToImpact.length) return null;
+  return (
+    <Card style={{ padding: 18, marginBottom: 20 }}>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 4 }}>From audit to impact</div>
+      <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 12 }}>This client's top audit opportunities by potential value, and whether Build has addressed them.</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {auditToImpact.map((o) => (
+          <div key={o.questionId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, fontFamily: FONT, fontSize: 13 }}>
+            <span style={{ color: BRAND.ink }}>{o.text}</span>
+            <span style={{
+              flexShrink: 0, fontFamily: FONT, fontSize: 11.5, fontWeight: 600, borderRadius: 999, padding: "3px 10px", whiteSpace: "nowrap",
+              color: o.status === "addressed" ? "#1B7A5A" : "#9B958F", background: o.status === "addressed" ? "#E7F5EF" : BRAND.cream,
+            }}>{o.note}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// "Recent win" / "Lesson learned" callout bars (page_6) -- the single most
+// recent scaled project and the single most recent stopped-with-a-lesson
+// project, pulled out of the same recentLessons array LessonsLearnedPanel
+// already renders in full below, so there's no new backend data here.
+function RecentCallouts({ recentLessons }) {
+  if (!recentLessons || !recentLessons.length) return null;
+  const win = recentLessons.find((l) => l.outcome === "scaled");
+  const lesson = recentLessons.find((l) => l.outcome !== "scaled");
+  if (!win && !lesson) return null;
+  return (
+    <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 20 }}>
+      {win && (
+        <div style={{ flex: "1 1 280px", background: "#E7F5EF", border: "1px solid #BFE3D3", borderRadius: 12, padding: "14px 16px" }}>
+          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11.5, color: "#1B7A5A", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 4 }}>Recent win</div>
+          <div style={{ fontFamily: FONT, fontSize: 13, color: BRAND.ink }}><b>{win.code}</b> {win.title} scaled{win.closedAt ? ` · ${fmtDate(win.closedAt)}` : ""}</div>
+          {win.worked && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#3C6652", marginTop: 4 }}>{win.worked}</div>}
+        </div>
+      )}
+      {lesson && (
+        <div style={{ flex: "1 1 280px", background: "#FBEFE9", border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: "14px 16px" }}>
+          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11.5, color: BRAND.coralDark, textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 4 }}>Lesson learned</div>
+          <div style={{ fontFamily: FONT, fontSize: 13, color: BRAND.ink }}><b>{lesson.code}</b> {lesson.title}{lesson.closedAt ? ` · ${fmtDate(lesson.closedAt)}` : ""}</div>
+          {(lesson.doDifferently || lesson.notWorked) && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A4A3A", marginTop: 4 }}>{lesson.doDifferently || lesson.notWorked}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const RECOMMENDATION_LABEL = { scale_to_others: "Scale to others", reuse_approach: "Reuse approach", dont_repeat: "Don't repeat" };
 
 // "Lessons learned from completed implementations" at leadership level (PRD
@@ -1793,16 +1881,40 @@ function SummaryStat({ label, value, sub, color }) {
   );
 }
 
+const DASHBOARD_PERIODS = [
+  { value: "3", label: "Last 3 months" },
+  { value: "6", label: "Last 6 months" },
+  { value: "12", label: "Last 12 months" },
+  { value: "24", label: "Last 24 months" },
+];
+const DASHBOARD_TYPES = [
+  { value: "", label: "All workflows" },
+  { value: "internal", label: "Internal ideas" },
+  { value: "startup", label: "Startup pilots" },
+];
+function DashboardSelect({ value, onChange, options }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} style={{
+      fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: BRAND.ink, background: "#fff",
+      border: `1px solid ${BRAND.line}`, borderRadius: 9, padding: "8px 10px", cursor: "pointer",
+    }}>
+      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  );
+}
+
 function ClientDashboard({ clientId, onOpenProject }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [period, setPeriod] = useState("12");
+  const [type, setType] = useState("");
 
   useEffect(() => {
     if (!clientId) return;
     setLoading(true);
-    api.getBuildClientDashboard(clientId).then(setData).catch((e) => setError(e.message || "Couldn't load dashboard.")).finally(() => setLoading(false));
-  }, [clientId]);
+    api.getBuildClientDashboard(clientId, { period, type }).then(setData).catch((e) => setError(e.message || "Couldn't load dashboard.")).finally(() => setLoading(false));
+  }, [clientId, period, type]);
 
   // useSortedRows itself calls hooks (useState/useMemo) -- it must run on
   // every render of this component in the same order, so it's called here
@@ -1819,11 +1931,17 @@ function ClientDashboard({ clientId, onOpenProject }) {
   if (error) return <ErrorBanner text={error} />;
   if (!data) return null;
 
-  const { summary, needsAttention, pipelineByStage, investmentVsBenefit, byType, recentLessons } = data;
+  const { summary, needsAttention, pipelineByStage, stageCountsByType, auditToImpact, investmentVsBenefit, byType, recentLessons } = data;
   const chartRows = (investmentVsBenefit || []).map((r) => ({ name: r.code, invested: r.actualCost || 0, benefit: r.realisedBenefit || 0 }));
 
   return (
     <div>
+      <div className="build-dashboard-no-print" style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginBottom: 14 }}>
+        <DashboardSelect value={period} onChange={setPeriod} options={DASHBOARD_PERIODS} />
+        <DashboardSelect value={type} onChange={setType} options={DASHBOARD_TYPES} />
+        <GhostButton icon={Download} onClick={() => window.print()}>Export PDF</GhostButton>
+      </div>
+
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 20 }}>
         <SummaryStat label="Active projects" value={summary.activeCount} />
         <SummaryStat label="Red / Amber" value={summary.redAmberCount} color={summary.redAmberCount ? "#C13B3B" : undefined} />
@@ -1835,8 +1953,11 @@ function ClientDashboard({ clientId, onOpenProject }) {
       </div>
 
       <WorkflowBreakdown byType={byType} />
+      <RecentCallouts recentLessons={recentLessons} />
+      <StageByWorkflowChart stageCountsByType={stageCountsByType} />
       <StageBreakdown pipelineByStage={pipelineByStage} />
       <InvestmentVsBenefitChart title="Investment vs. realised benefit" rows={chartRows} nameKey="name" investedKey="invested" benefitKey="benefit" />
+      <AuditToImpactPanel auditToImpact={auditToImpact} />
       <LessonsLearnedPanel recentLessons={recentLessons} />
 
       {needsAttention.length > 0 && (
@@ -2775,6 +2896,10 @@ export default function BuildRivApp() {
         .build-spin { animation: build-spin 0.8s linear infinite; }
         @keyframes build-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .build-row:hover { background: ${BRAND.cream}; }
+        @media print {
+          .build-nav, .build-dashboard-no-print { display: none !important; }
+          body, .build-dashboard-no-print ~ * { background: #fff !important; }
+        }
       `}</style>
       <BuildNavBar view={view} setView={goToView} session={session} onLogout={handleLogout} canSeeDashboard={canSeeDashboard} canSeeAdmin={canSeeAdmin} />
 

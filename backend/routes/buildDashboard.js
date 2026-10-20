@@ -74,6 +74,12 @@ router.get("/client/:clientId", async (req, res, next) => {
     const stageCounts = {};
     for (const p of active) stageCounts[p.stage] = (stageCounts[p.stage] || 0) + 1;
 
+    // Stage-by-workflow breakdown (Oct 2026 mockup page_6's stacked bar --
+    // Internal vs Startup side by side per stage), same `active` set as
+    // the flat stageCounts above, just split by p.type too.
+    const stageCountsByType = { internal: {}, startup: {} };
+    for (const p of active) stageCountsByType[p.type][p.stage] = (stageCountsByType[p.type][p.stage] || 0) + 1;
+
     const needsAttention = [
       ...redAmber.map((p) => ({
         projectId: p.id, code: p.code, title: p.title,
@@ -112,6 +118,36 @@ router.get("/client/:clientId", async (req, res, next) => {
       typeFilter ? [clientId, typeFilter] : [clientId]
     );
 
+    // "From audit to impact" (Oct 2026 mockup page_6): this client's top-5
+    // $-value audit opportunities (same computeScores() ranking the
+    // scorecard itself uses), cross-referenced against build_reassess_links
+    // for whether a Build project has been linked back to that question.
+    // Deliberately only "Addressed by {code}" / "Not yet addressed" --
+    // the mockup's richer per-opportunity "In Build"/"Starting" status
+    // would need a live link between an *open* project and an opportunity,
+    // which nothing in the schema tracks (reassess_links are written only
+    // when a project closes as Scaled), so that distinction isn't faked.
+    const { rows: clientResponseRows } = await pool.query("SELECT question_id, maturity, not_applicable FROM responses WHERE user_id = $1", [clientId]);
+    let auditToImpact = [];
+    if (clientResponseRows.length) {
+      const responses = {};
+      clientResponseRows.forEach((r) => { responses[r.question_id] = { maturity: r.maturity, na: !!r.not_applicable }; });
+      const { opportunities } = computeScores(responses);
+      const { rows: linkRows } = await pool.query(
+        `SELECT l.question_id, p.code, p.closed_at FROM build_reassess_links l JOIN build_projects p ON p.id = l.project_id WHERE l.client_id = $1`,
+        [clientId]
+      );
+      const linkByQ = Object.fromEntries(linkRows.map((r) => [r.question_id, r]));
+      auditToImpact = opportunities.map((o) => {
+        const link = linkByQ[o.id];
+        return {
+          questionId: o.id, text: o.text, midpoint: o.midpoint,
+          status: link ? "addressed" : "not_addressed",
+          note: link ? `Addressed by ${link.code} (${new Date(link.closed_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })})` : "Not yet addressed",
+        };
+      });
+    }
+
     res.json({
       summary: {
         activeCount: active.length,
@@ -122,6 +158,8 @@ router.get("/client/:clientId", async (req, res, next) => {
         portfolioRoi, estimated: anyEstimated,
       },
       pipelineByStage: stageCounts,
+      stageCountsByType,
+      auditToImpact,
       needsAttention,
       investmentVsBenefit: active.map((p) => ({ code: p.code, title: p.title, actualCost: p.actual_cost, realisedBenefit: p.realised_benefit, estimated: p.realised_benefit == null })),
       projects: enriched.map((p) => ({
