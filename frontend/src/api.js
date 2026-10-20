@@ -371,7 +371,12 @@ export const api = {
   listBuildStartupPocs: (projectId) => buildRequest(`/admin/build/startup-poc${toQuery({ projectId })}`),
   createBuildStartupPoc: (payload) => buildRequest("/admin/build/startup-poc", { method: "POST", body: payload }),
   deleteBuildStartupPoc: (id) => buildRequest(`/admin/build/startup-poc/${id}`, { method: "DELETE" }),
-  getReadyForBuild: () => buildRequest("/admin/build/ready-for-build"),
+  getReadyForBuild: (includeDeferred) => buildRequest(`/admin/build/ready-for-build${toQuery({ includeDeferred: includeDeferred ? "1" : undefined })}`),
+  deferReadyForBuild: (source, sourceId, days) => buildRequest("/admin/build/ready-for-build/defer", { method: "POST", body: { source, sourceId, days } }),
+  getBuildRequests: (status) => buildRequest(`/admin/build/requests${toQuery({ status })}`),
+  resolveBuildRequest: (id) => buildRequest(`/admin/build/requests/${id}/resolve`, { method: "PUT" }),
+  createBuildRequest: (projectId, message) => buildRequest(`/build/projects/${projectId}/requests`, { method: "POST", body: { message } }),
+  getBuildRequestsForProject: (projectId) => buildRequest(`/build/projects/${projectId}/requests`),
   // Build-scoped Client Leader logins -- separate from the main site's own
   // Manage Clients (api.listClients/createClient), which still creates
   // ordinary full-access clients. These are "client" role too, just flagged

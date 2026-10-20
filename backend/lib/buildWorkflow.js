@@ -159,17 +159,29 @@ export function computeRoi(metrics) {
 // mockup's "if an automatic rule is worse than the health you pick, the
 // worse one shows, with its reason" note.
 //
-// Deliberately NOT implemented: the mockup's "Stage running late" rule
-// (<=14 days late = amber, >14 days = red). That needs an *expected*
-// duration per stage to measure lateness against, and no such field
-// exists anywhere in the schema (build_projects has no per-stage target
-// date, only one overall target_end) -- inventing a duration would be a
-// fabricated threshold, not a derived one, so this rule is left out
-// rather than faked.
+// "Stage running late" (<=14 days late = amber, >14 days = red) needs an
+// *expected* duration per stage to measure lateness against, and no such
+// field exists anywhere in the schema (build_projects has no per-stage
+// target date, only one overall target_end). Rather than leave the rule
+// out, these are explicit, documented DEFAULT expected-duration-in-days
+// assumptions, flagged here the same way other undecided inputs in this
+// module are flagged rather than silently invented -- an admin reviewing
+// this should treat these as a starting point, not a measured fact:
+// Requirements/NDA/Proposal/Purchase Order/Agreement (deal/scoping
+// stages) ~2 weeks each, Design/Test ~2 weeks, Build ~4 weeks, Pilot ~4
+// weeks, Production ~2 weeks. No override field exists yet to replace
+// these per-project; if a team's actual norm differs a lot, that's the
+// next thing to add (a per-project or per-client expected-duration
+// override), not a change to these constants.
+export const STAGE_EXPECTED_DAYS = {
+  requirements: 14, nda: 14, proposal: 14, purchase_order: 14, agreement: 14,
+  design: 14, build: 28, test: 14, pilot: 28, production: 14,
+};
+
 const RANK = { on_track: 0, at_risk: 1, off_track: 2 };
 function worse(a, b) { return RANK[a.health] >= RANK[b.health] ? a : b; }
 
-export function computeAutoHealth({ project, metrics, daysSinceUpdate, latestKpiValue, needsHelp }) {
+export function computeAutoHealth({ project, metrics, daysSinceUpdate, daysInStage, latestKpiValue, needsHelp }) {
   let result = { health: "on_track", reason: null };
 
   // Status update not done.
@@ -201,6 +213,18 @@ export function computeAutoHealth({ project, metrics, daysSinceUpdate, latestKpi
       const progressFrac = (now - baseline) / span;
       if (progressFrac < 0) result = worse(result, { health: "off_track", reason: "Latest KPI reading is worse than baseline during Pilot." });
       else if (progressFrac < 0.5) result = worse(result, { health: "at_risk", reason: "Latest KPI reading is under halfway to target during Pilot." });
+    }
+  }
+
+  // Stage running late, against the default expected duration above --
+  // skipped once a project is done (closed, or sitting in Production
+  // awaiting close) since lateness no longer means anything there.
+  if (daysInStage != null && project.stage !== "production" && project.stage !== "closed") {
+    const expected = STAGE_EXPECTED_DAYS[project.stage];
+    if (expected != null) {
+      const daysLate = daysInStage - expected;
+      if (daysLate > 14) result = worse(result, { health: "off_track", reason: `${daysInStage} days in ${STAGE_LABELS[project.stage] || project.stage} (expected ~${expected}) -- more than 14 days late.` });
+      else if (daysLate > 0) result = worse(result, { health: "at_risk", reason: `${daysInStage} days in ${STAGE_LABELS[project.stage] || project.stage} (expected ~${expected}) -- running late.` });
     }
   }
 

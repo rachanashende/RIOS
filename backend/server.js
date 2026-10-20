@@ -19,7 +19,7 @@ import indexRoutes from "./routes/index.js";
 import indexAdminRoutes from "./routes/indexAdmin.js";
 import indexExportRoutes from "./routes/indexExport.js";
 import buildRoutes from "./routes/build.js";
-import buildAdminRoutes from "./routes/buildAdmin.js";
+import buildAdminRoutes, { runOverdueCheck } from "./routes/buildAdmin.js";
 import buildDashboardRoutes from "./routes/buildDashboard.js";
 
 const app = express();
@@ -28,6 +28,28 @@ app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
+
+// POST /api/cron/build-overdue-check -- an external scheduler's entry
+// point (e.g. a Render Cron Job) for the overdue-update digest, mounted
+// outside every other router's requireAuth chain since a scheduled job has
+// no user login to authenticate as. Gated by a shared secret instead --
+// set CRON_SECRET in the environment and have the scheduler send it as
+// `X-Cron-Secret`. Without CRON_SECRET set, this route always 503s rather
+// than silently running unauthenticated, so it's a no-op until someone
+// deliberately configures it (the admin console's "Overdue digest" tab's
+// manual button still works either way, unaffected by this).
+app.post("/api/cron/build-overdue-check", async (req, res, next) => {
+  try {
+    const secret = process.env.CRON_SECRET;
+    if (!secret) return res.status(503).json({ error: "CRON_SECRET is not configured -- set it in the environment to enable this endpoint." });
+    if (req.get("X-Cron-Secret") !== secret) return res.status(401).json({ error: "Invalid or missing X-Cron-Secret." });
+    const result = await runOverdueCheck();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 app.use("/api/auth", authRoutes);
 app.use("/api/admin/ideas", ideasAdminRoutes); // more specific path — must be mounted before /api/admin
 app.use("/api/admin/rise", riseAdminRoutes); // more specific path — must be mounted before /api/admin

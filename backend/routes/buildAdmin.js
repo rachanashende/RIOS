@@ -83,27 +83,33 @@ router.get("/ready-for-build", async (req, res, next) => {
     const clientParam = assigned === null ? [] : [assigned];
     const clientClause = (col) => (assigned === null ? "" : `AND ${col} = ANY($1::int[])`);
 
+    // ?includeDeferred=1 shows "Not now"-ed rows too (admin can un-defer
+    // one); otherwise a row whose build_deferred_until is still in the
+    // future is hidden, same idea as a snoozed notification.
+    const includeDeferred = req.query.includeDeferred === "1";
+    const deferredClause = includeDeferred ? "" : "AND (build_deferred_until IS NULL OR build_deferred_until <= now())";
+
     const { rows: ideaRows } = await pool.query(
       `SELECT i.id, i.title, i.selected_for_build_at AS selected_at, i.source_client_id AS client_id,
-              COALESCE(cl.company, cl.name) AS client_name
+              i.build_deferred_until, COALESCE(cl.company, cl.name) AS client_name
        FROM ideas i
        LEFT JOIN users cl ON cl.id = i.source_client_id
        WHERE i.selected_for_build_at IS NOT NULL
          AND NOT EXISTS (SELECT 1 FROM build_project_sources s WHERE s.source_type = 'idea' AND s.source_id = i.id)
-         ${clientClause("i.source_client_id")}
+         ${clientClause("i.source_client_id")} ${deferredClause.replace("build_deferred_until", "i.build_deferred_until")}
        ORDER BY i.selected_for_build_at ASC`,
       clientParam
     );
     const { rows: appRows } = await pool.query(
       `SELECT a.id, a.startup_name AS title, a.decided_at AS selected_at, o.client_id,
-              COALESCE(cl.company, cl.name) AS client_name,
+              a.build_deferred_until, COALESCE(cl.company, cl.name) AS client_name,
               (SELECT AVG(sc.total) FROM rise_scores sc WHERE sc.application_id = a.id) AS jury_score
        FROM rise_applications a
        LEFT JOIN rise_opportunities o ON o.id = a.opportunity_id
        LEFT JOIN users cl ON cl.id = o.client_id
        WHERE a.decision = 'selected_for_pilot'
          AND NOT EXISTS (SELECT 1 FROM build_project_sources s WHERE s.source_type = 'rise_application' AND s.source_id = a.id)
-         ${clientClause("o.client_id")}
+         ${clientClause("o.client_id")} ${deferredClause.replace("build_deferred_until", "a.build_deferred_until")}
        ORDER BY a.decided_at ASC`,
       clientParam
     );
@@ -113,16 +119,87 @@ router.get("/ready-for-build", async (req, res, next) => {
     const items = [
       ...ideaRows.map((r) => ({
         source: "idea", sourceId: r.id, title: r.title, clientId: r.client_id, clientName: r.client_name || "—",
-        selectedAt: r.selected_at, waitingDays: waitingDays(r.selected_at), juryScore: null,
+        selectedAt: r.selected_at, waitingDays: waitingDays(r.selected_at), juryScore: null, deferredUntil: r.build_deferred_until,
       })),
       ...appRows.map((r) => ({
         source: "rise_application", sourceId: r.id, title: r.title, clientId: r.client_id, clientName: r.client_name || "—",
         selectedAt: r.selected_at, waitingDays: waitingDays(r.selected_at),
-        juryScore: r.jury_score != null ? Number(r.jury_score).toFixed(1) : null,
+        juryScore: r.jury_score != null ? Number(r.jury_score).toFixed(1) : null, deferredUntil: r.build_deferred_until,
       })),
     ].sort((a, b) => new Date(a.selectedAt || 0) - new Date(b.selectedAt || 0));
 
     res.json({ items });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/admin/build/ready-for-build/defer { source, sourceId, days } --
+// the mockup's "Not now" action: hides the row from the default Ready for
+// Build queue for `days` (default 14, same documented-default convention
+// used elsewhere in this change) without declining or losing it. days: 0
+// clears the defer immediately (the admin console's "un-defer" case).
+router.post("/ready-for-build/defer", async (req, res, next) => {
+  try {
+    const { source } = req.body || {};
+    const sourceId = toId(req.body?.sourceId);
+    const days = Number.isFinite(Number(req.body?.days)) ? Number(req.body.days) : 14;
+    if (!["idea", "rise_application"].includes(source) || !sourceId) return res.status(400).json({ error: "A valid source ('idea' or 'rise_application') and sourceId are required." });
+    const table = source === "idea" ? "ideas" : "rise_applications";
+    const value = days > 0 ? `now() + interval '${days} days'` : "NULL";
+    await pool.query(`UPDATE ${table} SET build_deferred_until = ${value} WHERE id = $1`, [sourceId]);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* =========================================================================
+   REQUESTS FROM CLIENT PARTNERS (Oct 2026 "Proposed Screens" admin console)
+   ========================================================================= */
+
+// GET /api/admin/build/requests?status=open -- every build_requests row
+// across a RIV Client Partner's assigned clients (unrestricted for admin),
+// newest first. Default to open-only, matching the mockup's queue framing;
+// ?status=all shows resolved ones too.
+router.get("/requests", async (req, res, next) => {
+  try {
+    const assigned = await assignedClientIds(req.user); // null = admin
+    const statusClause = req.query.status === "all" ? "" : "AND r.status = 'open'";
+    const clientClause = assigned === null ? "" : "AND p.client_id = ANY($1::int[])";
+    const params = assigned === null ? [] : [assigned];
+    const { rows } = await pool.query(
+      `SELECT r.*, p.code AS project_code, p.title AS project_title, p.client_id,
+              COALESCE(cl.company, cl.name) AS client_name, u.name AS requested_by_name,
+              ru.name AS resolved_by_name
+       FROM build_requests r
+       JOIN build_projects p ON p.id = r.project_id
+       LEFT JOIN users cl ON cl.id = p.client_id
+       LEFT JOIN users u ON u.id = r.requested_by
+       LEFT JOIN users ru ON ru.id = r.resolved_by
+       WHERE 1=1 ${statusClause} ${clientClause}
+       ORDER BY r.created_at DESC`,
+      params
+    );
+    res.json({ requests: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/admin/build/requests/:id/resolve -- marks it handled. No
+// "response" field is modeled (the mockup doesn't spell out a reply flow
+// for this), just who resolved it and when; any actual follow-up happens
+// through the project's own Updates/Files, which already notify everyone.
+router.put("/requests/:id/resolve", async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE build_requests SET status = 'resolved', resolved_by = $1, resolved_at = now()
+       WHERE id = $2 RETURNING *`,
+      [req.user.id, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Request not found." });
+    res.json({ request: rows[0] });
   } catch (err) {
     next(err);
   }
@@ -636,49 +713,55 @@ router.get("/reassess/:clientId", async (req, res, next) => {
    OVERDUE DIGEST (PRD 10.3, Phase 3)
    ========================================================================= */
 
-// POST /api/admin/build/run-overdue-check -- RIV Admin only. Finds every
-// active project with no status update in >14 days, notifies its POC +
-// RIV Manager, and sends RIV Admin one digest. Idempotent to run more than
-// once a day (it just re-notifies; harmless, not duplicated into separate
-// digest emails per run beyond what's actually overdue right now).
-//
-// This endpoint does the work; nothing in this codebase schedules it yet
-// (RIOS has no in-process cron and none is added here -- see PR notes).
-// Call it from an external scheduler (a Render Cron Job hitting this route,
-// or any other daily trigger) once one is set up.
+// Shared logic for the overdue-update digest, factored out of the route
+// handler so it can be called two ways: the authenticated admin-console
+// button below, and the new unauthenticated-but-secret-gated route in
+// server.js that lets an external scheduler trigger it (see that file for
+// why it has to live outside this router's requireAuth/requireRole chain).
+export async function runOverdueCheck() {
+  const { rows: overdue } = await pool.query(`
+    SELECT * FROM (
+      SELECT p.*,
+             GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date) AS last_update_date
+      FROM build_projects p WHERE p.status = 'active'
+    ) x WHERE CURRENT_DATE - x.last_update_date > 14
+  `);
+
+  for (const project of overdue) {
+    const recipients = await recipientsForProject(project, ["poc", "riv_manager"]);
+    await notifyBuild(recipients, {
+      projectId: project.id, projectCode: project.code, kind: "overdue",
+      message: `${project.code} has had no status update in over 14 days.`,
+      subject: `RIOS Build: ${project.code} is overdue for an update`,
+      heading: "A project update is overdue",
+      body: `${project.title} (${project.code}) hasn't had a status update in more than 14 days.`,
+    });
+  }
+
+  if (overdue.length) {
+    const { rows: admins } = await pool.query("SELECT id, email, name FROM users WHERE role = 'admin'");
+    await notifyBuild(admins, {
+      kind: "overdue_digest",
+      message: `${overdue.length} project(s) overdue for an update: ${overdue.map((o) => o.code).join(", ")}.`,
+      subject: `RIOS Build: ${overdue.length} project(s) overdue for an update`,
+      heading: "Weekly overdue-update digest",
+      body: `${overdue.length} project(s) have had no status update in over 14 days: ${overdue.map((o) => o.code).join(", ")}.`,
+    });
+  }
+
+  return { overdueCount: overdue.length, codes: overdue.map((o) => o.code) };
+}
+
+// POST /api/admin/build/run-overdue-check -- RIV Admin only, manual trigger
+// from the admin console's "Overdue digest" tab. Idempotent to run more
+// than once a day (it just re-notifies; harmless, not duplicated into
+// separate digest emails per run beyond what's actually overdue right now).
+// For automatic daily runs, see the cron-secret-gated route mounted
+// directly in server.js, which calls the same runOverdueCheck() above.
 router.post("/run-overdue-check", requireRole("admin"), async (req, res, next) => {
   try {
-    const { rows: overdue } = await pool.query(`
-      SELECT * FROM (
-        SELECT p.*,
-               GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date) AS last_update_date
-        FROM build_projects p WHERE p.status = 'active'
-      ) x WHERE CURRENT_DATE - x.last_update_date > 14
-    `);
-
-    for (const project of overdue) {
-      const recipients = await recipientsForProject(project, ["poc", "riv_manager"]);
-      await notifyBuild(recipients, {
-        projectId: project.id, projectCode: project.code, kind: "overdue",
-        message: `${project.code} has had no status update in over 14 days.`,
-        subject: `RIOS Build: ${project.code} is overdue for an update`,
-        heading: "A project update is overdue",
-        body: `${project.title} (${project.code}) hasn't had a status update in more than 14 days.`,
-      });
-    }
-
-    if (overdue.length) {
-      const { rows: admins } = await pool.query("SELECT id, email, name FROM users WHERE role = 'admin'");
-      await notifyBuild(admins, {
-        kind: "overdue_digest",
-        message: `${overdue.length} project(s) overdue for an update: ${overdue.map((o) => o.code).join(", ")}.`,
-        subject: `RIOS Build: ${overdue.length} project(s) overdue for an update`,
-        heading: "Weekly overdue-update digest",
-        body: `${overdue.length} project(s) have had no status update in over 14 days: ${overdue.map((o) => o.code).join(", ")}.`,
-      });
-    }
-
-    res.json({ ok: true, overdueCount: overdue.length, codes: overdue.map((o) => o.code) });
+    const result = await runOverdueCheck();
+    res.json({ ok: true, ...result });
   } catch (err) {
     next(err);
   }

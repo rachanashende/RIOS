@@ -15,7 +15,7 @@ import {
   gateApprovers, missingFieldsForStage, computeRoi, computeAutoHealth,
 } from "../lib/buildWorkflow.js";
 import {
-  canSeeProject, canAddUpdate, canEditDetails, canEditRoi, canHoldOrStop, canClose, canApproveGate, canSendBack,
+  canSeeProject, canAddUpdate, canEditDetails, canEditRoi, canHoldOrStop, canClose, canApproveGate, canSendBack, isClientLeaderOf,
 } from "../lib/buildPermissions.js";
 import { notifyBuild, recipientsForProject } from "../lib/buildNotify.js";
 
@@ -219,7 +219,8 @@ router.get("/my-work", async (req, res, next) => {
               EXISTS(SELECT 1 FROM build_updates u2 WHERE u2.project_id = p.id) AS has_update,
               (SELECT u3.needs_help FROM build_updates u3 WHERE u3.project_id = p.id ORDER BY u3.update_date DESC, u3.created_at DESC LIMIT 1) AS latest_needs_help,
               GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date) AS last_update_date,
-              (CURRENT_DATE - GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date)) AS days_since_update
+              (CURRENT_DATE - GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date)) AS days_since_update,
+              (CURRENT_DATE - p.updated_at::date) AS days_in_stage
        FROM build_projects p
        LEFT JOIN build_metrics m ON m.project_id = p.id
        WHERE ${where}
@@ -235,6 +236,7 @@ router.get("/my-work", async (req, res, next) => {
       const auto = computeAutoHealth({
         project: r, metrics: { actual_cost: r.actual_cost, est_cost: r.est_cost, baseline: r.baseline, target: r.target },
         daysSinceUpdate: r.has_update ? Number(r.days_since_update) : null,
+        daysInStage: Number(r.days_in_stage),
         latestKpiValue: r.kpi_now, needsHelp: r.latest_needs_help,
       });
       const rank = { on_track: 0, at_risk: 1, off_track: 2 };
@@ -437,6 +439,7 @@ router.get("/projects", async (req, res, next) => {
         const auto = computeAutoHealth({
           project: r, metrics: { actual_cost: r.actual_cost, est_cost: r.est_cost, baseline: r.baseline, target: r.target },
           daysSinceUpdate: r.has_update ? Number(r.days_since_update) : null,
+          daysInStage: Number(r.days_in_stage),
           latestKpiValue: r.kpi_now, needsHelp: r.latest_needs_help,
         });
         const rank = { on_track: 0, at_risk: 1, off_track: 2 };
@@ -501,9 +504,11 @@ router.get("/projects/:id", async (req, res, next) => {
     const daysSinceUpdate = lastActivity ? Math.max(0, Math.round((Date.now() - new Date(lastActivity).getTime()) / 86400000)) : null;
     const latestKpiRow = kpiReadings.rows[kpiReadings.rows.length - 1];
     const projOut = projectOut(project);
+    const daysInStage = project.updated_at ? Math.max(0, Math.round((Date.now() - new Date(project.updated_at).getTime()) / 86400000)) : null;
     const auto = computeAutoHealth({
       project, metrics: projOut.metrics,
       daysSinceUpdate: latestUpdate ? daysSinceUpdate : null,
+      daysInStage,
       latestKpiValue: latestKpiRow ? Number(latestKpiRow.value) : null,
       needsHelp: latestUpdate?.needs_help,
     });
@@ -621,6 +626,63 @@ router.put("/updates/:id", async (req, res, next) => {
       [progress?.trim() || null, nextSteps?.trim() || null, (blockers ?? update.blockers) || null, pctComplete ?? null, update.id]
     );
     res.json({ update: out[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/build/projects/:id/requests { message } -- "Requests from
+// Client Partners" (mockup page 5's admin tab). Client Leader only, per
+// the mockup's own naming -- a generic free-text ask against their
+// project (a file removal, an access question, anything that doesn't fit
+// a structured field) for an admin to see and resolve. Deliberately
+// generic rather than inventing specific request "types" the mockup
+// didn't spell out.
+router.post("/projects/:id/requests", async (req, res, next) => {
+  try {
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    if (!isClientLeaderOf(req.user, project) && req.user.role !== "admin") {
+      return res.status(403).json({ error: "Only the Client Leader for this project can raise a request." });
+    }
+    const message = String(req.body?.message || "").trim();
+    if (!message) return res.status(400).json({ error: "A message is required." });
+    const { rows } = await pool.query(
+      "INSERT INTO build_requests (project_id, requested_by, message) VALUES ($1,$2,$3) RETURNING *",
+      [project.id, req.user.id, message]
+    );
+    const recipients = await recipientsForProject(project, ["admins"]);
+    await notifyBuild(recipients, {
+      projectId: project.id, projectCode: project.code, kind: "client_request",
+      message: `${project.code}: new request from the Client Partner -- "${message}"`,
+      subject: `RIOS Build: new request on ${project.code}`,
+      heading: "A Client Partner has a request",
+      body: `${project.title} (${project.code}): "${message}"`,
+    });
+    res.status(201).json({ request: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/build/projects/:id/requests -- a project's own request thread,
+// visible to anyone who can already see the project (Client Leader sees
+// their own asks; Product Owner/RIV Client Partner/admin see what's been
+// raised and whether it's resolved).
+router.get("/projects/:id/requests", async (req, res, next) => {
+  try {
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    const assigned = await assignedClientIds(req.user);
+    const pocClient = await pocClientId(req.user);
+    const isLinkedEmployee = req.user.role === "junior_employee" && (await employeeProjectIds(req.user)).includes(project.id);
+    if (!canSeeProject(req.user, project, assigned, pocClient, isLinkedEmployee)) return res.status(403).json({ error: "You don't have access to this project." });
+    const { rows } = await pool.query(
+      `SELECT r.*, u.name AS requested_by_name FROM build_requests r LEFT JOIN users u ON u.id = r.requested_by
+       WHERE r.project_id = $1 ORDER BY r.created_at DESC`,
+      [project.id]
+    );
+    res.json({ requests: rows });
   } catch (err) {
     next(err);
   }

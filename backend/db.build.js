@@ -381,4 +381,33 @@ export async function initBuildSchema() {
     JOIN ideas i ON i.id = s.source_id AND s.source_type = 'idea'
     WHERE s.project_id = p.id AND p.client_id IS NULL AND i.source_client_id IS NOT NULL;
   `);
+
+  // "Not now" (defer) on a Ready for Build row (mockup page 5) -- previously
+  // skipped for lack of a field to hold it. deferred_until is a plain
+  // "hide from Ready for Build until this date" marker, not a decline: the
+  // row is untouched otherwise and reappears on its own once the date
+  // passes, or immediately if an admin clears it. Default defer length (14
+  // days) is chosen the same way the health-rule stage-duration defaults
+  // are -- a documented starting assumption, not a measured one.
+  await pool.query(`ALTER TABLE ideas ADD COLUMN IF NOT EXISTS build_deferred_until TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE rise_applications ADD COLUMN IF NOT EXISTS build_deferred_until TIMESTAMPTZ;`);
+
+  // "Requests from Client Partners" (mockup page 5's admin tab) -- a
+  // generic request a Client Leader can raise against one of their
+  // projects (e.g. "please remove this file", a access question, anything
+  // that doesn't fit a structured field), for an admin to see and resolve.
+  // Kept deliberately generic (free-text message, open/resolved) rather
+  // than inventing specific request "types" the mockup didn't spell out.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS build_requests (
+      id SERIAL PRIMARY KEY,
+      project_id INTEGER NOT NULL REFERENCES build_projects(id) ON DELETE CASCADE,
+      requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','resolved')),
+      resolved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      resolved_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
 }

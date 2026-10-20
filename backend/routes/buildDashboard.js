@@ -4,7 +4,7 @@
 import { Router } from "express";
 import pool from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
-import { computeRoi, fmtUSD, computeAutoHealth } from "../lib/buildWorkflow.js";
+import { computeRoi, fmtUSD, computeAutoHealth, STAGE_LABELS } from "../lib/buildWorkflow.js";
 import { canSeeClientDashboard, canSeePortfolioDashboard } from "../lib/buildPermissions.js";
 import { QUESTIONS, computeScores } from "../lib/scoring.js";
 
@@ -57,6 +57,7 @@ router.get("/client/:clientId", async (req, res, next) => {
       const auto = computeAutoHealth({
         project: p, metrics: { actual_cost: p.actual_cost, est_cost: p.est_cost, baseline: p.baseline, target: p.target },
         daysSinceUpdate: Math.round((new Date() - new Date(p.last_update_date)) / 86400000),
+        daysInStage: p.updated_at ? Math.round((new Date() - new Date(p.updated_at)) / 86400000) : null,
         latestKpiValue: p.kpi_now, needsHelp: p.latest_needs_help,
       });
       const effectiveHealth = healthRank[auto.health] > healthRank[p.health] ? auto.health : p.health;
@@ -120,13 +121,15 @@ router.get("/client/:clientId", async (req, res, next) => {
 
     // "From audit to impact" (Oct 2026 mockup page_6): this client's top-5
     // $-value audit opportunities (same computeScores() ranking the
-    // scorecard itself uses), cross-referenced against build_reassess_links
-    // for whether a Build project has been linked back to that question.
-    // Deliberately only "Addressed by {code}" / "Not yet addressed" --
-    // the mockup's richer per-opportunity "In Build"/"Starting" status
-    // would need a live link between an *open* project and an opportunity,
-    // which nothing in the schema tracks (reassess_links are written only
-    // when a project closes as Scaled), so that distinction isn't faked.
+    // scorecard itself uses), cross-referenced against two real links:
+    // build_reassess_links (written only once a project closes Scaled --
+    // authoritative "Addressed") and build_project_sources (written when a
+    // project is first created from an idea/application, carries the same
+    // question_id, and exists for the whole life of the project -- this is
+    // the genuine link to an *open* project a prior pass of this feature
+    // said didn't exist in the schema; it does, it just wasn't queried
+    // here). So "In Build" is a real status now, not an invented one: it
+    // means a live, non-closed project traces back to this question.
     const { rows: clientResponseRows } = await pool.query("SELECT question_id, maturity, not_applicable FROM responses WHERE user_id = $1", [clientId]);
     let auditToImpact = [];
     if (clientResponseRows.length) {
@@ -138,13 +141,33 @@ router.get("/client/:clientId", async (req, res, next) => {
         [clientId]
       );
       const linkByQ = Object.fromEntries(linkRows.map((r) => [r.question_id, r]));
+      const { rows: sourceRows } = await pool.query(
+        `SELECT s.question_id, p.code, p.status, p.stage, p.outcome FROM build_project_sources s
+         JOIN build_projects p ON p.id = s.project_id
+         WHERE p.client_id = $1 AND s.question_id IS NOT NULL
+         ORDER BY (p.status != 'closed') DESC, p.created_at DESC`,
+        [clientId]
+      );
+      // Several projects could in principle trace back to the same
+      // question (re-attempted after a Stopped outcome, say) -- keep the
+      // first row per question, which the ORDER BY above biases toward an
+      // open project over a closed one, so "In Build" wins over a stale
+      // "Stopped" attempt when both exist.
+      const sourceByQ = {};
+      for (const r of sourceRows) if (!sourceByQ[r.question_id]) sourceByQ[r.question_id] = r;
       auditToImpact = opportunities.map((o) => {
         const link = linkByQ[o.id];
-        return {
-          questionId: o.id, text: o.text, midpoint: o.midpoint,
-          status: link ? "addressed" : "not_addressed",
-          note: link ? `Addressed by ${link.code} (${new Date(link.closed_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })})` : "Not yet addressed",
-        };
+        const src = sourceByQ[o.id];
+        if (link) {
+          return { questionId: o.id, text: o.text, midpoint: o.midpoint, status: "addressed", note: `Addressed by ${link.code} (${new Date(link.closed_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })})` };
+        }
+        if (src && src.status !== "closed") {
+          return { questionId: o.id, text: o.text, midpoint: o.midpoint, status: "in_build", note: `In Build via ${src.code} (${STAGE_LABELS[src.stage] || src.stage})` };
+        }
+        if (src && src.status === "closed" && src.outcome !== "scaled") {
+          return { questionId: o.id, text: o.text, midpoint: o.midpoint, status: "not_addressed", note: `Tried via ${src.code}, stopped -- not yet addressed` };
+        }
+        return { questionId: o.id, text: o.text, midpoint: o.midpoint, status: "not_addressed", note: "Not yet addressed" };
       });
     }
 

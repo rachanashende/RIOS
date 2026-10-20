@@ -1431,6 +1431,64 @@ function DealSummaryPanel({ project }) {
     </SidePanel>
   );
 }
+// "Requests from Client Partners" (mockup page 5's admin tab) -- raising
+// one lives here, on the project itself, since that's where a Client
+// Leader would naturally think to ask for something. Client Leader gets a
+// form; anyone else who can see the project gets a read-only thread so
+// they know what's been asked and whether it's resolved.
+function RequestsSidePanel({ project, isClientLeader }) {
+  const [requests, setRequests] = useState(null);
+  const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  function load() {
+    api.getBuildRequestsForProject(project.id).then((d) => setRequests(d.requests || [])).catch(() => setRequests([]));
+  }
+  useEffect(() => { load(); }, [project.id]);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!message.trim()) return;
+    setSubmitting(true); setError(null);
+    try {
+      await api.createBuildRequest(project.id, message.trim());
+      setMessage("");
+      load();
+    } catch (e) { setError(e.message || "Couldn't send that request."); } finally { setSubmitting(false); }
+  }
+
+  if (!isClientLeader && requests != null && requests.length === 0) return null;
+
+  return (
+    <SidePanel title="Requests">
+      {requests === null ? (
+        <Spinner label="Loading…" />
+      ) : (
+        <>
+          {requests.length === 0 && <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: isClientLeader ? 10 : 0 }}>No requests yet.</div>}
+          {requests.map((r) => (
+            <div key={r.id} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: `1px solid ${BRAND.line}` }}>
+              <div style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.ink }}>{r.message}</div>
+              <div style={{ fontFamily: FONT, fontSize: 11, color: r.status === "resolved" ? "#1B7A5A" : "#9B958F", marginTop: 3 }}>
+                {fmtDate(r.created_at)} · {r.status === "resolved" ? "Resolved" : "Open"}
+              </div>
+            </div>
+          ))}
+          {isClientLeader && (
+            <form onSubmit={submit} style={{ marginTop: 6 }}>
+              <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Ask RIV Admin something about this project…" rows={2}
+                style={{ width: "100%", fontFamily: FONT, fontSize: 12.5, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: 8, boxSizing: "border-box", resize: "vertical" }} />
+              <ErrorBanner text={error} />
+              <GhostButton disabled={submitting || !message.trim()} style={{ marginTop: 6, width: "100%" }}>{submitting ? "Sending…" : "Send request"}</GhostButton>
+            </form>
+          )}
+        </>
+      )}
+    </SidePanel>
+  );
+}
+
 const SOURCE_LABEL = { idea: "Ideathon idea", rise_application: "Startup pilot application", manual: "Created manually" };
 function WhereFromPanel({ sources }) {
   const s = sources?.[0];
@@ -1570,6 +1628,7 @@ function ProjectDetailView({ projectId, session, onBack }) {
           <KpiValuePanel project={project} />
           <DealSummaryPanel project={project} />
           <WhereFromPanel sources={sources} />
+          <RequestsSidePanel project={project} isClientLeader={isClientLeader} />
         </div>
       </div>
     </div>
@@ -1749,9 +1808,15 @@ function StageByWorkflowChart({ stageCountsByType }) {
 
 // "From audit to impact" (page_6) -- this client's top $-value audit
 // opportunities against whether a Build project has addressed them yet.
-// See the backend comment in buildDashboard.js for why only
-// addressed/not-addressed is shown, not the mockup's richer per-item
-// in-flight status.
+// Three real statuses, each backed by an actual link in the schema:
+// "addressed" (build_reassess_links, written when a project closes
+// Scaled), "in_build" (build_project_sources' question_id on a still-open
+// project), and "not_addressed" (no link, or only a Stopped attempt).
+const AUDIT_STATUS_STYLE = {
+  addressed: { color: "#1B7A5A", background: "#E7F5EF" },
+  in_build: { color: BRAND.coralDark, background: "#FCEEE1" },
+  not_addressed: { color: "#9B958F", background: BRAND.cream },
+};
 function AuditToImpactPanel({ auditToImpact }) {
   if (!auditToImpact || !auditToImpact.length) return null;
   return (
@@ -1759,15 +1824,15 @@ function AuditToImpactPanel({ auditToImpact }) {
       <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 4 }}>From audit to impact</div>
       <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 12 }}>This client's top audit opportunities by potential value, and whether Build has addressed them.</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {auditToImpact.map((o) => (
-          <div key={o.questionId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, fontFamily: FONT, fontSize: 13 }}>
-            <span style={{ color: BRAND.ink }}>{o.text}</span>
-            <span style={{
-              flexShrink: 0, fontFamily: FONT, fontSize: 11.5, fontWeight: 600, borderRadius: 999, padding: "3px 10px", whiteSpace: "nowrap",
-              color: o.status === "addressed" ? "#1B7A5A" : "#9B958F", background: o.status === "addressed" ? "#E7F5EF" : BRAND.cream,
-            }}>{o.note}</span>
-          </div>
-        ))}
+        {auditToImpact.map((o) => {
+          const style = AUDIT_STATUS_STYLE[o.status] || AUDIT_STATUS_STYLE.not_addressed;
+          return (
+            <div key={o.questionId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, fontFamily: FONT, fontSize: 13 }}>
+              <span style={{ color: BRAND.ink }}>{o.text}</span>
+              <span style={{ flexShrink: 0, fontFamily: FONT, fontSize: 11.5, fontWeight: 600, borderRadius: 999, padding: "3px 10px", whiteSpace: "nowrap", color: style.color, background: style.background }}>{o.note}</span>
+            </div>
+          );
+        })}
       </div>
     </Card>
   );
@@ -2319,47 +2384,75 @@ function CreateProjectPanel({ onCreated, prefill }) {
 function ReadyForBuildPanel({ onReview }) {
   const [items, setItems] = useState(null);
   const [error, setError] = useState(null);
+  const [showDeferred, setShowDeferred] = useState(false);
 
-  function load() {
-    api.getReadyForBuild().then((d) => setItems(d.items || [])).catch((e) => setError(e.message || "Couldn't load the queue."));
+  function load(includeDeferred = showDeferred) {
+    api.getReadyForBuild(includeDeferred).then((d) => setItems(d.items || [])).catch((e) => setError(e.message || "Couldn't load the queue."));
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(showDeferred); }, [showDeferred]);
+
+  // "Not now" (mockup page 5) -- hides a row from the default queue for 14
+  // days without declining it; un-defer (days: 0) clears that early. Both
+  // just re-load so the row's deferredUntil badge updates immediately.
+  async function defer(it, days) {
+    await api.deferReadyForBuild(it.source, it.sourceId, days);
+    load(showDeferred);
+  }
 
   if (error) return <ErrorBanner text={error} />;
   if (!items) return <Spinner label="Loading queue…" />;
-  if (!items.length) return <EmptyState icon={CheckCircle2} title="Nothing waiting" text="Every selected idea and startup pilot already has a Build project." />;
 
   return (
-    <Card style={{ padding: 0, overflow: "hidden" }}>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
-          <thead><tr style={{ background: BRAND.cream, textAlign: "left" }}>
-            {["Source", "Item", "Client", "Selected", "Waiting", "Jury score", ""].map((h) => (
-              <th key={h} style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#7A746F", textTransform: "uppercase", padding: "10px 14px", borderBottom: `1px solid ${BRAND.line}`, whiteSpace: "nowrap" }}>{h}</th>
-            ))}
-          </tr></thead>
-          <tbody>
-            {items.map((it) => (
-              <tr key={`${it.source}-${it.sourceId}`}>
-                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 11.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}`, whiteSpace: "nowrap" }}>
-                  {it.source === "idea" ? "Ideathon" : "Startup pilot"}
-                </td>
-                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 13, color: BRAND.ink, borderBottom: `1px solid ${BRAND.line}` }}>{it.title}</td>
-                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{it.clientName}</td>
-                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}`, whiteSpace: "nowrap" }}>{fmtDate(it.selectedAt)}</td>
-                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}`, color: it.waitingDays > 14 ? "#C13B3B" : "#7A746F", fontWeight: it.waitingDays > 14 ? 700 : 400, whiteSpace: "nowrap" }}>
-                  {it.waitingDays != null ? `${it.waitingDays}d` : "—"}
-                </td>
-                <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{it.juryScore ?? "—"}</td>
-                <td style={{ padding: "10px 14px", borderBottom: `1px solid ${BRAND.line}`, whiteSpace: "nowrap" }}>
-                  <GhostButton onClick={() => onReview(it)}>Review & create</GhostButton>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: FONT, fontSize: 12.5, color: "#7A746F", cursor: "pointer" }}>
+          <input type="checkbox" checked={showDeferred} onChange={(e) => setShowDeferred(e.target.checked)} /> Show "Not now" items too
+        </label>
       </div>
-    </Card>
+      {items.length === 0 ? (
+        <EmptyState icon={CheckCircle2} title="Nothing waiting" text="Every selected idea and startup pilot already has a Build project." />
+      ) : (
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 820 }}>
+              <thead><tr style={{ background: BRAND.cream, textAlign: "left" }}>
+                {["Source", "Item", "Client", "Selected", "Waiting", "Jury score", ""].map((h) => (
+                  <th key={h} style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#7A746F", textTransform: "uppercase", padding: "10px 14px", borderBottom: `1px solid ${BRAND.line}`, whiteSpace: "nowrap" }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {items.map((it) => {
+                  const isDeferred = it.deferredUntil && new Date(it.deferredUntil) > new Date();
+                  return (
+                    <tr key={`${it.source}-${it.sourceId}`} style={isDeferred ? { opacity: 0.6 } : undefined}>
+                      <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 11.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}`, whiteSpace: "nowrap" }}>
+                        {it.source === "idea" ? "Ideathon" : "Startup pilot"}
+                      </td>
+                      <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 13, color: BRAND.ink, borderBottom: `1px solid ${BRAND.line}` }}>
+                        {it.title}
+                        {isDeferred && <span style={{ marginLeft: 8, fontFamily: FONT, fontSize: 11, color: "#9B958F" }}>· Not now until {fmtDate(it.deferredUntil)}</span>}
+                      </td>
+                      <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{it.clientName}</td>
+                      <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}`, whiteSpace: "nowrap" }}>{fmtDate(it.selectedAt)}</td>
+                      <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}`, color: it.waitingDays > 14 ? "#C13B3B" : "#7A746F", fontWeight: it.waitingDays > 14 ? 700 : 400, whiteSpace: "nowrap" }}>
+                        {it.waitingDays != null ? `${it.waitingDays}d` : "—"}
+                      </td>
+                      <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{it.juryScore ?? "—"}</td>
+                      <td style={{ padding: "10px 14px", borderBottom: `1px solid ${BRAND.line}`, whiteSpace: "nowrap", display: "flex", gap: 6 }}>
+                        <GhostButton onClick={() => onReview(it)}>Review & create</GhostButton>
+                        {isDeferred
+                          ? <GhostButton onClick={() => defer(it, 0)}>Un-defer</GhostButton>
+                          : <GhostButton onClick={() => defer(it, 14)}>Not now</GhostButton>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+    </div>
   );
 }
 
@@ -2689,8 +2782,9 @@ function OverdueDigestPanel() {
     <Card style={{ padding: 20 }}>
       <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 8 }}>Overdue-update digest</div>
       <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginBottom: 12, lineHeight: 1.6 }}>
-        Notifies each overdue project's POC and RIV Client Partner, and sends admins one digest. This isn't scheduled automatically yet —
-        run it manually here, or point a daily scheduled task at this action.
+        Notifies each overdue project's POC and RIV Client Partner, and sends admins one digest. A daily GitHub Actions
+        workflow now calls this automatically via a cron-secret-gated endpoint (<code>/api/cron/build-overdue-check</code>) —
+        this button is for running it on demand in between.
       </div>
       {result && <Notice text={`${result.overdueCount} project(s) overdue${result.codes?.length ? `: ${result.codes.join(", ")}` : "."}`} />}
       <ErrorBanner text={error} />
@@ -2699,11 +2793,69 @@ function OverdueDigestPanel() {
   );
 }
 
+// "Requests from Client Partners" (mockup page 5) -- open, free-text asks a
+// Client Leader raised on one of their projects (see ProjectDetailView's
+// "Raise a request" control), newest first, with a Resolve action.
+function RequestsPanel() {
+  const [requests, setRequests] = useState(null);
+  const [showAll, setShowAll] = useState(false);
+  const [error, setError] = useState(null);
+
+  function load() {
+    api.getBuildRequests(showAll ? "all" : undefined).then((d) => setRequests(d.requests || [])).catch((e) => setError(e.message || "Couldn't load requests."));
+  }
+  useEffect(() => { load(); }, [showAll]);
+
+  async function resolve(id) {
+    await api.resolveBuildRequest(id);
+    load();
+  }
+
+  if (error) return <ErrorBanner text={error} />;
+  if (!requests) return <Spinner label="Loading requests…" />;
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: FONT, fontSize: 12.5, color: "#7A746F", cursor: "pointer" }}>
+          <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Show resolved too
+        </label>
+      </div>
+      {requests.length === 0 ? (
+        <EmptyState icon={CheckCircle2} title="Nothing open" text="No Client Partner has an open request right now." />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {requests.map((r) => (
+            <Card key={r.id} style={{ padding: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                <div>
+                  <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: BRAND.ink }}>
+                    <span style={{ color: BRAND.coralDark }}>{r.project_code}</span> {r.project_title}
+                  </div>
+                  <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 2 }}>
+                    {r.client_name} · {r.requested_by_name || "Client Leader"} · {fmtDate(r.created_at)}
+                  </div>
+                  <div style={{ fontFamily: FONT, fontSize: 13, color: BRAND.ink, marginTop: 8 }}>{r.message}</div>
+                  {r.status === "resolved" && (
+                    <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#1B7A5A", marginTop: 6 }}>✓ Resolved by {r.resolved_by_name || "an admin"} · {fmtDate(r.resolved_at)}</div>
+                  )}
+                </div>
+                {r.status === "open" && <GhostButton onClick={() => resolve(r.id)}>Mark resolved</GhostButton>}
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminConsoleView({ reload }) {
   const [tab, setTab] = useState("ready");
   const [prefill, setPrefill] = useState(null);
   const tabs = [
     { id: "ready", label: "Ready for Build" },
+    { id: "requests", label: "Requests from Client Partners" },
     { id: "create", label: "Create project" },
     { id: "assign", label: "Assign people" },
     { id: "people", label: "Logins" },
@@ -2734,6 +2886,7 @@ function AdminConsoleView({ reload }) {
         ))}
       </div>
       {tab === "ready" && <ReadyForBuildPanel onReview={reviewItem} />}
+      {tab === "requests" && <RequestsPanel />}
       {tab === "create" && <CreateProjectPanel onCreated={reload} prefill={prefill} />}
       {tab === "assign" && <AssignPanel />}
       {tab === "people" && <PeoplePanel />}

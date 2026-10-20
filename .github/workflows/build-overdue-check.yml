@@ -1,0 +1,24 @@
+name: Build.RIV overdue-update digest
+
+# Daily trigger for POST /api/cron/build-overdue-check (backend/server.js),
+# which was built but had nothing scheduling it -- the admin console's
+# "Overdue digest" tab only ran it manually. This is a free alternative to
+# a paid Render Cron Job: GitHub Actions' own scheduler, hitting the
+# RIOS backend with the shared secret in CRON_SECRET (a repo secret --
+# must match the CRON_SECRET environment variable set on the Render
+# backend service). Runs once a day; safe to also trigger manually from
+# the Actions tab (workflow_dispatch) to test it or re-run on demand.
+on:
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC daily
+  workflow_dispatch: {}
+
+jobs:
+  run-overdue-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the overdue-check endpoint
+        run: |
+          curl -sS -X POST "https://rios.onrender.com/api/cron/build-overdue-check" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" \
+            -w "\nHTTP %{http_code}\n" --fail-with-body
