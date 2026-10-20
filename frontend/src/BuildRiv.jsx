@@ -360,7 +360,7 @@ function ProjectListView({ session, onOpen }) {
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 880 }}>
               <thead>
                 <tr style={{ textAlign: "left", background: BRAND.cream }}>
-                  {["Code", "Title", "Type", "Client", "Stage", "Days in stage", "Health", "Status", "Owner", "Last update"].map((h) => (
+                  {["Code", "Title", "Type", "Client", "Stage", "Days in stage", "Health", "Status", "Product Owner", "Last update"].map((h) => (
                     <th key={h} style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 700, color: "#7A746F", textTransform: "uppercase", letterSpacing: "0.03em", padding: "10px 14px", borderBottom: `1px solid ${BRAND.line}` }}>{h}</th>
                   ))}
                 </tr>
@@ -376,7 +376,7 @@ function ProjectListView({ session, onOpen }) {
                     <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, color: Number(p.days_in_stage) > 14 ? "#C13B3B" : "#7A746F", fontWeight: Number(p.days_in_stage) > 14 ? 700 : 400, borderBottom: `1px solid ${BRAND.line}` }}>{p.days_in_stage != null ? `${p.days_in_stage}d` : "—"}</td>
                     <td style={{ padding: "12px 14px", borderBottom: `1px solid ${BRAND.line}` }}><HealthBadge health={p.health} size="sm" /></td>
                     <td style={{ padding: "12px 14px", borderBottom: `1px solid ${BRAND.line}` }}><StatusBadge status={p.status} /></td>
-                    <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{p.owner_name || "—"}</td>
+                    <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{p.product_owner_name || "—"}</td>
                     <td style={{ padding: "12px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}`, color: p.updateOverdue ? "#C13B3B" : "#7A746F", fontWeight: p.updateOverdue ? 700 : 400 }}>
                       {p.updateOverdue ? "Overdue" : fmtDate(p.last_update_date)}
                     </td>
@@ -569,7 +569,7 @@ function ReassessLinkPanel({ project, session }) {
 function OverviewTab({ project, sources, canEdit, onSaved, session }) {
   const rows = [
     ["Client", project.client_company || project.client_name],
-    ["Owner", project.owner_name], ["Client POC", project.poc_name], ["RIV Manager", project.riv_manager_name],
+    ["Product Owner", project.product_owner_name], ["Startup POC", project.startup_poc_name], ["RIV Client Partner", project.riv_manager_name],
     ["Started", fmtDate(project.started_at)], ["Target end", fmtDate(project.target_end)],
     ["Source", sources?.[0] ? sources[0].source_type.replace("_", " ") : "manual"],
   ].filter(([, v]) => v);
@@ -1385,7 +1385,7 @@ function ClientDashboard({ clientId }) {
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
             <thead><tr style={{ background: BRAND.cream, textAlign: "left" }}>
-              {[["Code", "code"], ["Title", "title"], ["Workflow", "type"], ["Stage", "stage"], ["Health", "healthRank"], ["Owner", "ownerName"], ["ROI", "roiPct"]].map(([label, key]) => (
+              {[["Code", "code"], ["Title", "title"], ["Workflow", "type"], ["Stage", "stage"], ["Health", "healthRank"], ["Product Owner", "productOwnerName"], ["ROI", "roiPct"]].map(([label, key]) => (
                 <SortTh key={key} label={label} sortKey={key} active={sortKey === key} dir={sortDir} onSort={toggleSort} />
               ))}
             </tr></thead>
@@ -1397,7 +1397,7 @@ function ClientDashboard({ clientId }) {
                   <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 11.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{p.type === "internal" ? "Enterprise" : "Open"}</td>
                   <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}`, textTransform: "capitalize" }}>{p.stage}</td>
                   <td style={{ padding: "10px 14px", borderBottom: `1px solid ${BRAND.line}` }}><HealthBadge health={p.health} size="sm" /></td>
-                  <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{p.ownerName || "—"}</td>
+                  <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, color: "#7A746F", borderBottom: `1px solid ${BRAND.line}` }}>{p.productOwnerName || "—"}</td>
                   <td style={{ padding: "10px 14px", fontFamily: FONT, fontSize: 12.5, borderBottom: `1px solid ${BRAND.line}` }}>{fmtPct(p.roi?.roiPct)}</td>
                 </tr>
               ))}
