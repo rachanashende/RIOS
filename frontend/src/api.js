@@ -142,6 +142,13 @@ async function requestWithToken(path, { method = "GET", body, raw, keepalive } =
 function request(path, opts) { return requestWithToken(path, opts, getToken()); }
 // Ideas.RIV calls (employee/jury) attach Ideas.RIV's own token instead.
 function ideasRequest(path, opts) { return requestWithToken(path, opts, getIdeasToken()); }
+// An admin working *inside* Ideas.RIV (the client switcher, "Select for
+// Build") holds an Ideas session -- or, if they came in through the main
+// site, only the main one -- so admin calls made from this module try the
+// Ideas token first and fall back to the main-site token. Previously
+// "Select for Build" used the main-site token only, which an admin who
+// logged in through Ideas.RIV's own login doesn't have.
+function ideasAdminRequest(path, opts) { return requestWithToken(path, opts, getIdeasToken() || getToken()); }
 // Rise.RIV calls (rise_jury) attach Rise.RIV's own token instead.
 function riseRequest(path, opts) { return requestWithToken(path, opts, getRiseToken()); }
 // R-Index calls (index_respondent) attach R-Index's own token instead.
@@ -193,8 +200,13 @@ export const api = {
 
   // ---- Ideas.RIV (employee/jury) — uses its own isolated token ------
   ideasLogin: (email, password) => loginRequest(email, password), // same endpoint, token just isn't attached to anything yet here
-  getOpportunities: () => ideasRequest("/ideas/opportunities"),
-  getIdeas: (questionId) => ideasRequest(`/ideas${questionId ? `?questionId=${questionId}` : ""}`),
+  // `clientId` is honoured for admins only (the backend's resolveClientId()
+  // ignores it for employees/jury, who are always scoped to their own
+  // client). Without it an admin falls back to the legacy global source
+  // setting -- which is why the Ideathon admin view used to be stuck on one
+  // client (E2E report Issue 1).
+  getOpportunities: (clientId) => ideasRequest(`/ideas/opportunities${toQuery({ clientId })}`),
+  getIdeas: (questionId, clientId) => ideasRequest(`/ideas${toQuery({ questionId, clientId })}`),
   getIdeaRatings: (ideaId) => ideasRequest(`/ideas/${ideaId}/ratings`),
   getMyIdeas: () => ideasRequest("/ideas/mine"),
   updateIdea: (id, payload) => ideasRequest(`/ideas/${id}`, { method: "PUT", body: payload }),
@@ -202,13 +214,17 @@ export const api = {
   submitIdeas: (ideas) => ideasRequest("/ideas", { method: "POST", body: { ideas } }),
   getMyRatingForIdea: (ideaId) => ideasRequest(`/ideas/${ideaId}/ratings/mine`),
   submitRating: (ideaId, criteria, comment) => ideasRequest(`/ideas/${ideaId}/ratings`, { method: "POST", body: { criteria, comment } }),
-  getLeaderboard: () => ideasRequest("/ideas/leaderboard"),
+  getLeaderboard: (clientId) => ideasRequest(`/ideas/leaderboard${toQuery({ clientId })}`),
   critTurn: (ideaId, messages) => ideasRequest("/ideas/crit-turn", { method: "POST", body: { ideaId, messages } }),
 
   // ---- Ideas.RIV admin (source client + employee/jury accounts) -----
   // Called only from the main site's admin panel, so these correctly use
   // the main site's (admin) token, not the Ideas.RIV one.
   getIdeasSettings: () => request("/admin/ideas/settings"),
+  // The Ideathon admin's client switcher: every client, plus the legacy
+  // global source client (used only to pick a sensible default).
+  getIdeasAdminClients: () => ideasAdminRequest("/admin/ideas/clients"),
+  getIdeasAdminDefaultClient: () => ideasAdminRequest("/admin/ideas/settings"),
   setIdeasSourceClient: (sourceClientId) => request("/admin/ideas/settings", { method: "PUT", body: { sourceClientId } }),
   listIdeasUsers: (role, clientId) => request(`/admin/ideas/users?role=${role}${clientId ? `&clientId=${clientId}` : ""}`),
   assignIdeasUserClient: (id, clientId) => request(`/admin/ideas/users/${id}/client`, { method: "PUT", body: { clientId } }),
@@ -407,7 +423,7 @@ export const api = {
   runBuildOverdueCheck: () => buildRequest("/admin/build/run-overdue-check", { method: "POST" }),
 
   // ---- Build.RIV: unblocking endpoints added to the owning modules (R21/R22)
-  selectIdeaForBuild: (ideaId) => request(`/admin/ideas/${ideaId}/select-for-build`, { method: "PUT" }),
+  selectIdeaForBuild: (ideaId) => ideasAdminRequest(`/admin/ideas/${ideaId}/select-for-build`, { method: "PUT" }),
   decideRiseApplication: (applicationId, decision) => request(`/admin/rise/applications/${applicationId}/decision`, { method: "PUT", body: { decision } }),
   reviewRiseApplication: (applicationId, status) => request(`/admin/rise/applications/${applicationId}/riv-review`, { method: "PUT", body: { status } }),
   setRiseOpportunityClient: (opportunityId, clientId) => request(`/admin/rise/opportunities/${opportunityId}/client`, { method: "PUT", body: { clientId } }),

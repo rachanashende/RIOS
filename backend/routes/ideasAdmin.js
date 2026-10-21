@@ -48,6 +48,25 @@ router.put("/settings", async (req, res, next) => {
   }
 });
 
+// GET /api/admin/ideas/clients -- id/name/company of every client, for the
+// Ideathon admin's "which client's Ideathon am I looking at?" switcher.
+// Lightweight on purpose (no per-client response counts, unlike the main
+// site's GET /api/admin/clients) so it's cheap to load on every Ideathon
+// visit, and lives under /api/admin/ideas so the Ideathon session's own
+// token can reach it.
+router.get("/clients", async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name, company FROM users
+       WHERE role = 'client' AND audit_owner_id IS NULL
+       ORDER BY COALESCE(NULLIF(company, ''), name)`
+    );
+    res.json({ clients: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/admin/ideas/users?role=junior_employee — list junior_employee or jury accounts
 router.get("/users", async (req, res, next) => {
   try {
