@@ -664,6 +664,18 @@ function RiseTeamPanel({ clients }) {
   }, []);
   useEffect(() => { refresh(); }, [refresh]);
 
+  // The Startup module's "Manage calls" link lands here (/admin#startup-team).
+  // The panel isn't on the page yet when a full page load tries to jump to the
+  // hash, so scroll to it once it has rendered.
+  useEffect(() => {
+    if (window.location.hash !== "#startup-team") return undefined;
+    const t = setTimeout(() => {
+      const el = document.getElementById("startup-team");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 300);
+    return () => clearTimeout(t);
+  }, []);
+
   async function createOpportunity(e) {
     e.preventDefault();
     setError(""); showOppNotice(""); setBusy(true);
@@ -710,7 +722,7 @@ function RiseTeamPanel({ clients }) {
   }
 
   return (
-    <div style={{ marginTop: 44 }}>
+    <div id="startup-team" style={{ marginTop: 44 }}>
       <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>Startup team</div>
       <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Control which opportunity is open for startup applications, and create jury logins to review them.</div>
 
