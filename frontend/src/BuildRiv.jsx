@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
-  Hammer, LogOut, ArrowRight, ChevronLeft, Loader2, AlertCircle, Briefcase,
+  Bell, Hammer, LogOut, ArrowRight, ChevronLeft, Loader2, AlertCircle, Briefcase,
   LayoutDashboard, Settings, Plus, CheckCircle2, Paperclip, Download, Upload,
   History, FileText, Users, Building2, Gauge, Search, X, KeyRound, Trash2,
   ArrowUpDown, ArrowUp, ArrowDown,
@@ -186,7 +186,96 @@ function roleScopeLabel(session) {
   }[session?.role];
   return scope ? `${role} · ${scope}` : role;
 }
-function BuildNavBar({ view, setView, session, onLogout, canSeeDashboard, canSeeAdmin }) {
+/* In-app notification bell. The backend has always written build_notifications
+   rows (notifyBuild); this is the first place they are shown. Polls quietly
+   every 60s while the tab is visible. */
+function timeAgo(iso) {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+function NotificationBell({ onOpenProject }) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState([]);
+  const [unread, setUnread] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const boxRef = useRef(null);
+
+  async function load() {
+    try {
+      const r = await api.listBuildNotifications();
+      setItems(r.notifications || []);
+      setUnread(r.unreadCount ?? (r.notifications || []).filter((n) => !n.read_at).length);
+      setFailed(false);
+    } catch { setFailed(true); }
+  }
+  useEffect(() => {
+    load();
+    const t = setInterval(() => { if (!document.hidden) load(); }, 60000);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  async function openItem(n) {
+    setOpen(false);
+    if (!n.read_at) {
+      setItems((xs) => xs.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)));
+      setUnread((u) => Math.max(0, u - 1));
+      try { await api.markBuildNotificationRead(n.id); } catch { /* next poll corrects it */ }
+    }
+    if (n.project_id && onOpenProject) onOpenProject(n.project_id);
+  }
+  async function markAll() {
+    setItems((xs) => xs.map((x) => ({ ...x, read_at: x.read_at || new Date().toISOString() })));
+    setUnread(0);
+    try { await api.markAllBuildNotificationsRead(); } catch { load(); }
+  }
+
+  return (
+    <div ref={boxRef} style={{ position: "relative" }}>
+      <button onClick={() => { setOpen((o) => !o); if (!open) load(); }} aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}
+        style={{ position: "relative", width: 36, height: 36, borderRadius: 999, border: `1px solid ${BRAND.line}`, background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Bell size={16} color={BRAND.ink} />
+        {unread > 0 && (
+          <span style={{ position: "absolute", top: -4, right: -4, minWidth: 17, height: 17, padding: "0 4px", borderRadius: 999, background: BRAND.coral, color: "#fff", fontFamily: FONT, fontSize: 10.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {unread > 99 ? "99+" : unread}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div style={{ position: "absolute", right: 0, top: 44, width: 340, maxWidth: "90vw", maxHeight: 420, overflowY: "auto", background: "#fff", border: `1px solid ${BRAND.line}`, borderRadius: 12, boxShadow: "0 12px 32px rgba(0,0,0,0.12)", zIndex: 60 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${BRAND.line}` }}>
+            <span style={{ fontFamily: FONT, fontSize: 13.5, fontWeight: 700, color: BRAND.ink }}>Notifications</span>
+            {unread > 0 && (
+              <button onClick={markAll} style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: BRAND.coral, background: "none", border: "none", cursor: "pointer", padding: 0 }}>Mark all read</button>
+            )}
+          </div>
+          {failed && items.length === 0 ? (
+            <div style={{ padding: 16, fontFamily: FONT, fontSize: 12.5, color: "#7A746F" }}>Couldn't load notifications. <button onClick={load} style={{ color: BRAND.coral, background: "none", border: "none", cursor: "pointer", fontWeight: 600, padding: 0 }}>Retry</button></div>
+          ) : items.length === 0 ? (
+            <div style={{ padding: 16, fontFamily: FONT, fontSize: 12.5, color: "#7A746F" }}>You're all caught up.</div>
+          ) : items.map((n) => (
+            <button key={n.id} onClick={() => openItem(n)} style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 14px", border: "none", borderBottom: `1px solid ${BRAND.line}`, background: n.read_at ? "#fff" : "#FFF6F1", cursor: "pointer" }}>
+              <div style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.ink, fontWeight: n.read_at ? 400 : 600, lineHeight: 1.4 }}>{n.message}</div>
+              <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F", marginTop: 3 }}>
+                {n.project_code ? `${n.project_code} · ` : ""}{timeAgo(n.created_at)}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BuildNavBar({ view, setView, session, onLogout, canSeeDashboard, canSeeAdmin, onOpenProject }) {
   const items = [];
   if (session) items.push({ id: "my-work", label: "My work" });
   items.push({ id: "projects", label: "Projects" });
@@ -219,6 +308,7 @@ function BuildNavBar({ view, setView, session, onLogout, canSeeDashboard, canSee
         <div>
           {session ? (
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <NotificationBell onOpenProject={onOpenProject} />
               {/* Mockup: the user chip says who you are AND what you can see. */}
               <div style={{ textAlign: "right", lineHeight: 1.25 }}>
                 <div style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: BRAND.ink }}>{session.name}</div>
@@ -3529,7 +3619,12 @@ export default function BuildRivApp() {
           body, .build-dashboard-no-print ~ * { background: #fff !important; }
         }
       `}</style>
-      <BuildNavBar view={view} setView={goToView} session={session} onLogout={handleLogout} canSeeDashboard={canSeeDashboard} canSeeAdmin={canSeeAdmin} />
+      <BuildNavBar view={view} setView={goToView} session={session} onLogout={handleLogout} canSeeDashboard={canSeeDashboard} canSeeAdmin={canSeeAdmin}
+        onOpenProject={(id) => {
+          window.history.pushState(null, "", BUILD_VIEW_TO_PATH.projects);
+          setView("projects");
+          setActiveProjectId(id);
+        }} />
 
       {view === "my-work" && (
         <MyWorkView

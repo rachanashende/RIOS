@@ -370,6 +370,7 @@ export const api = {
   },
   listBuildNotifications: () => buildRequest("/build/notifications"),
   markBuildNotificationRead: (id) => buildRequest(`/build/notifications/${id}/read`, { method: "PUT" }),
+  markAllBuildNotificationsRead: () => buildRequest("/build/notifications/read-all", { method: "PUT" }),
 
   // ---- Build.RIV: Leader dashboard (backend/routes/buildDashboard.js)
   getBuildClientDashboard: (clientId, params) => buildRequest(`/build/dashboard/client/${clientId}${toQuery(params)}`),
