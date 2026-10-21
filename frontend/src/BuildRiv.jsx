@@ -170,6 +170,22 @@ function fmtUSD(n) {
 /* =========================================================================
    NAV
    ========================================================================= */
+const ROLE_LABELS = {
+  admin: "RIV Admin", riv_manager: "RIV Client Partner", client: "Client Leader",
+  product_owner: "Product Owner", startup_poc: "Startup POC", junior_employee: "Employee",
+};
+function roleScopeLabel(session) {
+  const role = ROLE_LABELS[session?.role] || session?.role || "";
+  const scope = {
+    admin: "All clients · all projects",
+    riv_manager: "Your assigned clients only",
+    client: session?.company || "Your company's projects",
+    product_owner: "Projects you own",
+    startup_poc: "Your startup's pilot only",
+    junior_employee: "Projects you're on",
+  }[session?.role];
+  return scope ? `${role} · ${scope}` : role;
+}
 function BuildNavBar({ view, setView, session, onLogout, canSeeDashboard, canSeeAdmin }) {
   const items = [];
   if (session) items.push({ id: "my-work", label: "My work" });
@@ -185,12 +201,12 @@ function BuildNavBar({ view, setView, session, onLogout, canSeeDashboard, canSee
             <Hammer size={18} color={BRAND.coral} /> Build
           </div>
           <div style={{ display: "flex", gap: 4 }}>
-            {/* Real link back to the main site's Overview page -- this
-                module doesn't render inside the main site's own header. */}
+            {/* Mockup screen 1: a plain way back to the main RIOS site --
+                this module doesn't render inside the main site's own header. */}
             <a href="/" style={{
               fontFamily: FONT, fontSize: 13.5, fontWeight: 500, padding: "8px 14px", borderRadius: 999,
-              textDecoration: "none", color: BRAND.ink, display: "inline-block",
-            }}>Overview</a>
+              textDecoration: "none", color: "#7A746F", display: "inline-block",
+            }}>← RIOS home</a>
             {items.map((it) => (
               <button key={it.id} onClick={() => setView(it.id)} style={{
                 fontFamily: FONT, fontSize: 13.5, fontWeight: 500, padding: "8px 14px", borderRadius: 999,
@@ -202,7 +218,14 @@ function BuildNavBar({ view, setView, session, onLogout, canSeeDashboard, canSee
         </div>
         <div>
           {session ? (
-            <GhostButton onClick={onLogout} icon={LogOut}>{session.name}</GhostButton>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {/* Mockup: the user chip says who you are AND what you can see. */}
+              <div style={{ textAlign: "right", lineHeight: 1.25 }}>
+                <div style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: BRAND.ink }}>{session.name}</div>
+                <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F" }}>{roleScopeLabel(session)}</div>
+              </div>
+              <GhostButton onClick={onLogout} icon={LogOut} style={{ padding: "8px 12px" }}>Log out</GhostButton>
+            </div>
           ) : (
             <span style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F" }}>Not logged in</span>
           )}
@@ -295,7 +318,8 @@ const INNOV_TABS = [
 // that needs a look" -- same red/amber/overdue test, without the
 // assigned-to-me narrowing the other roles get.
 function isWaitingOnMe(p, session) {
-  const needsAttention = p.health !== "on_track" || p.updateOverdue;
+  const h = p.effectiveHealth || p.health;
+  const needsAttention = !p.hasUpdate || h !== "on_track" || p.updateOverdue;
   if (!needsAttention) return false;
   if (session.role === "admin") return true;
   if (session.role === "riv_manager") return Number(p.riv_manager_id) === Number(session.id);
@@ -327,6 +351,27 @@ function healthSubtext(p) {
     return `KPI ${pct}% of the way`;
   }
   return null;
+}
+
+// Red/amber is judged on the *effective* health (posted health raised by
+// the automatic rules: no update in 21 days, 14 days late, 20% over budget)
+// -- the same value the Health column shows.
+function isRedOrAmber(p) {
+  const h = p.effectiveHealth || p.health;
+  return p.hasUpdate !== false && (h === "off_track" || h === "at_risk");
+}
+
+// Mockup screen 1: an empty list says *why* it's empty for this role.
+function emptyListText(session, hasFilters) {
+  if (hasFilters) return { title: "No projects match", text: "Try All in quick filters, or clear the search / stage / Product Owner filters above." };
+  return ({
+    admin: { title: "No projects yet", text: "Create one from Admin → Ready for Build, or start one by hand with New project." },
+    riv_manager: { title: "No projects for your clients yet", text: "You only see projects for the clients assigned to you. Ask the RIV Admin if a client is missing." },
+    client: { title: "No projects yet", text: "Your RIV team will set up a project here once an idea or startup is selected for Build." },
+    product_owner: { title: "No projects assigned to you", text: "When the RIV Admin makes you Product Owner of a project, it shows up here." },
+    startup_poc: { title: "Your pilot isn't set up yet", text: "The RIV Admin will link you to your startup's project. You'll get an email when it's ready." },
+    junior_employee: { title: "You're not on a project yet", text: "When you're added to a Build project as the Employee, it shows up here." },
+  }[session.role]) || { title: "No projects", text: "Nothing to show yet." };
 }
 
 const QUICK_FILTERS = [
@@ -391,14 +436,14 @@ function ProjectListView({ session, onOpen, onNewProject }) {
   const quickCounts = {
     all: withProductOwner.length,
     waiting: withProductOwner.filter((p) => isWaitingOnMe(p, session)).length,
-    red_amber: withProductOwner.filter((p) => p.health === "off_track" || p.health === "at_risk").length,
+    red_amber: withProductOwner.filter(isRedOrAmber).length,
     overdue: withProductOwner.filter((p) => p.updateOverdue).length,
     on_hold: withProductOwner.filter((p) => p.status === "on_hold").length,
     closed: withProductOwner.filter((p) => p.status === "closed").length,
   };
   const visible = withProductOwner.filter((p) => {
     if (quickFilter === "waiting") return isWaitingOnMe(p, session);
-    if (quickFilter === "red_amber") return p.health === "off_track" || p.health === "at_risk";
+    if (quickFilter === "red_amber") return isRedOrAmber(p);
     if (quickFilter === "overdue") return p.updateOverdue;
     if (quickFilter === "on_hold") return p.status === "on_hold";
     if (quickFilter === "closed") return p.status === "closed";
@@ -492,9 +537,14 @@ function ProjectListView({ session, onOpen, onNewProject }) {
         </div>
       </Card>
 
+      {session.role === "riv_manager" && (
+        <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A746F", background: BRAND.cream, border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: "10px 14px", marginBottom: 14 }}>
+          You're seeing projects for <b>your assigned clients only</b>. To delete a project or change who's on it, ask the RIV Admin.
+        </div>
+      )}
       <ErrorBanner text={error} />
       {loading ? <Spinner label="Loading projects…" /> : visible.length === 0 ? (
-        <EmptyState icon={Briefcase} title="No projects match" text="Try All in quick filters, or clear the search / stage / Product Owner filters above." />
+        <EmptyState icon={Briefcase} {...emptyListText(session, quickFilter !== "all" || !!filters.q || !!filters.stage || !!filters.productOwnerId || !!filters.clientId)} />
       ) : mode === "table" ? (
         <Card style={{ overflow: "hidden" }}>
           <div style={{ overflowX: "auto" }}>
@@ -518,7 +568,7 @@ function ProjectListView({ session, onOpen, onNewProject }) {
                       <div style={{ fontSize: 12.5, color: BRAND.ink, fontWeight: 600 }}>{(p.stageLabel || p.stage)}{p.stagePosition ? ` · ${p.stagePosition} of ${p.stageCount}` : ""}</div>
                       {p.stagePosition && p.stageCount && (
                         <div style={{ height: 4, borderRadius: 2, background: BRAND.line, marginTop: 5, overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${(p.stagePosition / p.stageCount) * 100}%`, background: p.health === "off_track" ? "#C13B3B" : BRAND.coral }} />
+                          <div style={{ height: "100%", width: `${(p.stagePosition / p.stageCount) * 100}%`, background: (p.effectiveHealth || p.health) === "off_track" ? "#C13B3B" : BRAND.coral }} />
                         </div>
                       )}
                     </td>
@@ -571,83 +621,171 @@ function ProjectListView({ session, onOpen, onNewProject }) {
    PROJECT DETAIL -- header + tabs (Overview, Status updates, ROI, Lessons
    learned, Files, History) and the stage-action buttons (PRD 8, 6, 7).
    ========================================================================= */
-function StageActions({ project, missing, gateApprovers, session, onAction, busy }) {
-  const [reasonModal, setReasonModal] = useState(null); // 'send-back' | 'hold' | 'stop' | 'close' | 'pilot-iterate' | 'pilot-stop'
+// Mockup screen 3: "Current stage" card -- what this stage needs (a
+// checklist, ticked as the fields get filled in), who approves it, and the
+// approve / send back (or, at Pilot, the pilot decision) buttons, shown only
+// to people the backend says may approve (permissions.approveStage).
+// Hold / stop / close / delete live in the header's "More" menu instead.
+function CurrentStagePanel({ project, checklist, gateApprovers, permissions, onAction, busy, onEditDetails }) {
+  const [reasonKind, setReasonKind] = useState(null); // 'send-back' | 'pilot-iterate' | 'pilot-stop'
   const [reason, setReason] = useState("");
-  const [outcome, setOutcome] = useState("scaled");
+  if (!project || project.stage === "closed") return null;
+  const items = checklist || [];
+  const doneCount = items.filter((i) => i.done).length;
+  const ready = items.every((i) => i.done);
+  const canApprove = !!permissions?.approveStage && project.status === "active";
+  const approverText = (gateApprovers || []).map((t) => ({ product_owner: "Product Owner", riv_manager: "RIV Client Partner", admin: "RIV Admin" }[t] || t)).join(" or ") || "Product Owner";
+  const next = (BUILD_STAGES[project.type] || [])[(BUILD_STAGES[project.type] || []).indexOf(project.stage) + 1];
 
-  if (!project || project.stage === "closed" && project.status === "closed") {
-    return <Notice text="This project is closed." />;
-  }
-
-  function submitReason(kind) {
-    if (kind === "send-back") onAction("sendBack", { reason });
-    else if (kind === "hold") onAction("hold", { reason });
-    else if (kind === "stop") onAction("stop", { reason });
-    else if (kind === "close") onAction("close", { outcome });
-    else if (kind === "pilot-iterate") onAction("pilotDecision", { decision: "iterate", reason });
-    else if (kind === "pilot-stop") onAction("pilotDecision", { decision: "stop", reason });
-    setReasonModal(null); setReason("");
+  function confirm() {
+    if (reasonKind === "send-back") onAction("sendBack", { reason });
+    else if (reasonKind === "pilot-iterate") onAction("pilotDecision", { decision: "iterate", reason });
+    else if (reasonKind === "pilot-stop") onAction("pilotDecision", { decision: "stop", reason });
+    setReasonKind(null); setReason("");
   }
 
   return (
     <Card style={{ padding: 20, marginBottom: 20 }}>
-      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 10 }}>Stage actions</div>
-      {gateApprovers?.length > 0 && (
-        <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 10 }}>
-          Approver for this gate: {gateApprovers.join(", ")}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink }}>
+          Current stage: {BUILD_STAGE_LABELS[project.stage] || project.stage}
         </div>
-      )}
-      {missing?.length > 0 && (
-        <div style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.coralDark, marginBottom: 12, background: "#FCEEE1", padding: "8px 12px", borderRadius: 9 }}>
-          Fill in before moving on: {missing.join(", ")}
+        <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F" }}>
+          {items.length ? `${doneCount} of ${items.length} done` : "Nothing to fill in"} · Approved by {approverText} · Client Leader reviews
         </div>
-      )}
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        {project.stage === "pilot" ? (
-          <>
-            <PrimaryButton disabled={busy || missing?.length > 0} onClick={() => onAction("pilotDecision", { decision: "scale" })}>Scale → Production</PrimaryButton>
-            <GhostButton disabled={busy} onClick={() => setReasonModal("pilot-iterate")}>Iterate → back to Build</GhostButton>
-            <GhostButton disabled={busy} onClick={() => setReasonModal("pilot-stop")}>Stop</GhostButton>
-          </>
-        ) : project.stage !== "closed" ? (
-          <>
-            <PrimaryButton disabled={busy || missing?.length > 0} onClick={() => onAction("advance", {})}>Advance stage</PrimaryButton>
-            <GhostButton disabled={busy} onClick={() => setReasonModal("send-back")}>Send back</GhostButton>
-          </>
-        ) : null}
-        {project.status === "active" && <GhostButton disabled={busy} onClick={() => setReasonModal("hold")}>Put on hold</GhostButton>}
-        {project.status === "on_hold" && <GhostButton disabled={busy} onClick={() => onAction("resume", {})}>Resume</GhostButton>}
-        {["active", "on_hold"].includes(project.status) && <GhostButton disabled={busy} onClick={() => setReasonModal("stop")}>Stop project</GhostButton>}
-        {session.role === "admin" && ["active", "stopped"].includes(project.status) && (
-          <GhostButton disabled={busy} onClick={() => { setOutcome(project.stage === "closed" ? "scaled" : "stopped"); setReasonModal("close"); }} icon={CheckCircle2}>Close project</GhostButton>
-        )}
       </div>
 
-      {reasonModal && (
-        <div style={{ marginTop: 16, borderTop: `1px solid ${BRAND.line}`, paddingTop: 16 }}>
-          {reasonModal === "close" ? (
-            <Field
-              label="Outcome"
-              required
-              hint={project.stage !== "closed" ? "\"Scaled\" isn't available yet -- the project hasn't reached the Closed stage (after Production). Choose \"Stopped\" to close it now." : undefined}
-            >
-              <select style={selectStyle} value={outcome} onChange={(e) => setOutcome(e.target.value)}>
-                <option value="scaled" disabled={project.stage !== "closed"}>Scaled{project.stage !== "closed" ? " (reach Closed stage first)" : ""}</option>
-                <option value="stopped">Stopped</option>
-              </select>
-            </Field>
-          ) : (
-            <Field label="Reason" required>
-              <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical" }} value={reason} onChange={(e) => setReason(e.target.value)} />
-            </Field>
+      {items.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+          {items.map((i) => (
+            <div key={i.label} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontSize: 13, color: i.done ? "#7A746F" : BRAND.ink }}>
+              <span style={{
+                width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center",
+                background: i.done ? "#1B7A5A" : "#fff", border: `1.5px solid ${i.done ? "#1B7A5A" : BRAND.line}`, color: "#fff", fontSize: 12, fontWeight: 700,
+              }}>{i.done ? "✓" : ""}</span>
+              <span style={{ textDecoration: i.done ? "line-through" : "none" }}>{i.label}</span>
+            </div>
+          ))}
+          {!ready && permissions?.editDetails && onEditDetails && (
+            <button onClick={onEditDetails} style={{ alignSelf: "flex-start", marginTop: 4, fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: BRAND.coral, background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+              Fill these in →
+            </button>
           )}
+        </div>
+      )}
+
+      {project.status !== "active" && (
+        <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A746F", marginBottom: 6 }}>
+          {project.status === "on_hold" ? `On hold${project.hold_reason ? `: ${project.hold_reason}` : ""}. Resume it from More to continue.` : "This project is stopped."}
+        </div>
+      )}
+
+      {canApprove && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {project.stage === "pilot" ? (
+            <>
+              <PrimaryButton disabled={busy || !ready} onClick={() => onAction("pilotDecision", { decision: "scale" })}>Pilot decision: Scale → Production</PrimaryButton>
+              <GhostButton disabled={busy} onClick={() => setReasonKind("pilot-iterate")}>Iterate → back to Build</GhostButton>
+              <GhostButton disabled={busy} onClick={() => setReasonKind("pilot-stop")}>Stop after pilot</GhostButton>
+            </>
+          ) : (
+            <>
+              <PrimaryButton disabled={busy || !ready} onClick={() => onAction("advance", {})}>
+                Approve & move to {BUILD_STAGE_LABELS[next] || "next stage"}
+              </PrimaryButton>
+              {project.stage !== "requirements" && <GhostButton disabled={busy} onClick={() => setReasonKind("send-back")}>Send back</GhostButton>}
+            </>
+          )}
+        </div>
+      )}
+      {!canApprove && project.status === "active" && (
+        <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F" }}>
+          {ready ? `Ready for the ${approverText} to approve.` : `The ${approverText} approves this stage once the checklist is complete.`}
+        </div>
+      )}
+
+      {reasonKind && (
+        <div style={{ marginTop: 16, borderTop: `1px solid ${BRAND.line}`, paddingTop: 16 }}>
+          <Field label="Reason" required>
+            <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical" }} value={reason} onChange={(e) => setReason(e.target.value)} />
+          </Field>
           <div style={{ display: "flex", gap: 10 }}>
-            <PrimaryButton disabled={busy || (reasonModal !== "close" && !reason.trim())} onClick={() => submitReason(reasonModal)}>Confirm</PrimaryButton>
-            <GhostButton onClick={() => { setReasonModal(null); setReason(""); }}>Cancel</GhostButton>
+            <PrimaryButton disabled={busy || !reason.trim()} onClick={confirm}>Confirm</PrimaryButton>
+            <GhostButton onClick={() => { setReasonKind(null); setReason(""); }}>Cancel</GhostButton>
           </div>
         </div>
       )}
+    </Card>
+  );
+}
+
+// Header "More ▾" menu (mockup screen 3) -- only the actions this viewer's
+// permissions allow: hold / resume / stop (RIV Admin, Product Owner), close
+// (RIV Admin), request deletion (RIV Client Partner), delete (RIV Admin).
+function MoreMenu({ project, permissions, onPick }) {
+  const [open, setOpen] = useState(false);
+  const items = [];
+  if (permissions?.holdOrStop && project.status === "active") items.push(["hold", "Put on hold"]);
+  if (permissions?.holdOrStop && project.status === "on_hold") items.push(["resume", "Resume"]);
+  if (permissions?.holdOrStop && ["active", "on_hold"].includes(project.status)) items.push(["stop", "Stop project"]);
+  if (permissions?.close && ["active", "stopped"].includes(project.status)) items.push(["close", "Close project"]);
+  if (permissions?.requestDelete) items.push(["request-delete", "Ask RIV Admin to delete"]);
+  if (permissions?.deleteProject) items.push(["delete", "Delete project"]);
+  if (!items.length) return null;
+  return (
+    <div style={{ position: "relative" }}>
+      <GhostButton onClick={() => setOpen((o) => !o)} style={{ padding: "9px 14px" }}>More ▾</GhostButton>
+      {open && (
+        <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 30, background: "#fff", border: `1px solid ${BRAND.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.08)", minWidth: 210, padding: 6 }}>
+          {items.map(([id, label]) => (
+            <button key={id} onClick={() => { setOpen(false); onPick(id); }} style={{
+              display: "block", width: "100%", textAlign: "left", fontFamily: FONT, fontSize: 13, padding: "9px 12px", borderRadius: 7,
+              border: "none", background: "none", cursor: "pointer", color: id === "delete" || id === "stop" ? "#C13B3B" : BRAND.ink,
+            }}>{label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The reason / outcome form a "More" pick opens (hold, stop, close, delete
+// request, delete). Resume needs no form and runs straight away.
+function MoreActionForm({ kind, project, busy, onConfirm, onCancel }) {
+  const [reason, setReason] = useState("");
+  const [outcome, setOutcome] = useState(project.stage === "closed" ? "scaled" : "stopped");
+  const titles = {
+    hold: "Put this project on hold", stop: "Stop this project", close: "Close this project",
+    "request-delete": "Ask the RIV Admin to delete this project", delete: `Delete ${project.code} permanently`,
+  };
+  const needsReason = kind !== "close" && kind !== "delete";
+  return (
+    <Card style={{ padding: 18, marginBottom: 20, borderColor: kind === "delete" || kind === "stop" ? "#F3C6C6" : BRAND.line }}>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}>{titles[kind]}</div>
+      {kind === "close" && (
+        <Field label="Outcome" required hint={project.stage !== "closed" ? "\"Scaled\" needs the project to reach the Closed stage (after Production). Choose \"Stopped\" to close it now." : undefined}>
+          <select style={selectStyle} value={outcome} onChange={(e) => setOutcome(e.target.value)}>
+            <option value="scaled" disabled={project.stage !== "closed"}>Scaled{project.stage !== "closed" ? " (reach Closed stage first)" : ""}</option>
+            <option value="stopped">Stopped</option>
+          </select>
+        </Field>
+      )}
+      {kind === "delete" && (
+        <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#C13B3B", marginBottom: 12 }}>
+          This removes the project with all its updates, files and history. It can't be undone.
+        </div>
+      )}
+      {needsReason && (
+        <Field label="Reason" required hint={kind === "request-delete" ? "The RIV Admin approves or rejects this. Nothing is deleted until they do." : undefined}>
+          <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical" }} value={reason} onChange={(e) => setReason(e.target.value)} />
+        </Field>
+      )}
+      <div style={{ display: "flex", gap: 10 }}>
+        <PrimaryButton disabled={busy || (needsReason && !reason.trim())} onClick={() => onConfirm({ reason, outcome })}>
+          {kind === "delete" ? "Delete permanently" : kind === "request-delete" ? "Send request" : "Confirm"}
+        </PrimaryButton>
+        <GhostButton onClick={onCancel}>Cancel</GhostButton>
+      </div>
     </Card>
   );
 }
@@ -952,7 +1090,23 @@ const HEALTH_OPTIONS = [
   ["on_track", "On track", "#1B7A5A"], ["at_risk", "At risk", BRAND.coralDark], ["off_track", "Off track", "#C13B3B"],
 ];
 
-function UpdatesTab({ project, updates, canAdd, onAdded }) {
+// Mockup screen 4: "Add status update" opens as a pop-up from the project
+// header (or the Updates tab). Startup POC never sees the cost field
+// (permissions.seeMoney). A file can be attached with the update; it's
+// filed against the project's current stage.
+function StatusUpdateModal({ project, permissions, onClose, onSaved }) {
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(30,24,20,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "48px 16px", overflowY: "auto" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 640 }}>
+        <StatusUpdateForm project={project} permissions={permissions} onCancel={onClose} onSaved={() => { onSaved(); onClose(); }} />
+      </div>
+    </div>
+  );
+}
+
+function StatusUpdateForm({ project, permissions, onCancel, onSaved }) {
+  const seeMoney = permissions?.seeMoney !== false;
+  const [file, setFile] = useState(null);
   const [form, setForm] = useState({
     health: "on_track", progress: "", nextSteps: "", blockers: "", needsHelp: false, pctComplete: "",
     kpiActual: "", actualCost: "", agreedWithUserId: "",
@@ -969,11 +1123,21 @@ function UpdatesTab({ project, updates, canAdd, onAdded }) {
         health: form.health, progress: form.progress, nextSteps: form.nextSteps, blockers: form.blockers,
         needsHelp: form.needsHelp, pctComplete: form.pctComplete === "" ? null : Number(form.pctComplete),
         kpiActual: form.kpiActual === "" ? null : Number(form.kpiActual),
-        actualCost: form.actualCost === "" ? null : Number(form.actualCost),
+        actualCost: !seeMoney || form.actualCost === "" ? null : Number(form.actualCost),
         agreedWithUserId: form.agreedWithUserId || null,
       });
+      if (file) {
+        try { await api.uploadBuildFile(project.id, file, project.stage); }
+        catch (fe) {
+          setForm({ health: "on_track", progress: "", nextSteps: "", blockers: "", needsHelp: false, pctComplete: "", kpiActual: "", actualCost: "", agreedWithUserId: "" });
+          setFile(null);
+          setError(`Your update was posted, but the file didn't upload (${fe.message || "unknown error"}). Close this and attach it from the Files tab.`);
+          return;
+        }
+      }
       setForm({ health: "on_track", progress: "", nextSteps: "", blockers: "", needsHelp: false, pctComplete: "", kpiActual: "", actualCost: "", agreedWithUserId: "" });
-      onAdded();
+      setFile(null);
+      onSaved();
     } catch (e) {
       setError(e.message || "Couldn't save update.");
     } finally { setSubmitting(false); }
@@ -983,10 +1147,14 @@ function UpdatesTab({ project, updates, canAdd, onAdded }) {
   const agreedOptions = agreedWithOptions(project);
 
   return (
-    <div>
-      {canAdd && (
-        <Card style={{ padding: 20, marginBottom: 20 }}>
-          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}>Add status update</div>
+        <Card style={{ padding: 22 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div>
+              <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink }}>Add status update</div>
+              <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginTop: 2 }}>{project.code} · {BUILD_STAGE_LABELS[project.stage] || project.stage}</div>
+            </div>
+            {onCancel && <button type="button" onClick={onCancel} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "#9B958F" }}><X size={18} /></button>}
+          </div>
           <form onSubmit={submit}>
             <Field label="Health" required>
               <div style={{ display: "flex", gap: 8, marginBottom: 2 }}>
@@ -1017,9 +1185,11 @@ function UpdatesTab({ project, updates, canAdd, onAdded }) {
               <Field label="KPI now" hint={m.kpi_name ? `Baseline ${m.baseline ?? "—"} · target ${m.target ?? "—"}` : "No KPI set yet -- see Overview."}>
                 <input type="number" style={inputStyle} value={form.kpiActual} onChange={(e) => setForm((f) => ({ ...f, kpiActual: e.target.value }))} />
               </Field>
-              <Field label="Cost to date (USD)" hint={m.est_cost != null ? `Budget ${fmtUSD(m.est_cost)}` : "No budget estimate set yet."}>
-                <input type="number" style={inputStyle} value={form.actualCost} onChange={(e) => setForm((f) => ({ ...f, actualCost: e.target.value }))} />
-              </Field>
+              {seeMoney && (
+                <Field label="Cost to date (USD)" hint={m.est_cost != null ? `Budget ${fmtUSD(m.est_cost)}` : "No budget estimate set yet."}>
+                  <input type="number" style={inputStyle} value={form.actualCost} onChange={(e) => setForm((f) => ({ ...f, actualCost: e.target.value }))} />
+                </Field>
+              )}
               <Field label="% complete">
                 <input type="number" min="0" max="100" style={inputStyle} value={form.pctComplete} onChange={(e) => setForm((f) => ({ ...f, pctComplete: e.target.value }))} />
               </Field>
@@ -1041,10 +1211,27 @@ function UpdatesTab({ project, updates, canAdd, onAdded }) {
                 : " None of them currently read worse than the health you pick."}
             </div>
 
+            <Field label="Attach a file (optional)" hint="PDF, Word, Excel, PowerPoint, PNG or JPG, up to 10 MB. Filed under the current stage.">
+              <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg" onChange={(e) => setFile(e.target.files?.[0] || null)} style={{ fontFamily: FONT, fontSize: 12.5 }} />
+            </Field>
+
             <ErrorBanner text={error} />
-            <PrimaryButton type="submit" disabled={submitting}>{submitting ? "Saving…" : "Post update"}</PrimaryButton>
+            <div style={{ display: "flex", gap: 10 }}>
+              <PrimaryButton type="submit" disabled={submitting}>{submitting ? "Saving…" : "Post update"}</PrimaryButton>
+              {onCancel && <GhostButton onClick={onCancel}>Cancel</GhostButton>}
+            </div>
           </form>
         </Card>
+  );
+}
+
+function UpdatesTab({ updates, canAdd, onAddClick }) {
+  return (
+    <div>
+      {canAdd && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+          <PrimaryButton icon={Plus} onClick={onAddClick}>Add status update</PrimaryButton>
+        </div>
       )}
       {updates.length === 0 ? <EmptyState icon={FileText} title="No updates yet" text="Status updates will appear here once posted." /> : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1375,17 +1562,30 @@ function SideRow({ label, value }) {
     </div>
   );
 }
+// Mockup screen 3: everyone on the project, by role -- one Client Leader,
+// one Product Owner, one Employee (Enterprise) or Startup POC (Open
+// Innovation), and the RIV Client Partner. A missing person shows as
+// "Not assigned" so the gap is visible instead of the row vanishing.
 function PeoplePanel2({ project }) {
+  const row = (label, name, sub) => (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#9B958F", textTransform: "uppercase", letterSpacing: "0.03em" }}>{label}</div>
+      <div style={{ fontFamily: FONT, fontSize: 12.5, color: name ? BRAND.ink : "#B7B2AE", marginTop: 2 }}>{name || "Not assigned"}</div>
+      {sub && name && <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F" }}>{sub}</div>}
+    </div>
+  );
   return (
     <SidePanel title="People">
-      <SideRow label="Client" value={project.client_company || project.client_name} />
-      <SideRow label="Product Owner" value={project.product_owner_name} />
-      <SideRow label="RIV Client Partner" value={project.riv_manager_name} />
-      {project.type === "startup" && <SideRow label="Startup POC" value={project.startup_poc_name} />}
+      {row("Client Leader (reviews)", project.client_name, project.client_company)}
+      {row("Product Owner (owns delivery)", project.product_owner_name)}
+      {project.type === "startup"
+        ? row("Startup POC", project.startup_poc_name)
+        : row("Employee", project.employee_name)}
+      {row("RIV Client Partner", project.riv_manager_name)}
     </SidePanel>
   );
 }
-function KpiValuePanel({ project }) {
+function KpiValuePanel({ project, seeMoney = true }) {
   const m = project.metrics || {};
   if (!m.kpi_name && m.est_cost == null && m.actual_cost == null) return null;
   const pct = m.baseline != null && m.target != null && project.kpi_now != null && m.target !== m.baseline
@@ -1404,7 +1604,7 @@ function KpiValuePanel({ project }) {
           </div>
         </div>
       )}
-      <div style={{ display: "flex", gap: 14 }}>
+      {seeMoney && <div style={{ display: "flex", gap: 14 }}>
         <div>
           <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#9B958F", textTransform: "uppercase" }}>Cost to date</div>
           <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink }}>{fmtUSD(m.actual_cost) || "—"}</div>
@@ -1413,7 +1613,7 @@ function KpiValuePanel({ project }) {
           <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#9B958F", textTransform: "uppercase" }}>Benefit/yr</div>
           <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink }}>{fmtUSD(m.realised_benefit ?? m.est_benefit) || "—"}</div>
         </div>
-      </div>
+      </div>}
     </SidePanel>
   );
 }
@@ -1493,10 +1693,19 @@ const SOURCE_LABEL = { idea: "Ideathon idea", rise_application: "Startup pilot a
 function WhereFromPanel({ sources }) {
   const s = sources?.[0];
   if (!s) return null;
+  const name = s.source_type === "idea" ? s.idea_title : s.source_type === "rise_application" ? s.startup_name : null;
+  const by = s.source_type === "idea" ? (s.idea_submitted_by_name && `Submitted by ${s.idea_submitted_by_name}`)
+    : s.source_type === "rise_application" ? (s.opportunity_title && `Applied to "${s.opportunity_title}"`) : null;
   return (
     <SidePanel title="Where it came from">
-      <div style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.ink }}>{SOURCE_LABEL[s.source_type] || s.source_type}</div>
-      {s.source_id && <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 2 }}>#{s.source_id}</div>}
+      <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F", textTransform: "uppercase", letterSpacing: "0.03em" }}>{SOURCE_LABEL[s.source_type] || s.source_type}</div>
+      {name && <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: BRAND.ink, marginTop: 3 }}>{name}</div>}
+      {by && <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#7A746F", marginTop: 2 }}>{by}</div>}
+      {s.auditQuestion && (
+        <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#7A746F", marginTop: 8, paddingTop: 8, borderTop: `1px solid ${BRAND.line}` }}>
+          <b style={{ color: BRAND.ink }}>Audit opportunity:</b> {s.auditQuestion}
+        </div>
+      )}
     </SidePanel>
   );
 }
@@ -1507,6 +1716,9 @@ function ProjectDetailView({ projectId, session, onBack }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [showUpdate, setShowUpdate] = useState(false);
+  const [moreAction, setMoreAction] = useState(null); // 'hold' | 'stop' | 'close' | 'request-delete' | 'delete'
+  const [notice, setNotice] = useState(null);
 
   function load() {
     setLoading(true);
@@ -1524,6 +1736,9 @@ function ProjectDetailView({ projectId, session, onBack }) {
       else if (kind === "resume") await api.resumeBuildProject(projectId);
       else if (kind === "stop") await api.stopBuildProject(projectId, payload.reason);
       else if (kind === "close") await api.closeBuildProject(projectId, payload.outcome);
+      else if (kind === "request-delete") { await api.requestBuildDelete(projectId, payload.reason); setNotice("Delete request sent to the RIV Admin. Nothing is deleted until they approve it."); }
+      else if (kind === "delete") { await api.deleteBuildProject(projectId); onBack(); return; }
+      setMoreAction(null);
       load();
     } catch (e) {
       setError(e.message || "That action failed.");
@@ -1534,21 +1749,22 @@ function ProjectDetailView({ projectId, session, onBack }) {
   if (!data) return <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}><ErrorBanner text={error || "Project not found."} /></div>;
 
   const { project, sources, history, updates, lessons, files } = data;
-  // These only toggle what's shown -- lib/buildPermissions.js on the
-  // backend is the real gate (Oct 2026 "Proposed Screens" permission
-  // table); a frontend slip here just hides a button a server call would
-  // reject anyway, never grants extra access. isOwner/owner_user_id was
-  // retired -- Product Owner is now the sole non-admin gate approver.
-  const isProductOwner = session.role === "product_owner" && Number(session.id) === Number(project.product_owner_user_id);
-  const isStartupPoc = session.role === "startup_poc" && Number(session.id) === Number(project.startup_poc_user_id);
+  // Every button below is driven by data.permissions -- the backend's own
+  // answer (lib/buildPermissions.js) for *this* viewer on *this* project --
+  // so the screen can't drift from the server rules again.
+  const perms = data.permissions || {};
   const isClientLeader = session.role === "client" && Number(session.id) === Number(project.client_id);
-  // canEditDetails mirrors the backend's narrower check (no Employee/Startup
-  // POC) for the Overview/ROI "edit" affordances; canAddUpdate (status
-  // updates, files, lessons) stays broader and also includes Startup POC.
-  const canEditDetails = session.role === "admin" || session.role === "riv_manager" || isProductOwner;
-  const canAddUpdate = canEditDetails || isStartupPoc || session.role === "junior_employee";
-  const canEditRoi = canEditDetails || isClientLeader;
-  const canUpload = canAddUpdate;
+  const canEditDetails = !!perms.editDetails;
+  const canAddUpdate = !!perms.addUpdate;
+  const canEditRoi = !!perms.editRoi;
+  const canUpload = !!perms.uploadFile;
+  const headerHealth = displayHealth(project);
+
+  function pickMore(kind) {
+    setNotice(null);
+    if (kind === "resume") doAction("resume", {});
+    else setMoreAction(kind);
+  }
 
   const isStartupProject = project.type === "startup";
   const dealFiles = isStartupProject ? files.filter((f) => DEAL_STAGES.includes(f.stage)) : [];
@@ -1577,11 +1793,15 @@ function ProjectDetailView({ projectId, session, onBack }) {
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-          <div style={{ display: "flex", gap: 8 }}>
-            <HealthBadge health={project.effectiveHealth || project.health} />
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <HealthBadge health={headerHealth} />
             <StatusBadge status={project.status} />
+            {canAddUpdate && project.status !== "closed" && (
+              <PrimaryButton icon={Plus} onClick={() => setShowUpdate(true)} style={{ padding: "9px 14px" }}>Add status update</PrimaryButton>
+            )}
+            <MoreMenu project={project} permissions={perms} onPick={pickMore} />
           </div>
-          {project.healthReason && (
+          {project.hasUpdate !== false && project.healthReason && (
             <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F", maxWidth: 260, textAlign: "right" }}>{project.healthReason}</div>
           )}
         </div>
@@ -1590,12 +1810,25 @@ function ProjectDetailView({ projectId, session, onBack }) {
       <StageStepper project={project} />
 
       <ErrorBanner text={error} />
+      <Notice text={notice} />
+
+      {moreAction && (
+        <MoreActionForm
+          kind={moreAction} project={project} busy={busy}
+          onCancel={() => setMoreAction(null)}
+          onConfirm={({ reason, outcome }) => doAction(moreAction, moreAction === "close" ? { outcome } : { reason })}
+        />
+      )}
 
       {project.status !== "closed" && (
-        <StageActions
-          project={project} missing={data.missingForNextStage} gateApprovers={data.gateApprovers}
-          session={session} onAction={doAction} busy={busy}
+        <CurrentStagePanel
+          project={project} checklist={data.stageChecklist} gateApprovers={data.gateApprovers}
+          permissions={perms} onAction={doAction} busy={busy} onEditDetails={() => setTab("overview")}
         />
+      )}
+
+      {showUpdate && (
+        <StatusUpdateModal project={project} permissions={perms} onClose={() => { setShowUpdate(false); load(); }} onSaved={() => {}} />
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(220px, 1fr)", gap: 24, alignItems: "flex-start" }}>
@@ -1611,7 +1844,7 @@ function ProjectDetailView({ projectId, session, onBack }) {
           </div>
 
           {tab === "overview" && <OverviewTab project={project} sources={sources} canEdit={canEditDetails} onSaved={load} session={session} />}
-          {tab === "updates" && <UpdatesTab project={project} updates={updates} canAdd={canAddUpdate} onAdded={load} />}
+          {tab === "updates" && <UpdatesTab updates={updates} canAdd={canAddUpdate && project.status !== "closed"} onAddClick={() => setShowUpdate(true)} />}
           {tab === "roi" && <RoiTab project={project} canEdit={canEditRoi} isClientLeader={isClientLeader && !canEditDetails} onSaved={load} />}
           {tab === "lessons" && <LessonsTab project={project} lessons={lessons} canEdit={canEditDetails} onSaved={load} />}
           {tab === "files" && <FilesTab project={project} files={files} canUpload={canUpload} onUploaded={load} />}
@@ -1625,7 +1858,7 @@ function ProjectDetailView({ projectId, session, onBack }) {
 
         <div>
           <PeoplePanel2 project={project} />
-          <KpiValuePanel project={project} />
+          <KpiValuePanel project={project} seeMoney={perms.seeMoney !== false} />
           <DealSummaryPanel project={project} />
           <WhereFromPanel sources={sources} />
           <RequestsSidePanel project={project} isClientLeader={isClientLeader} />
@@ -1715,7 +1948,7 @@ function StageBreakdown({ pipelineByStage }) {
 // actualCost, realisedBenefit}]) or the per-client shape built from the
 // portfolio endpoint's own invested/benefit fields -- same chart, different
 // caller-supplied field names so neither dashboard needs a second component.
-function InvestmentVsBenefitChart({ title, rows, nameKey, investedKey, benefitKey }) {
+function InvestmentVsBenefitChart({ title, rows, nameKey, investedKey, benefitKey, benefitLabel = "Realised benefit" }) {
   if (!rows || !rows.length) return null;
   return (
     <Card style={{ padding: 18, marginBottom: 20 }}>
@@ -1728,7 +1961,7 @@ function InvestmentVsBenefitChart({ title, rows, nameKey, investedKey, benefitKe
           <Tooltip contentStyle={{ fontFamily: FONT, fontSize: 12, borderRadius: 8, border: `1px solid ${BRAND.line}` }} />
           <Legend wrapperStyle={{ fontFamily: FONT, fontSize: 11 }} />
           <Bar dataKey={investedKey} name="Invested" fill="#D9A79C" radius={[0, 4, 4, 0]} />
-          <Bar dataKey={benefitKey} name="Realised benefit" fill="#1B7A5A" radius={[0, 4, 4, 0]} />
+          <Bar dataKey={benefitKey} name={benefitLabel} fill="#1B7A5A" radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </Card>
@@ -1906,11 +2139,13 @@ function LessonsLearnedPanel({ recentLessons }) {
 // portfolio is fine vs. not" read, computed client-side from the same
 // per-project health values already in the table below (no new backend
 // field needed).
-const HEALTH_DONUT_ORDER = ["on_track", "at_risk", "off_track"];
-function HealthDonut({ projects }) {
-  const counts = { on_track: 0, at_risk: 0, off_track: 0 };
-  for (const p of projects || []) if (counts[p.health] != null) counts[p.health] += 1;
-  const total = counts.on_track + counts.at_risk + counts.off_track;
+const HEALTH_DONUT_ORDER = ["on_track", "at_risk", "off_track", "no_update"];
+// Mockup screen 6: four slices -- on track, at risk, off track, and "no
+// update yet" (a project nobody has reported on isn't green).
+function HealthDonut({ projects, breakdown }) {
+  const counts = breakdown ? { ...breakdown } : { on_track: 0, at_risk: 0, off_track: 0, no_update: 0 };
+  if (!breakdown) for (const p of projects || []) if (counts[p.health] != null) counts[p.health] += 1;
+  const total = HEALTH_DONUT_ORDER.reduce((n, k) => n + (counts[k] || 0), 0);
   const data = HEALTH_DONUT_ORDER.map((k) => ({ name: HEALTH_COLORS[k].label, value: counts[k], key: k }));
   return (
     <Card style={{ padding: 18, flex: "1 1 200px", display: "flex", alignItems: "center", gap: 14 }}>
@@ -1946,12 +2181,9 @@ function SummaryStat({ label, value, sub, color }) {
   );
 }
 
-const DASHBOARD_PERIODS = [
-  { value: "3", label: "Last 3 months" },
-  { value: "6", label: "Last 6 months" },
-  { value: "12", label: "Last 12 months" },
-  { value: "24", label: "Last 24 months" },
-];
+// Approved: the dashboard runs on the calendar year (this year + the two before).
+const THIS_YEAR = new Date().getFullYear();
+const DASHBOARD_PERIODS = [0, 1, 2].map((n) => ({ value: String(THIS_YEAR - n), label: `Calendar year ${THIS_YEAR - n}` }));
 const DASHBOARD_TYPES = [
   { value: "", label: "All workflows" },
   { value: "internal", label: "Internal ideas" },
@@ -1972,13 +2204,13 @@ function ClientDashboard({ clientId, onOpenProject }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [period, setPeriod] = useState("12");
+  const [period, setPeriod] = useState(String(THIS_YEAR));
   const [type, setType] = useState("");
 
   useEffect(() => {
     if (!clientId) return;
     setLoading(true);
-    api.getBuildClientDashboard(clientId, { period, type }).then(setData).catch((e) => setError(e.message || "Couldn't load dashboard.")).finally(() => setLoading(false));
+    api.getBuildClientDashboard(clientId, { year: period, type }).then(setData).catch((e) => setError(e.message || "Couldn't load dashboard.")).finally(() => setLoading(false));
   }, [clientId, period, type]);
 
   // useSortedRows itself calls hooks (useState/useMemo) -- it must run on
@@ -1997,14 +2229,24 @@ function ClientDashboard({ clientId, onOpenProject }) {
   if (!data) return null;
 
   const { summary, needsAttention, pipelineByStage, stageCountsByType, auditToImpact, investmentVsBenefit, byType, recentLessons } = data;
-  const chartRows = (investmentVsBenefit || []).map((r) => ({ name: r.code, invested: r.actualCost || 0, benefit: r.realisedBenefit || 0 }));
+  // Value bar = realised benefit once confirmed, otherwise the estimate (mockup screen 6).
+  const chartRows = (investmentVsBenefit || []).map((r) => ({
+    name: `${r.code}${r.estimated && r.value != null ? " (est.)" : ""}`, invested: r.actualCost || 0, benefit: r.value ?? r.realisedBenefit ?? 0,
+  }));
+  const yearLabel = data.period?.kind === "year" ? `Calendar year ${data.period.year}` : DASHBOARD_PERIODS.find((p) => p.value === period)?.label;
 
   return (
     <div>
-      <div className="build-dashboard-no-print" style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginBottom: 14 }}>
-        <DashboardSelect value={period} onChange={setPeriod} options={DASHBOARD_PERIODS} />
-        <DashboardSelect value={type} onChange={setType} options={DASHBOARD_TYPES} />
-        <GhostButton icon={Download} onClick={() => window.print()}>Export PDF</GhostButton>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+        <div>
+          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 18, color: BRAND.ink }}>{data.client?.name || "Client"} · Build dashboard</div>
+          <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginTop: 2 }}>{yearLabel} · as of {fmtDate(data.asOf || new Date())}</div>
+        </div>
+        <div className="build-dashboard-no-print" style={{ display: "flex", gap: 10 }}>
+          <DashboardSelect value={period} onChange={setPeriod} options={DASHBOARD_PERIODS} />
+          <DashboardSelect value={type} onChange={setType} options={DASHBOARD_TYPES} />
+          <GhostButton icon={Download} onClick={() => window.print()}>Export PDF</GhostButton>
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 20 }}>
@@ -2012,16 +2254,17 @@ function ClientDashboard({ clientId, onOpenProject }) {
         <SummaryStat label="Red / Amber" value={summary.redAmberCount} color={summary.redAmberCount ? "#C13B3B" : undefined} />
         <SummaryStat label="Overdue updates" value={summary.overdueCount} color={summary.overdueCount ? BRAND.coralDark : undefined} />
         <SummaryStat label="Invested to date" value={summary.investedToDateFmt} />
-        <SummaryStat label="Realised benefit" value={summary.realisedBenefitFmt} sub={summary.estimated ? "partly estimated" : undefined} />
+        <SummaryStat label="Est. value / year" value={summary.estBenefitPerYearFmt ?? "—"} sub="from project estimates" />
+        <SummaryStat label="Realised benefit" value={summary.realisedBenefitFmt} sub={summary.estimated ? "some still estimated" : "confirmed by Client Leader"} />
         <SummaryStat label="Portfolio ROI" value={fmtPct(summary.portfolioRoi)} color={summary.portfolioRoi >= 0 ? "#1B7A5A" : "#C13B3B"} />
-        <HealthDonut projects={data.projects} />
+        <HealthDonut projects={data.projects} breakdown={data.healthBreakdown} />
       </div>
 
       <WorkflowBreakdown byType={byType} />
       <RecentCallouts recentLessons={recentLessons} />
       <StageByWorkflowChart stageCountsByType={stageCountsByType} />
       <StageBreakdown pipelineByStage={pipelineByStage} />
-      <InvestmentVsBenefitChart title="Investment vs. realised benefit" rows={chartRows} nameKey="name" investedKey="invested" benefitKey="benefit" />
+      <InvestmentVsBenefitChart title="Cost vs. value per project" rows={chartRows} nameKey="name" investedKey="invested" benefitKey="benefit" benefitLabel="Value / year (realised, or est.)" />
       <AuditToImpactPanel auditToImpact={auditToImpact} />
       <LessonsLearnedPanel recentLessons={recentLessons} />
 
@@ -2146,16 +2389,27 @@ function DashboardView({ session, onOpenProject }) {
   const isRivManager = session.role === "riv_manager";
   const myClients = useMyClients(session.role);
   const [pickedClientId, setPickedClientId] = useState(null);
+  const allClients = useClientOptions();
 
   return (
     <div style={{ maxWidth: 1180, margin: "0 auto", padding: "36px 24px 100px" }}>
-      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink, marginBottom: 4 }}>Leader dashboard</div>
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink, marginBottom: 4 }}>Dashboard</div>
       <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 20 }}>What's in flight, what's in trouble, and what it has returned.</div>
 
       {isAdmin && (
         <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
           <GhostButton style={sub === "portfolio" ? { background: BRAND.ink, color: "#fff" } : {}} onClick={() => setSub("portfolio")}>RIV portfolio</GhostButton>
-          <GhostButton style={sub === "client" ? { background: BRAND.ink, color: "#fff" } : {}} onClick={() => setSub("client")}>My client view</GhostButton>
+          <GhostButton style={sub === "client" ? { background: BRAND.ink, color: "#fff" } : {}} onClick={() => setSub("client")}>One client</GhostButton>
+        </div>
+      )}
+
+      {isAdmin && sub === "client" && allClients && allClients.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <DashboardSelect
+            value={pickedClientId ?? ""}
+            onChange={(v) => setPickedClientId(v ? Number(v) : null)}
+            options={[{ value: "", label: "Choose a client…" }, ...allClients.map((c) => ({ value: String(c.id), label: c.company || c.name }))]}
+          />
         </div>
       )}
 
@@ -2180,7 +2434,9 @@ function DashboardView({ session, onOpenProject }) {
                   : pickedClientId
                     ? <ClientDashboard clientId={pickedClientId} onOpenProject={onOpenProject} />
                     : <EmptyState icon={Gauge} title="Pick a client" text="Choose one of your assigned clients above to see their dashboard." />)
-            : <EmptyState icon={Gauge} title="Pick a client" text="Open a project directly, or ask an admin for dashboard access." />
+            : isAdmin && pickedClientId
+              ? <ClientDashboard clientId={pickedClientId} onOpenProject={onOpenProject} />
+              : <EmptyState icon={Gauge} title="Pick a client" text={isAdmin ? "Choose a client above to see their dashboard." : "Open a project directly, or ask an admin for dashboard access."} />
       )}
     </div>
   );
@@ -2226,142 +2482,215 @@ function ClientPicker({ value, onChange, required, label, hint }) {
   );
 }
 
+// Mockup screen 5: "Review & create". Same form for all three starts --
+// by hand, from a selected Ideathon idea, or from a selected startup -- and
+// every project names its people here: Product Owner (required), the
+// Employee (Enterprise; defaults to whoever submitted the idea) or the
+// Startup POC (Open Innovation; pick an existing login or create one), and
+// the RIV Client Partner. Ideas / startups are picked from the Ready for
+// Build list by name, never by typing an ID.
 function CreateProjectPanel({ onCreated, prefill }) {
   const [mode, setMode] = useState(prefill?.mode || "manual");
-  const [form, setForm] = useState({ type: "internal", title: "", description: "", clientId: prefill?.clientId || "", targetEnd: "", productOwnerUserId: "" });
-  const [ideaId, setIdeaId] = useState(prefill?.ideaId || "");
-  const [applicationId, setApplicationId] = useState(prefill?.applicationId || "");
+  const [ready, setReady] = useState([]);
+  const [sourceKey, setSourceKey] = useState("");
+  const [form, setForm] = useState({
+    type: "internal", title: "", description: "", clientId: "", targetEnd: "",
+    productOwnerUserId: "", employeeUserId: "", rivManagerId: "",
+  });
+  const [pocMode, setPocMode] = useState("later"); // 'later' | 'create'
+  const [pocForm, setPocForm] = useState({ name: "", email: "", password: "" });
+  const [pocCreds, setPocCreds] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
 
-  // A "Review & create" click from the Ready for Build queue pre-fills
-  // mode + the idea/application id (and clientId, for the manual form) --
-  // re-sync whenever a new prefill arrives (object identity changes each
-  // time the queue hands over a different row).
+  useEffect(() => { api.getReadyForBuild(false).then((d) => setReady(d.items || [])).catch(() => setReady([])); }, []);
+
+  // A "Review & create" click from the queue hands over the whole row.
   useEffect(() => {
     if (!prefill) return;
     setMode(prefill.mode || "manual");
-    if (prefill.ideaId) setIdeaId(prefill.ideaId);
-    if (prefill.applicationId) setApplicationId(prefill.applicationId);
-    if (prefill.clientId) setForm((f) => ({ ...f, clientId: prefill.clientId }));
+    if (prefill.item) setSourceKey(`${prefill.item.source}-${prefill.item.sourceId}`);
   }, [prefill]);
 
-  // So a project doesn't have to go through the Assign tab afterward just
-  // to get a POC on it -- when a client has POC logins already, offer them
-  // right here, scoped to whichever client was just picked above.
-  const [pocs, setPocs] = useState(null);
-  useEffect(() => {
-    if (!form.clientId) { setPocs(null); return; }
-    api.listBuildPocs(form.clientId).then((d) => setPocs(d.pocs || [])).catch(() => setPocs(null));
-  }, [form.clientId]);
+  const sourceItems = ready.filter((r) => (mode === "idea" ? r.source === "idea" : r.source === "rise_application"));
+  const item = mode === "manual" ? null
+    : (prefill?.item && `${prefill.item.source}-${prefill.item.sourceId}` === sourceKey ? prefill.item : sourceItems.find((r) => `${r.source}-${r.sourceId}` === sourceKey)) || null;
+  const type = mode === "manual" ? form.type : mode === "idea" ? "internal" : "startup";
+  const clientId = mode === "manual" ? form.clientId : item?.clientId || "";
 
-  // "Create the Startup POC login" (page 5 of the Oct 2026 mockup) -- only
-  // offered for a manually-created startup project (the idea/application
-  // paths don't collect this; a Startup POC can always be added afterward
-  // from the Logins tab). An invite email is now attempted (same Resend
-  // path every other RIOS transactional email goes through) but it's
-  // best-effort -- if Resend isn't configured, or the send fails, the login
-  // still gets created, so the temp password is always also shown here to
-  // share manually as a backup.
-  const [createPoc, setCreatePoc] = useState(false);
-  const [pocForm, setPocForm] = useState({ name: "", email: "", password: "" });
-  const [pocCreds, setPocCreds] = useState(null);
+  // Pre-fill the editable fields from the picked idea / startup.
+  useEffect(() => {
+    if (!item) return;
+    setForm((f) => ({
+      ...f,
+      title: item.source === "idea" ? item.title : `${item.title} — Pilot`,
+      description: item.description || "",
+      employeeUserId: item.source === "idea" && item.submittedById ? String(item.submittedById) : "",
+    }));
+    if (item.source === "rise_application") setPocForm((p) => ({ ...p, name: item.founderName || "", email: item.founderEmail || "" }));
+  }, [sourceKey, item?.sourceId]);
+
+  const [pocs, setPocs] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [managers, setManagers] = useState([]);
+  useEffect(() => {
+    if (!clientId) { setPocs([]); setEmployees([]); return; }
+    api.listBuildPocs(clientId).then((d) => setPocs(d.pocs || [])).catch(() => setPocs([]));
+    api.listBuildEmployees(clientId).then((d) => setEmployees(d.employees || [])).catch(() => setEmployees([]));
+  }, [clientId]);
+  useEffect(() => { api.listBuildManagers().then((d) => setManagers(d.managers || [])).catch(() => setManagers([])); }, []);
+  const clientManagers = managers.filter((m) => !clientId || (m.client_ids || []).map(Number).includes(Number(clientId)));
+
+  // If the idea's submitter isn't an Employee login of this client, don't pre-select a ghost.
+  useEffect(() => {
+    if (form.employeeUserId && employees.length && !employees.some((e) => String(e.id) === String(form.employeeUserId))) {
+      setForm((f) => ({ ...f, employeeUserId: "" }));
+    }
+  }, [employees]);
 
   async function submit(e) {
     e.preventDefault();
     setSubmitting(true); setError(null); setNotice(null); setPocCreds(null);
     try {
-      if (mode === "manual") {
-        if (!form.title.trim() || !form.clientId) throw new Error("Title and clientId are required.");
-        const d = await api.createBuildProject(form);
-        let noticeText = `Created ${d.project.code}.`;
-        if (form.type === "startup" && createPoc) {
-          if (!pocForm.name.trim() || !pocForm.email.trim() || pocForm.password.length < 8) {
-            throw new Error(`${d.project.code} was created, but the Startup POC login needs a name, email, and an 8+ character temporary password.`);
-          }
-          await api.createBuildStartupPoc({ ...pocForm, projectId: d.project.id });
-          setPocCreds({ email: pocForm.email, password: pocForm.password });
-          noticeText += ` Startup POC login created for ${pocForm.email} -- an invite email was attempted; the credentials are also shown below as a backup.`;
-        }
-        setNotice(noticeText);
-        onCreated();
-      } else if (mode === "idea") {
-        const d = await api.createBuildProjectFromIdea(ideaId);
-        setNotice(`Created ${d.project.code} from idea #${ideaId}.`);
-        onCreated();
-      } else {
-        const d = await api.createBuildProjectFromApplication(applicationId);
-        setNotice(`Created ${d.project.code} from application #${applicationId}.`);
-        onCreated();
+      if (mode !== "manual" && !item) throw new Error("Pick the idea or startup to build.");
+      if (!form.title.trim()) throw new Error("A title is required.");
+      if (!clientId) throw new Error("Pick the client.");
+      if (!form.productOwnerUserId) throw new Error("Pick the Product Owner -- every project needs one.");
+      if (type === "startup" && pocMode === "create" && (!pocForm.name.trim() || !pocForm.email.trim() || pocForm.password.length < 8)) {
+        throw new Error("The Startup POC login needs a name, email, and an 8+ character temporary password.");
       }
+      const people = {
+        title: form.title.trim(), description: form.description, targetEnd: form.targetEnd || null,
+        productOwnerUserId: form.productOwnerUserId, rivManagerId: form.rivManagerId || null,
+        employeeUserId: type === "internal" ? form.employeeUserId || null : null,
+      };
+      let d;
+      if (mode === "manual") d = await api.createBuildProject({ ...people, type, clientId });
+      else if (mode === "idea") d = await api.createBuildProjectFromIdea(item.sourceId, people);
+      else d = await api.createBuildProjectFromApplication(item.sourceId, { ...people, clientId });
+      let text = `Created ${d.project.code}.`;
+      if (type === "startup" && pocMode === "create") {
+        await api.createBuildStartupPoc({ ...pocForm, projectId: d.project.id });
+        setPocCreds({ email: pocForm.email, password: pocForm.password });
+        text += ` Startup POC login created for ${pocForm.email} -- an invite email was attempted; the credentials are below as a backup.`;
+      }
+      setNotice(text);
+      setSourceKey("");
+      setForm({ type: "internal", title: "", description: "", clientId: "", targetEnd: "", productOwnerUserId: "", employeeUserId: "", rivManagerId: "" });
+      setPocMode("later"); setPocForm({ name: "", email: "", password: "" });
+      api.getReadyForBuild(false).then((r) => setReady(r.items || [])).catch(() => {});
+      onCreated();
     } catch (e) {
       setError(e.message || "Couldn't create the project.");
     } finally { setSubmitting(false); }
   }
 
+  const pickerHint = (list, what) => (!clientId ? "Choose the client first." : list.length ? undefined : `This client has no ${what} logins yet -- create one under Logins.`);
+
   return (
     <Card style={{ padding: 20 }}>
-      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}>Create a Build project</div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        {[["manual", "Manual"], ["idea", "From Ideathon winner"], ["application", "From startup pilot"]].map(([id, label]) => (
-          <button key={id} onClick={() => setMode(id)} style={{
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}>Review & create a Build project</div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {[["idea", "From Ideathon winner"], ["application", "From startup pilot"], ["manual", "By hand"]].map(([id, label]) => (
+          <button key={id} type="button" onClick={() => { setMode(id); setSourceKey(""); }} style={{
             fontFamily: FONT, fontSize: 12.5, fontWeight: 600, padding: "8px 12px", borderRadius: 999,
             border: `1px solid ${BRAND.line}`, cursor: "pointer", background: mode === id ? BRAND.ink : "#fff", color: mode === id ? "#fff" : BRAND.ink,
           }}>{label}</button>
         ))}
       </div>
       <form onSubmit={submit}>
+        {mode !== "manual" && (
+          <>
+            <Field label={mode === "idea" ? "Selected idea" : "Selected startup"} required hint={sourceItems.length || item ? undefined : "Nothing is waiting in Ready for Build for this type."}>
+              <select style={selectStyle} value={sourceKey} onChange={(e) => setSourceKey(e.target.value)}>
+                <option value="">— Choose —</option>
+                {item && !sourceItems.some((r) => `${r.source}-${r.sourceId}` === sourceKey) && <option value={sourceKey}>{item.title} · {item.clientName}</option>}
+                {sourceItems.map((r) => <option key={`${r.source}-${r.sourceId}`} value={`${r.source}-${r.sourceId}`}>{r.title} · {r.clientName}</option>)}
+              </select>
+            </Field>
+            {item && (
+              <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A746F", background: BRAND.cream, border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: "10px 14px", marginBottom: 16, lineHeight: 1.6 }}>
+                <div><b style={{ color: BRAND.ink }}>Client:</b> {item.clientName}</div>
+                {item.source === "idea" && <div><b style={{ color: BRAND.ink }}>Submitted by:</b> {item.submittedByName || "—"}</div>}
+                {item.source === "idea" && <div><b style={{ color: BRAND.ink }}>Audit opportunity:</b> {item.auditQuestion || "Not linked to an audit question"}</div>}
+                {item.source === "rise_application" && <div><b style={{ color: BRAND.ink }}>Founder:</b> {item.founderName || "—"}{item.founderEmail ? ` · ${item.founderEmail}` : ""}</div>}
+                {item.source === "rise_application" && item.opportunityTitle && <div><b style={{ color: BRAND.ink }}>Call:</b> {item.opportunityTitle}</div>}
+                {item.juryScore && <div><b style={{ color: BRAND.ink }}>Jury score:</b> {item.juryScore}</div>}
+                <div><b style={{ color: BRAND.ink }}>Waiting:</b> {item.waitingDays != null ? `${item.waitingDays} days` : "—"}</div>
+              </div>
+            )}
+          </>
+        )}
+
         {mode === "manual" && (
           <>
             <Field label="Type" required>
               <select style={selectStyle} value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}>
-                <option value="internal">Internal</option>
-                <option value="startup">Startup</option>
+                <option value="internal">Internal idea (Enterprise Innovation)</option>
+                <option value="startup">Startup pilot (Open Innovation)</option>
               </select>
             </Field>
+            <ClientPicker label="Client" required hint="The client company this project belongs to." value={form.clientId} onChange={(v) => setForm((f) => ({ ...f, clientId: v, productOwnerUserId: "", employeeUserId: "", rivManagerId: "" }))} />
+          </>
+        )}
+
+        {(mode === "manual" || item) && (
+          <>
             <Field label="Title" required><input style={inputStyle} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} /></Field>
             <Field label="Description"><textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} /></Field>
-            <ClientPicker label="Client" required hint="The RIOS client (leader) account this project belongs to." value={form.clientId} onChange={(v) => setForm((f) => ({ ...f, clientId: v }))} />
-            <Field label="Product Owner" hint={!form.clientId ? "Choose a client first." : pocs && !pocs.length ? "This client has no Product Owner logins yet -- create one under Logins, or assign later." : "Optional -- can also be set later from Assign people."}>
-              <select style={selectStyle} value={form.productOwnerUserId} onChange={(e) => setForm((f) => ({ ...f, productOwnerUserId: e.target.value }))} disabled={!pocs || !pocs.length}>
-                <option value="">— None yet —</option>
-                {(pocs || []).map((p) => <option key={p.id} value={p.id}>{p.name} ({p.email})</option>)}
-              </select>
-            </Field>
-            <Field label="Target end date"><input type="date" style={inputStyle} value={form.targetEnd} onChange={(e) => setForm((f) => ({ ...f, targetEnd: e.target.value }))} /></Field>
 
-            {form.type === "startup" && (
+            <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: BRAND.ink, margin: "4px 0 10px" }}>People</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: "0 16px" }}>
+              <Field label="Product Owner" required hint={pickerHint(pocs, "Product Owner")}>
+                <select style={selectStyle} value={form.productOwnerUserId} onChange={(e) => setForm((f) => ({ ...f, productOwnerUserId: e.target.value }))} disabled={!pocs.length}>
+                  <option value="">— Choose —</option>
+                  {pocs.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.email})</option>)}
+                </select>
+              </Field>
+              {type === "internal" && (
+                <Field label="Employee" hint={pickerHint(employees, "Employee") || (mode === "idea" ? "Defaults to the person who submitted the idea." : "Optional.")}>
+                  <select style={selectStyle} value={form.employeeUserId} onChange={(e) => setForm((f) => ({ ...f, employeeUserId: e.target.value }))} disabled={!employees.length}>
+                    <option value="">— None yet —</option>
+                    {employees.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.email})</option>)}
+                  </select>
+                </Field>
+              )}
+              <Field label="RIV Client Partner" hint={clientId && !clientManagers.length ? "No Client Partner is assigned to this client yet." : "Optional."}>
+                <select style={selectStyle} value={form.rivManagerId} onChange={(e) => setForm((f) => ({ ...f, rivManagerId: e.target.value }))}>
+                  <option value="">— None —</option>
+                  {clientManagers.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.email})</option>)}
+                </select>
+              </Field>
+              <Field label="Target end date"><input type="date" style={inputStyle} value={form.targetEnd} onChange={(e) => setForm((f) => ({ ...f, targetEnd: e.target.value }))} /></Field>
+            </div>
+
+            {type === "startup" && (
               <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: 14, marginBottom: 16 }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontSize: 13, fontWeight: 600, color: BRAND.ink, cursor: "pointer" }}>
-                  <input type="checkbox" checked={createPoc} onChange={(e) => setCreatePoc(e.target.checked)} />
-                  Create a Startup POC login for this pilot
-                </label>
-                {createPoc && (
-                  <div style={{ marginTop: 12 }}>
-                    <Field label="Startup POC name" required><input style={inputStyle} value={pocForm.name} onChange={(e) => setPocForm((f) => ({ ...f, name: e.target.value }))} /></Field>
-                    <Field label="Startup POC email" required><input type="email" style={inputStyle} value={pocForm.email} onChange={(e) => setPocForm((f) => ({ ...f, email: e.target.value }))} /></Field>
-                    <Field label="Temporary password" required hint="8+ characters. They'll be asked to change it on first login."><input style={inputStyle} value={pocForm.password} onChange={(e) => setPocForm((f) => ({ ...f, password: e.target.value }))} /></Field>
-                  </div>
+                <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: BRAND.ink, marginBottom: 8 }}>Startup POC login</div>
+                <div style={{ display: "flex", gap: 16, marginBottom: pocMode === "create" ? 12 : 0 }}>
+                  {[["create", "Create it now"], ["later", "Add later (Logins tab)"]].map(([id, label]) => (
+                    <label key={id} style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: FONT, fontSize: 12.5, cursor: "pointer" }}>
+                      <input type="radio" checked={pocMode === id} onChange={() => setPocMode(id)} /> {label}
+                    </label>
+                  ))}
+                </div>
+                {pocMode === "create" && (
+                  <>
+                    <Field label="Name" required><input style={inputStyle} value={pocForm.name} onChange={(e) => setPocForm((f) => ({ ...f, name: e.target.value }))} /></Field>
+                    <Field label="Email" required><input type="email" style={inputStyle} value={pocForm.email} onChange={(e) => setPocForm((f) => ({ ...f, email: e.target.value }))} /></Field>
+                    <Field label="Temporary password" required hint="8+ characters. They change it on first login. They'll never see PO or contract amounts."><input style={inputStyle} value={pocForm.password} onChange={(e) => setPocForm((f) => ({ ...f, password: e.target.value }))} /></Field>
+                  </>
                 )}
               </div>
             )}
           </>
         )}
-        {mode === "idea" && (
-          <Field label="Idea ID" required hint="The idea must already be marked “Selected for Build” (Ideathon admin console).">
-            <input style={inputStyle} value={ideaId} onChange={(e) => setIdeaId(e.target.value)} />
-          </Field>
-        )}
-        {mode === "application" && (
-          <Field label="Application ID" required hint="The startup application must already be decided “Selected for Pilot” (Startup admin console).">
-            <input style={inputStyle} value={applicationId} onChange={(e) => setApplicationId(e.target.value)} />
-          </Field>
-        )}
+
         {notice && <Notice text={notice} />}
         {pocCreds && (
           <div style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.ink, background: BRAND.cream, border: `1px solid ${BRAND.line}`, borderRadius: 9, padding: "10px 12px", marginBottom: 16 }}>
-            Startup POC credentials — email: <b>{pocCreds.email}</b>, temporary password: <b>{pocCreds.password}</b>. An invite email was attempted, but keep these as a backup in case it didn't land.
+            Startup POC credentials — email: <b>{pocCreds.email}</b>, temporary password: <b>{pocCreds.password}</b>. An invite email was attempted; keep these as a backup.
           </div>
         )}
         <ErrorBanner text={error} />
@@ -2371,37 +2700,35 @@ function CreateProjectPanel({ onCreated, prefill }) {
   );
 }
 
-// "Ready for Build" queue (Oct 2026 "Proposed Screens" admin console,
-// page 5) -- ideas/applications that have cleared selection but have no
-// Build project yet, so an admin doesn't have to already know a numeric
-// idea/application ID to act on it. "Review & create" hands the row to
-// CreateProjectPanel via prefill. The mockup's "Not now" (defer/decline)
-// action is deliberately left out -- there's no backing schema for either
-// on an idea or application (no deferred-until date, no decline-reason
-// field), so it would have to be invented from nothing rather than wired
-// to real data; same reasoning as skipping the "Requests from Client
-// Partners" tab below.
+// "Ready for Build" queue (mockup screen 5): ideas / startups that cleared
+// selection but have no Build project yet. Review & create, Not now (hide
+// 14 days), or Decline (with a reason; doesn't come back).
 function ReadyForBuildPanel({ onReview }) {
   const [items, setItems] = useState(null);
   const [error, setError] = useState(null);
   const [showDeferred, setShowDeferred] = useState(false);
+  const [declining, setDeclining] = useState(null);
+  const [declineReason, setDeclineReason] = useState("");
 
   function load(includeDeferred = showDeferred) {
     api.getReadyForBuild(includeDeferred).then((d) => setItems(d.items || [])).catch((e) => setError(e.message || "Couldn't load the queue."));
   }
   useEffect(() => { load(showDeferred); }, [showDeferred]);
 
-  // "Not now" (mockup page 5) -- hides a row from the default queue for 14
-  // days without declining it; un-defer (days: 0) clears that early. Both
-  // just re-load so the row's deferredUntil badge updates immediately.
   async function defer(it, days) {
     await api.deferReadyForBuild(it.source, it.sourceId, days);
     load(showDeferred);
   }
+  async function decline() {
+    try {
+      await api.declineReadyForBuild(declining.source, declining.sourceId, declineReason.trim());
+      setDeclining(null); setDeclineReason("");
+      load(showDeferred);
+    } catch (e) { setError(e.message || "Couldn't decline."); }
+  }
 
   if (error) return <ErrorBanner text={error} />;
   if (!items) return <Spinner label="Loading queue…" />;
-
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
@@ -2409,6 +2736,18 @@ function ReadyForBuildPanel({ onReview }) {
           <input type="checkbox" checked={showDeferred} onChange={(e) => setShowDeferred(e.target.checked)} /> Show "Not now" items too
         </label>
       </div>
+      {declining && (
+        <Card style={{ padding: 16, marginBottom: 12, borderColor: "#F3C6C6" }}>
+          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13.5, color: BRAND.ink, marginBottom: 8 }}>Decline “{declining.title}”</div>
+          <Field label="Reason" required hint="It leaves the queue for good. Use Not now if it might come back.">
+            <textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} value={declineReason} onChange={(e) => setDeclineReason(e.target.value)} />
+          </Field>
+          <div style={{ display: "flex", gap: 10 }}>
+            <PrimaryButton disabled={!declineReason.trim()} onClick={decline}>Decline</PrimaryButton>
+            <GhostButton onClick={() => setDeclining(null)}>Cancel</GhostButton>
+          </div>
+        </Card>
+      )}
       {items.length === 0 ? (
         <EmptyState icon={CheckCircle2} title="Nothing waiting" text="Every selected idea and startup pilot already has a Build project." />
       ) : (
@@ -2443,6 +2782,7 @@ function ReadyForBuildPanel({ onReview }) {
                         {isDeferred
                           ? <GhostButton onClick={() => defer(it, 0)}>Un-defer</GhostButton>
                           : <GhostButton onClick={() => defer(it, 14)}>Not now</GhostButton>}
+                        <GhostButton onClick={() => { setDeclining(it); setDeclineReason(""); }} style={{ color: "#C13B3B" }}>Decline</GhostButton>
                       </td>
                     </tr>
                   );
@@ -2474,7 +2814,7 @@ function ReadyForBuildPanel({ onReview }) {
 function AssignPanel() {
   const [projects, setProjects] = useState(null);
   const [projectId, setProjectId] = useState("");
-  const [form, setForm] = useState({ productOwnerUserId: "", rivManagerId: "", startupPocUserId: "" });
+  const [form, setForm] = useState({ productOwnerUserId: "", rivManagerId: "", startupPocUserId: "", employeeUserId: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -2486,9 +2826,11 @@ function AssignPanel() {
   const selectedProject = (projects || []).find((p) => String(p.id) === String(projectId));
   const [pocs, setPocs] = useState(null);
   const [managers, setManagers] = useState(null);
+  const [employees, setEmployees] = useState([]);
   useEffect(() => {
-    if (!selectedProject) { setPocs(null); setManagers(null); return; }
+    if (!selectedProject) { setPocs(null); setManagers(null); setEmployees([]); return; }
     api.listBuildPocs(selectedProject.client_id).then((d) => setPocs(d.pocs || [])).catch(() => setPocs(null));
+    api.listBuildEmployees(selectedProject.client_id).then((d) => setEmployees(d.employees || [])).catch(() => setEmployees([]));
     api.listBuildManagers().then((d) => setManagers(d.managers || [])).catch(() => setManagers(null));
   }, [selectedProject?.id]);
 
@@ -2499,6 +2841,7 @@ function AssignPanel() {
       await api.assignBuildProject(projectId, {
         productOwnerUserId: form.productOwnerUserId || undefined, rivManagerId: form.rivManagerId || undefined,
         startupPocUserId: form.startupPocUserId || undefined,
+        employeeUserId: form.employeeUserId || undefined,
       });
       setNotice("Assignment saved.");
     } catch (e) {
@@ -2531,6 +2874,15 @@ function AssignPanel() {
             <input style={inputStyle} value={form.productOwnerUserId} onChange={(e) => setForm((f) => ({ ...f, productOwnerUserId: e.target.value }))} placeholder={selectedProject ? "This client has no Product Owner logins yet -- create one under Logins." : "Numeric Product Owner user ID"} />
           )}
         </Field>
+
+        {selectedProject?.type === "internal" && (
+          <Field label="Employee" hint={employees.length ? "One Employee per Enterprise project." : "This client has no Employee logins yet."}>
+            <select style={selectStyle} value={form.employeeUserId} onChange={(e) => setForm((f) => ({ ...f, employeeUserId: e.target.value }))} disabled={!employees.length}>
+              <option value="">— No change —</option>
+              {employees.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.email})</option>)}
+            </select>
+          </Field>
+        )}
 
         {selectedProject?.type === "startup" && (
           <Field label="Startup POC" hint="No picker for this one yet -- there's no listing of candidate Startup POC accounts in the app.">
@@ -2810,9 +3162,21 @@ function RequestsPanel() {
     await api.resolveBuildRequest(id);
     load();
   }
+  const [deciding, setDeciding] = useState(null); // { r, action: 'approve'|'reject' }
+  const [note, setNote] = useState("");
+  const [notice, setNotice] = useState(null);
+  async function decide() {
+    try {
+      if (deciding.action === "approve") { await api.approveBuildDelete(deciding.r.id, note); setNotice(`${deciding.r.project_code} was deleted.`); }
+      else { await api.rejectBuildDelete(deciding.r.id, note); setNotice(`Delete request for ${deciding.r.project_code} rejected; the Client Partner was told.`); }
+      setDeciding(null); setNote(""); load();
+    } catch (e) { setError(e.message || "That didn't work."); }
+  }
 
   if (error) return <ErrorBanner text={error} />;
   if (!requests) return <Spinner label="Loading requests…" />;
+  const deleteRequests = requests.filter((r) => r.kind === "delete");
+  const otherRequests = requests.filter((r) => r.kind !== "delete");
 
   return (
     <div>
@@ -2821,11 +3185,55 @@ function RequestsPanel() {
           <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Show resolved too
         </label>
       </div>
-      {requests.length === 0 ? (
-        <EmptyState icon={CheckCircle2} title="Nothing open" text="No Client Partner has an open request right now." />
+      <Notice text={notice} />
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, margin: "4px 0 10px" }}>Delete requests from Client Partners</div>
+      {deleteRequests.length === 0 ? (
+        <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginBottom: 20 }}>No delete requests waiting.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
+          {deleteRequests.map((r) => (
+            <Card key={r.id} style={{ padding: 16, borderColor: r.status === "open" ? "#F3C6C6" : BRAND.line }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: BRAND.ink }}>
+                    <span style={{ color: BRAND.coralDark }}>{r.project_code}</span> {r.project_title}
+                  </div>
+                  <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 2 }}>
+                    {r.client_name} · asked by {r.requested_by_name || "Client Partner"} · {fmtDate(r.created_at)}
+                  </div>
+                  <div style={{ fontFamily: FONT, fontSize: 13, color: BRAND.ink, marginTop: 8 }}><b>Reason:</b> {r.message}</div>
+                  {r.status === "rejected" && <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#7A746F", marginTop: 6 }}>Rejected by {r.resolved_by_name || "an admin"} · {fmtDate(r.resolved_at)}{r.resolution ? ` · ${r.resolution}` : ""}</div>}
+                </div>
+                {r.status === "open" && (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <GhostButton onClick={() => { setDeciding({ r, action: "approve" }); setNote(""); }} style={{ color: "#C13B3B" }}>Approve & delete</GhostButton>
+                    <GhostButton onClick={() => { setDeciding({ r, action: "reject" }); setNote(""); }}>Reject</GhostButton>
+                  </div>
+                )}
+              </div>
+              {deciding?.r.id === r.id && (
+                <div style={{ marginTop: 14, borderTop: `1px solid ${BRAND.line}`, paddingTop: 14 }}>
+                  {deciding.action === "approve" && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#C13B3B", marginBottom: 10 }}>This permanently deletes {r.project_code} with all its updates, files and history.</div>}
+                  <Field label={deciding.action === "approve" ? "Note (optional)" : "Note to the Client Partner (optional)"}>
+                    <input style={inputStyle} value={note} onChange={(e) => setNote(e.target.value)} />
+                  </Field>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <PrimaryButton onClick={decide}>{deciding.action === "approve" ? "Delete permanently" : "Reject request"}</PrimaryButton>
+                    <GhostButton onClick={() => setDeciding(null)}>Cancel</GhostButton>
+                  </div>
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: BRAND.ink, margin: "4px 0 10px" }}>Requests from Client Leaders</div>
+      {otherRequests.length === 0 ? (
+        <EmptyState icon={CheckCircle2} title="Nothing open" text="No Client Leader has an open request right now." />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {requests.map((r) => (
+          {otherRequests.map((r) => (
             <Card key={r.id} style={{ padding: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
                 <div>
@@ -2855,7 +3263,7 @@ function AdminConsoleView({ reload }) {
   const [prefill, setPrefill] = useState(null);
   const tabs = [
     { id: "ready", label: "Ready for Build" },
-    { id: "requests", label: "Requests from Client Partners" },
+    { id: "requests", label: "Requests" },
     { id: "create", label: "Create project" },
     { id: "assign", label: "Assign people" },
     { id: "people", label: "Logins" },
@@ -2863,13 +3271,7 @@ function AdminConsoleView({ reload }) {
     { id: "overdue", label: "Overdue digest" },
   ];
   function reviewItem(it) {
-    setPrefill({
-      mode: it.source === "idea" ? "idea" : "application",
-      ideaId: it.source === "idea" ? it.sourceId : undefined,
-      applicationId: it.source === "rise_application" ? it.sourceId : undefined,
-      clientId: it.clientId || undefined,
-      key: `${it.source}-${it.sourceId}-${Date.now()}`,
-    });
+    setPrefill({ mode: it.source === "idea" ? "idea" : "application", item: it, key: `${it.source}-${it.sourceId}-${Date.now()}` });
     setTab("create");
   }
   return (
@@ -3046,8 +3448,9 @@ export default function BuildRivApp() {
   function handleAuthed(token, user) {
     setBuildSession(token, user);
     setSessionState(user);
-    window.history.pushState(null, "", "/build/projects");
-    setView("projects");
+    // Mockup screen 2: everyone lands on their own "My work" page after login.
+    window.history.pushState(null, "", "/build/my-work");
+    setView("my-work");
   }
   function handleLogout() {
     clearBuildSession(); clearAllSessions();
@@ -3063,7 +3466,10 @@ export default function BuildRivApp() {
   }
 
   const canSeeDashboard = session && ["admin", "client", "product_owner", "riv_manager"].includes(session.role);
-  const canSeeAdmin = session && ["admin", "riv_manager"].includes(session.role);
+  // Approved workflow v2: the Admin console (Ready for Build, project
+  // creation, people, delete approvals) is RIV Admin only. A Client Partner
+  // works inside their assigned projects and asks the Admin for the rest.
+  const canSeeAdmin = session && session.role === "admin";
 
   // Build spans roles with no login of their own here (client leader,
   // admin -- App.jsx seeds their session on the way in) and the ones that

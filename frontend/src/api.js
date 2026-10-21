@@ -361,9 +361,17 @@ export const api = {
 
   // ---- Build.RIV: admin + RIV Manager console (backend/routes/buildAdmin.js)
   createBuildProject: (payload) => buildRequest("/admin/build/projects", { method: "POST", body: payload }),
-  createBuildProjectFromIdea: (ideaId) => buildRequest(`/admin/build/from-idea/${ideaId}`, { method: "POST" }),
-  createBuildProjectFromApplication: (applicationId, clientId) =>
-    buildRequest(`/admin/build/from-application/${applicationId}`, { method: "POST", body: clientId ? { clientId } : {} }),
+  // payload: { productOwnerUserId (required), employeeUserId?, rivManagerId?, title?, description?, targetEnd? }
+  createBuildProjectFromIdea: (ideaId, payload) => buildRequest(`/admin/build/from-idea/${ideaId}`, { method: "POST", body: payload || {} }),
+  // payload: { productOwnerUserId (required), startupPocUserId?, rivManagerId?, clientId?, title?, description?, targetEnd? }
+  createBuildProjectFromApplication: (applicationId, payload) =>
+    buildRequest(`/admin/build/from-application/${applicationId}`, { method: "POST", body: typeof payload === "object" && payload ? payload : (payload ? { clientId: payload } : {}) }),
+  listBuildEmployees: (clientId) => buildRequest(`/admin/build/employees${toQuery({ clientId })}`),
+  declineReadyForBuild: (source, sourceId, reason) => buildRequest("/admin/build/ready-for-build/decline", { method: "POST", body: { source, sourceId, reason } }),
+  requestBuildDelete: (projectId, reason) => buildRequest(`/build/projects/${projectId}/delete-request`, { method: "POST", body: { reason } }),
+  approveBuildDelete: (requestId, note) => buildRequest(`/admin/build/requests/${requestId}/approve-delete`, { method: "PUT", body: { note } }),
+  rejectBuildDelete: (requestId, note) => buildRequest(`/admin/build/requests/${requestId}/reject-delete`, { method: "PUT", body: { note } }),
+  deleteBuildProject: (id) => buildRequest(`/admin/build/projects/${id}`, { method: "DELETE" }),
   assignBuildProject: (id, payload) => buildRequest(`/admin/build/projects/${id}/assign`, { method: "PUT", body: payload }),
   listBuildPocs: (clientId) => buildRequest(`/admin/build/poc${toQuery({ clientId })}`),
   createBuildPoc: (payload) => buildRequest("/admin/build/poc", { method: "POST", body: payload }),

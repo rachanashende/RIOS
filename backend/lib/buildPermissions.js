@@ -68,8 +68,10 @@ export function canSeeProject(user, project, assignedClientIds, pocClientId, isL
 }
 
 // "Create a project, assign people" -- RIV Admin, RIV Client Partner only.
+// Approved workflow v2: only the RIV Admin creates projects (Admin console);
+// a Client Partner works inside projects already assigned to them.
 export function canCreateProject(user) {
-  return isAdmin(user) || user?.role === "riv_manager";
+  return isAdmin(user);
 }
 
 // "Add a status update" / "Upload files" -- the permission table gives
@@ -114,11 +116,41 @@ export function canEditRoi(user, project, assignedClientIds) {
 
 // "Hold or stop a project" -- Admin, RIV Client Partner, Client Leader.
 // Not in the proposed-screens table explicitly; kept as before.
-export function canHoldOrStop(user, project, assignedClientIds) {
+// Approved workflow v2: hold / resume / stop is the RIV Admin or the
+// project's Product Owner. The Client Leader reviews only, and the RIV
+// Client Partner explicitly cannot hold or stop (they raise it with Admin).
+export function canHoldOrStop(user, project) {
   if (isAdmin(user)) return true;
-  if (isRivManagerOf(user, project, assignedClientIds)) return true;
-  if (isClientLeaderOf(user, project)) return true;
+  if (isProductOwnerOf(user, project)) return true;
   return false;
+}
+
+// A Client Partner can't delete anything themselves -- they raise a delete
+// request that only the RIV Admin can approve.
+export function canRequestDelete(user, project, assignedClientIds) {
+  return isRivManagerOf(user, project, assignedClientIds);
+}
+export function canDeleteProject(user) {
+  return isAdmin(user);
+}
+
+// Money the Startup POC must never see (approved: "Startup POC can't see PO
+// or contract amounts"). Stripped from every Build API response for that role.
+export const HIDDEN_FROM_STARTUP_POC = new Set([
+  "proposal_amount", "contract_value", "pilot_fee",
+  "est_cost", "actual_cost", "est_benefit", "realised_benefit", "roi",
+]);
+export function stripMoneyForStartupPoc(value) {
+  if (Array.isArray(value)) return value.map(stripMoneyForStartupPoc);
+  if (value && typeof value === "object" && !(value instanceof Date) && !Buffer.isBuffer(value)) {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (HIDDEN_FROM_STARTUP_POC.has(k)) continue;
+      out[k] = stripMoneyForStartupPoc(v);
+    }
+    return out;
+  }
+  return value;
 }
 
 // "Close a project" / "Delete anything" -- RIV Admin only (RIV Client

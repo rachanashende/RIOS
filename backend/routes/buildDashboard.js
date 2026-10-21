@@ -28,16 +28,30 @@ router.get("/client/:clientId", async (req, res, next) => {
     const assigned = await assignedClientIds(req.user);
     if (!canSeeClientDashboard(req.user, clientId, assigned)) return res.status(403).json({ error: "You don't have access to this client's dashboard." });
 
-    const months = Number(req.query.period) || 12;
+    // Approved workflow v2: the dashboard runs on the calendar year
+    // (?year=2026, default this year) -- a project counts if it was live at
+    // any point in that year. ?period=<months> is still honoured for old
+    // links, but only when no year is given.
     const typeFilter = ["internal", "startup"].includes(req.query.type) ? req.query.type : null;
+    const thisYear = new Date().getFullYear();
+    const yearQ = Number(req.query.year);
+    const useMonths = !req.query.year && Number(req.query.period) > 0;
+    const year = Number.isInteger(yearQ) && yearQ >= 2000 && yearQ <= 2100 ? yearQ : thisYear;
 
-    const params = [clientId, months];
-    let where = "p.client_id = $1 AND p.started_at >= now() - ($2 || ' months')::interval";
+    let params, where;
+    if (useMonths) {
+      params = [clientId, Number(req.query.period)];
+      where = "p.client_id = $1 AND p.started_at >= now() - ($2 || ' months')::interval";
+    } else {
+      params = [clientId, `${year}-01-01`, `${year + 1}-01-01`];
+      where = "p.client_id = $1 AND p.started_at < $3::date AND (p.closed_at IS NULL OR p.closed_at >= $2::date)";
+    }
     if (typeFilter) { params.push(typeFilter); where += ` AND p.type = $${params.length}`; }
 
     const { rows: projects } = await pool.query(
       `SELECT p.*, m.actual_cost, m.est_cost, m.realised_benefit, m.est_benefit, m.baseline, m.target,
               (SELECT k.value FROM build_kpi_readings k WHERE k.project_id = p.id ORDER BY k.reading_date DESC, k.id DESC LIMIT 1) AS kpi_now,
+              EXISTS(SELECT 1 FROM build_updates u2 WHERE u2.project_id = p.id) AS has_update,
               (SELECT u3.needs_help FROM build_updates u3 WHERE u3.project_id = p.id ORDER BY u3.update_date DESC, u3.created_at DESC LIMIT 1) AS latest_needs_help,
               GREATEST(COALESCE((SELECT MAX(u.update_date) FROM build_updates u WHERE u.project_id = p.id), p.started_at::date), p.started_at::date) AS last_update_date,
               po.name AS product_owner_name
@@ -56,11 +70,11 @@ router.get("/client/:clientId", async (req, res, next) => {
       const overdue = p.status === "active" && (new Date() - new Date(p.last_update_date)) / 86400000 > 14;
       const auto = computeAutoHealth({
         project: p, metrics: { actual_cost: p.actual_cost, est_cost: p.est_cost, baseline: p.baseline, target: p.target },
-        daysSinceUpdate: Math.round((new Date() - new Date(p.last_update_date)) / 86400000),
+        daysSinceUpdate: p.has_update ? Math.round((new Date() - new Date(p.last_update_date)) / 86400000) : null,
         daysInStage: p.updated_at ? Math.round((new Date() - new Date(p.updated_at)) / 86400000) : null,
         latestKpiValue: p.kpi_now, needsHelp: p.latest_needs_help,
       });
-      const effectiveHealth = healthRank[auto.health] > healthRank[p.health] ? auto.health : p.health;
+      const effectiveHealth = healthRank[auto.health] > healthRank[p.health || "on_track"] ? auto.health : (p.health || "on_track");
       return { ...p, ...metrics, roi, overdue, effectiveHealth, healthReason: effectiveHealth === p.health ? null : auto.reason };
     });
 
@@ -70,6 +84,13 @@ router.get("/client/:clientId", async (req, res, next) => {
     const investedToDate = active.reduce((s, p) => s + (p.actual_cost || 0), 0);
     const realisedBenefit = active.reduce((s, p) => s + (p.realised_benefit || 0), 0);
     const anyEstimated = active.some((p) => p.realised_benefit == null && (p.est_benefit != null || p.actual_cost != null));
+    const estBenefitPerYear = active.reduce((s, p) => s + (p.est_benefit || 0), 0);
+    // Health donut (mockup screen 6): on track / at risk / off track / no update yet.
+    const healthBreakdown = { on_track: 0, at_risk: 0, off_track: 0, no_update: 0 };
+    for (const p of active) {
+      if (!p.has_update) healthBreakdown.no_update += 1;
+      else healthBreakdown[p.effectiveHealth || "on_track"] += 1;
+    }
     const portfolioRoi = investedToDate > 0 ? ((realisedBenefit - investedToDate) / investedToDate) * 100 : null;
 
     const stageCounts = {};
@@ -171,9 +192,15 @@ router.get("/client/:clientId", async (req, res, next) => {
       });
     }
 
+    const { rows: clientRows } = await pool.query("SELECT name, company FROM users WHERE id = $1", [clientId]);
     res.json({
+      client: { id: clientId, name: clientRows[0]?.company || clientRows[0]?.name || null },
+      period: useMonths ? { kind: "months", months: Number(req.query.period) } : { kind: "year", year },
+      asOf: new Date().toISOString(),
+      healthBreakdown,
       summary: {
         activeCount: active.length,
+        estBenefitPerYear, estBenefitPerYearFmt: fmtUSD(estBenefitPerYear),
         redAmberCount: redAmber.length,
         overdueCount: overdue.length,
         investedToDate, investedToDateFmt: fmtUSD(investedToDate),
@@ -184,7 +211,13 @@ router.get("/client/:clientId", async (req, res, next) => {
       stageCountsByType,
       auditToImpact,
       needsAttention,
-      investmentVsBenefit: active.map((p) => ({ code: p.code, title: p.title, actualCost: p.actual_cost, realisedBenefit: p.realised_benefit, estimated: p.realised_benefit == null })),
+      investmentVsBenefit: active.map((p) => ({
+        code: p.code, title: p.title, actualCost: p.actual_cost, estCost: p.est_cost,
+        realisedBenefit: p.realised_benefit, estBenefit: p.est_benefit,
+        // Mockup: value bar = realised once confirmed, otherwise the estimate (shown hatched/labelled "est.").
+        value: p.realised_benefit != null ? p.realised_benefit : p.est_benefit,
+        estimated: p.realised_benefit == null,
+      })),
       projects: enriched.map((p) => ({
         id: p.id, code: p.code, title: p.title, type: p.type, stage: p.stage, status: p.status, health: p.effectiveHealth,
         lastUpdateDate: p.last_update_date, productOwnerName: p.product_owner_name, roi: p.roi, overdue: p.overdue,
