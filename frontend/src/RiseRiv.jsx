@@ -156,6 +156,17 @@ function RiseNavBar({ view, setView, session, onLogout }) {
                 {it.label}
               </button>
             ))}
+            {/* E2E report Issue 2: opening a call, creating one, and the RIV
+                quality-check approve all live in the main site's Admin ->
+                "Startup team" panel, but nothing in this module said so, so an
+                admin looking at "Applications aren't open right now" had no
+                way to find them. Admin only; a real link, like Overview. */}
+            {session && session.role === "admin" && (
+              <a href="/admin#startup-team" title="Open or create a call, and approve applications (RIV quality check)" style={{
+                fontFamily: FONT, fontSize: 13.5, fontWeight: 500, padding: "8px 14px", borderRadius: 999,
+                textDecoration: "none", color: BRAND.ink, display: "inline-block",
+              }}>Manage calls</a>
+            )}
           </div>
         </div>
         <div>
@@ -173,7 +184,7 @@ function RiseNavBar({ view, setView, session, onLogout }) {
 /* =========================================================================
    LANDING — public opportunity page
    ========================================================================= */
-function LandingView({ opportunity, loading, setView }) {
+function LandingView({ opportunity, loading, setView, isAdmin }) {
   const [criteria, setCriteria] = useState([]);
   useEffect(() => { api.getRiseCriteria().then((d) => setCriteria(d.criteria || [])).catch(() => {}); }, []);
   if (loading) return <Spinner label="Loading opportunity…" />;
@@ -220,7 +231,14 @@ function LandingView({ opportunity, loading, setView }) {
           </PrimaryButton>
         </>
       ) : (
-        <EmptyState icon={ClipboardList} title="Applications aren't open right now" text="Check back soon, or contact the Rise team directly." />
+        <>
+          <EmptyState icon={ClipboardList} title="Applications aren't open right now" text="Check back soon, or contact the Rise team directly." />
+          {isAdmin && (
+            <div style={{ fontFamily: FONT, fontSize: 13, color: "#7A746F", marginTop: 16, lineHeight: 1.6 }}>
+              You're an admin: no call is open. <a href="/admin#startup-team" style={{ color: BRAND.coralDark, fontWeight: 600 }}>Open or create a call</a> under Admin → Startup team.
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -704,7 +722,7 @@ export default function RiseRivApp() {
       `}</style>
       <RiseNavBar view={view} setView={goToView} session={session} onLogout={handleLogout} />
 
-      {view === "landing" && <LandingView opportunity={opportunity} loading={oppLoading} setView={goToView} />}
+      {view === "landing" && <LandingView opportunity={opportunity} loading={oppLoading} setView={goToView} isAdmin={!!session && session.role === "admin"} />}
       {view === "apply" && <ApplyView onDone={() => goToView("landing")} />}
       {view === "jury-login" && <JuryLoginView onAuthed={handleAuthed} />}
       {view === "jury-dashboard" && session && (

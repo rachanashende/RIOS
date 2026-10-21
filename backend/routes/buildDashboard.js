@@ -81,9 +81,16 @@ router.get("/client/:clientId", async (req, res, next) => {
     const active = enriched.filter((p) => ["active", "on_hold"].includes(p.status));
     const redAmber = active.filter((p) => p.effectiveHealth === "off_track" || p.effectiveHealth === "at_risk");
     const overdue = active.filter((p) => p.overdue);
-    const investedToDate = active.reduce((s, p) => s + (p.actual_cost || 0), 0);
-    const realisedBenefit = active.reduce((s, p) => s + (p.realised_benefit || 0), 0);
-    const anyEstimated = active.some((p) => p.realised_benefit == null && (p.est_benefit != null || p.actual_cost != null));
+    // Money tiles ("Invested to date", "Realised benefit", "Portfolio ROI")
+    // count every project in the window -- Closed ones included. A Closed /
+    // Scaled project is exactly where the realised benefit lives, and a
+    // Closed / Stopped one still spent its budget; summing only `active`
+    // projects made both silently drop out the moment a project closed
+    // (E2E report Issue 5). Counts, health, stages and "needs attention"
+    // below deliberately stay active-only.
+    const investedToDate = enriched.reduce((s, p) => s + (p.actual_cost || 0), 0);
+    const realisedBenefit = enriched.reduce((s, p) => s + (p.realised_benefit || 0), 0);
+    const anyEstimated = enriched.some((p) => p.realised_benefit == null && (p.est_benefit != null || p.actual_cost != null));
     const estBenefitPerYear = active.reduce((s, p) => s + (p.est_benefit || 0), 0);
     // Health donut (mockup screen 6): on track / at risk / off track / no update yet.
     const healthBreakdown = { on_track: 0, at_risk: 0, off_track: 0, no_update: 0 };
@@ -114,12 +121,15 @@ router.get("/client/:clientId", async (req, res, next) => {
     // 'internal') vs "Open Innovation Management" (type 'startup'), the
     // same split the Projects tab's sub-tabs use. Leadership-level ask: how
     // many opportunities per workflow, and their invested/benefit/ROI.
+    // `count` stays the number of *active* opportunities; invested / benefit
+    // / ROI cover every project in the window so a Closed project's money
+    // still shows (same fix as the summary tiles above).
     const byType = { internal: { count: 0, invested: 0, benefit: 0 }, startup: { count: 0, invested: 0, benefit: 0 } };
-    for (const p of active) {
-      byType[p.type].count += 1;
+    for (const p of enriched) {
       byType[p.type].invested += p.actual_cost || 0;
       byType[p.type].benefit += p.realised_benefit || 0;
     }
+    for (const p of active) byType[p.type].count += 1;
     for (const t of Object.keys(byType)) {
       const b = byType[t];
       b.roi = b.invested > 0 ? ((b.benefit - b.invested) / b.invested) * 100 : null;
@@ -211,7 +221,9 @@ router.get("/client/:clientId", async (req, res, next) => {
       stageCountsByType,
       auditToImpact,
       needsAttention,
-      investmentVsBenefit: active.map((p) => ({
+      // Cost-vs-value chart: every project in the window, Closed included,
+      // so it agrees with the tiles above.
+      investmentVsBenefit: enriched.map((p) => ({
         code: p.code, title: p.title, actualCost: p.actual_cost, estCost: p.est_cost,
         realisedBenefit: p.realised_benefit, estBenefit: p.est_benefit,
         // Mockup: value bar = realised once confirmed, otherwise the estimate (shown hatched/labelled "est.").
@@ -250,8 +262,12 @@ router.get("/portfolio", async (req, res, next) => {
       if (!projects.length) continue; // only list clients with at least one Build project
       const active = projects.filter((p) => ["active", "on_hold"].includes(p.status));
       const redAmber = active.filter((p) => p.health === "off_track" || p.health === "at_risk");
-      const invested = active.reduce((s, p) => s + num(p.actual_cost || 0), 0);
-      const benefit = active.reduce((s, p) => s + num(p.realised_benefit || 0), 0);
+      // INVESTED / BENEFIT / ROI span *all* of the client's projects, not
+      // just active ones -- otherwise a Closed project with real recorded
+      // cost and realised benefit showed US$0 / US$0 / "—" on this table
+      // (E2E report Issue 5). ACTIVE and RED/AMBER stay active-only.
+      const invested = projects.reduce((s, p) => s + num(p.actual_cost || 0), 0);
+      const benefit = projects.reduce((s, p) => s + num(p.realised_benefit || 0), 0);
       const roi = invested > 0 ? ((benefit - invested) / invested) * 100 : null;
 
       const { rows: respRows } = await pool.query("SELECT question_id, maturity, not_applicable FROM responses WHERE user_id = $1", [c.id]);

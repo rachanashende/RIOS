@@ -1205,6 +1205,11 @@ router.get("/projects/:id/files/:fileId", async (req, res, next) => {
    NOTIFICATIONS
    ========================================================================= */
 
+// The in-app feed behind the nav bar's notification bell (E2E report Issue 7:
+// this route and the table behind it existed from the start, but nothing in
+// the frontend ever called them, so no bell was ever drawn). `unreadCount`
+// is counted in SQL over *all* of the caller's rows, not just the 50 newest
+// returned below, so the badge can't under-count a long backlog.
 router.get("/notifications", async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -1213,7 +1218,21 @@ router.get("/notifications", async (req, res, next) => {
        WHERE n.user_id = $1 ORDER BY n.created_at DESC LIMIT 50`,
       [req.user.id]
     );
-    res.json({ notifications: rows });
+    const { rows: countRows } = await pool.query(
+      "SELECT COUNT(*)::int AS n FROM build_notifications WHERE user_id = $1 AND read_at IS NULL",
+      [req.user.id]
+    );
+    res.json({ notifications: rows, unreadCount: countRows[0].n });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Declared before "/notifications/:id/read" so "read-all" is never taken for an id.
+router.put("/notifications/read-all", async (req, res, next) => {
+  try {
+    await pool.query("UPDATE build_notifications SET read_at = now() WHERE user_id = $1 AND read_at IS NULL", [req.user.id]);
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

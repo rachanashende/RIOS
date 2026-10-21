@@ -832,8 +832,58 @@ function IdeaRatingsDetailView({ idea, ratings, loading, error, onBack }) {
 /* =========================================================================
    MAIN — the actual Ideathon app, once a session exists.
    ========================================================================= */
+// The admin's last-picked client survives a refresh (per-tab, light
+// convenience only -- every read below still works with it missing).
+const ADMIN_CLIENT_KEY = "rios-ideas-admin-client";
+
 function IdeasRivMain({ session, onLogout }) {
   const [view, setView] = useState(() => pathToIdeasView(window.location.pathname, session.role));
+
+  // E2E report Issue 1: an admin's Ideathon view was hard-pinned to whichever
+  // client the legacy global "source client" setting named (UrbanKart), with
+  // no way to look at another client's opportunities, ideas or leaderboard --
+  // so e.g. Demo Retailer's scored ideas could never be reached, let alone
+  // sent to Build with "Select for Build". The backend has accepted
+  // ?clientId= for admins all along (routes/ideas.js resolveClientId); the
+  // frontend just never sent it. Employees and jury are unaffected: the
+  // backend scopes them to their own client and ignores the parameter.
+  const isAdmin = session.role === "admin";
+  const [adminClients, setAdminClients] = useState(null); // null = still loading
+  const [adminClientsError, setAdminClientsError] = useState(false);
+  const [adminClientId, setAdminClientId] = useState("");
+  const adminReady = !isAdmin || adminClients !== null;
+  const clientParam = isAdmin && adminClientId ? adminClientId : undefined;
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let alive = true;
+    Promise.all([
+      api.getIdeasAdminClients(),
+      api.getIdeasAdminDefaultClient().catch(() => ({})),
+    ]).then(([c, s]) => {
+      if (!alive) return;
+      const list = c.clients || [];
+      let stored = "";
+      try { stored = sessionStorage.getItem(ADMIN_CLIENT_KEY) || ""; } catch { /* storage unavailable -- fine */ }
+      const has = (id) => id != null && list.some((x) => String(x.id) === String(id));
+      const legacy = s && s.sourceClient ? s.sourceClient.id : null;
+      setAdminClients(list);
+      setAdminClientId(has(stored) ? String(stored) : has(legacy) ? String(legacy) : list[0] ? String(list[0].id) : "");
+    }).catch(() => {
+      // Couldn't list clients: fall back to the old behaviour (the default
+      // client) rather than leaving the module empty.
+      if (alive) { setAdminClientsError(true); setAdminClients([]); }
+    });
+    return () => { alive = false; };
+  }, [isAdmin]);
+
+  function pickAdminClient(id) {
+    try { sessionStorage.setItem(ADMIN_CLIENT_KEY, id); } catch { /* storage unavailable -- fine */ }
+    // Drop everything tied to the previous client so it can't flash on screen.
+    setAdminClientId(id);
+    setActiveLeaderboardIdea(null);
+    setLeaderboard([]); setIdeas([]); setOpportunities([]);
+  }
 
   // Keeps the URL in sync with every internal tab change (Opportunities,
   // My submissions, Rate ideas, Leaderboard). Sub-views without a URL of
@@ -878,7 +928,7 @@ function IdeasRivMain({ session, onLogout }) {
     setLoadingIdeas(true);
     setError(null);
     try {
-      const { ideas: rows } = await api.getIdeas();
+      const { ideas: rows } = await api.getIdeas(undefined, clientParam);
       setIdeas(rows);
       if (session.role === "jury") {
         const pairs = await Promise.all(
@@ -891,18 +941,21 @@ function IdeasRivMain({ session, onLogout }) {
     } finally {
       setLoadingIdeas(false);
     }
-  }, [session]);
+  }, [session, clientParam]);
 
-  // Load opportunities + ideas on mount
+  // Load opportunities + ideas on mount -- and again whenever an admin
+  // switches client. (An admin waits for the client list first so the first
+  // request already names a client instead of hitting the legacy default.)
   useEffect(() => {
+    if (!adminReady) return;
     setLoadingOpps(true);
-    api.getOpportunities()
+    api.getOpportunities(clientParam)
       .then((d) => { setOpportunities(d.opportunities || []); setSourceClient(d.sourceClient || null); setUnassigned(!!d.unassigned); })
       .catch((e) => setError(e.message || "Couldn't load opportunities."))
       .finally(() => setLoadingOpps(false));
     refreshIdeas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [adminReady, clientParam]);
 
   // My submissions (junior employee)
   const [myIdeasTick, setMyIdeasTick] = useState(0);
@@ -916,15 +969,15 @@ function IdeasRivMain({ session, onLogout }) {
   const refreshLeaderboard = useCallback(() => {
     if (session.role !== "admin" && session.role !== "jury") return;
     setLoadingLeaderboard(true);
-    api.getLeaderboard()
+    api.getLeaderboard(clientParam)
       .then((d) => setLeaderboard(d.leaderboard || []))
       .catch((e) => setError(e.message))
       .finally(() => setLoadingLeaderboard(false));
-  }, [session]);
+  }, [session, clientParam]);
   useEffect(() => {
-    if ((session.role !== "admin" && session.role !== "jury") || view !== "leaderboard") return;
+    if ((session.role !== "admin" && session.role !== "jury") || view !== "leaderboard" || !adminReady) return;
     refreshLeaderboard();
-  }, [session, view, refreshLeaderboard]);
+  }, [session, view, adminReady, refreshLeaderboard]);
 
   function handleSaveRating(rating) {
     setMyRatings((m) => ({ ...m, [rating.idea_id]: rating }));
@@ -958,6 +1011,30 @@ function IdeasRivMain({ session, onLogout }) {
       `}</style>
 
       <IdeasNavBar view={view} setView={goToView} session={session} onLogout={onLogout} />
+
+      {/* Admin only: which client's Ideathon is on screen. A slim strip under
+          the nav, so the existing tabs and pages don't move. */}
+      {isAdmin && (
+        <div style={{ background: "#fff", borderBottom: `1px solid ${BRAND.line}` }}>
+          <div style={{ maxWidth: 1180, margin: "0 auto", padding: "10px 24px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: "#7A746F" }}>Viewing Ideathon for</span>
+            {adminClients === null ? (
+              <span style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F" }}>Loading clients…</span>
+            ) : adminClients.length === 0 ? (
+              <span style={{ fontFamily: FONT, fontSize: 12.5, color: adminClientsError ? BRAND.coralDark : "#9B958F" }}>
+                {adminClientsError ? "Couldn't load the client list — showing the default client." : "No clients yet."}
+              </span>
+            ) : (
+              <select
+                value={adminClientId} onChange={(e) => pickAdminClient(e.target.value)} aria-label="Client"
+                style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, padding: "6px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, background: BRAND.cream, color: BRAND.ink, cursor: "pointer" }}
+              >
+                {adminClients.map((c) => <option key={c.id} value={c.id}>{c.company || c.name}</option>)}
+              </select>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* flex: 1 makes this fill all leftover space, pushing the footer below
           to the bottom of the viewport on short pages (e.g. an empty

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
-  Hammer, LogOut, ArrowRight, ChevronLeft, Loader2, AlertCircle, Briefcase,
+  Bell, Hammer, LogOut, ArrowRight, ChevronLeft, Loader2, AlertCircle, Briefcase,
   LayoutDashboard, Settings, Plus, CheckCircle2, Paperclip, Download, Upload,
   History, FileText, Users, Building2, Gauge, Search, X, KeyRound, Trash2,
   ArrowUpDown, ArrowUp, ArrowDown,
@@ -186,7 +186,96 @@ function roleScopeLabel(session) {
   }[session?.role];
   return scope ? `${role} · ${scope}` : role;
 }
-function BuildNavBar({ view, setView, session, onLogout, canSeeDashboard, canSeeAdmin }) {
+/* In-app notification bell. The backend has always written build_notifications
+   rows (notifyBuild); this is the first place they are shown. Polls quietly
+   every 60s while the tab is visible. */
+function timeAgo(iso) {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+function NotificationBell({ onOpenProject }) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState([]);
+  const [unread, setUnread] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const boxRef = useRef(null);
+
+  async function load() {
+    try {
+      const r = await api.listBuildNotifications();
+      setItems(r.notifications || []);
+      setUnread(r.unreadCount ?? (r.notifications || []).filter((n) => !n.read_at).length);
+      setFailed(false);
+    } catch { setFailed(true); }
+  }
+  useEffect(() => {
+    load();
+    const t = setInterval(() => { if (!document.hidden) load(); }, 60000);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  async function openItem(n) {
+    setOpen(false);
+    if (!n.read_at) {
+      setItems((xs) => xs.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)));
+      setUnread((u) => Math.max(0, u - 1));
+      try { await api.markBuildNotificationRead(n.id); } catch { /* next poll corrects it */ }
+    }
+    if (n.project_id && onOpenProject) onOpenProject(n.project_id);
+  }
+  async function markAll() {
+    setItems((xs) => xs.map((x) => ({ ...x, read_at: x.read_at || new Date().toISOString() })));
+    setUnread(0);
+    try { await api.markAllBuildNotificationsRead(); } catch { load(); }
+  }
+
+  return (
+    <div ref={boxRef} style={{ position: "relative" }}>
+      <button onClick={() => { setOpen((o) => !o); if (!open) load(); }} aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}
+        style={{ position: "relative", width: 36, height: 36, borderRadius: 999, border: `1px solid ${BRAND.line}`, background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Bell size={16} color={BRAND.ink} />
+        {unread > 0 && (
+          <span style={{ position: "absolute", top: -4, right: -4, minWidth: 17, height: 17, padding: "0 4px", borderRadius: 999, background: BRAND.coral, color: "#fff", fontFamily: FONT, fontSize: 10.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {unread > 99 ? "99+" : unread}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div style={{ position: "absolute", right: 0, top: 44, width: 340, maxWidth: "90vw", maxHeight: 420, overflowY: "auto", background: "#fff", border: `1px solid ${BRAND.line}`, borderRadius: 12, boxShadow: "0 12px 32px rgba(0,0,0,0.12)", zIndex: 60 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${BRAND.line}` }}>
+            <span style={{ fontFamily: FONT, fontSize: 13.5, fontWeight: 700, color: BRAND.ink }}>Notifications</span>
+            {unread > 0 && (
+              <button onClick={markAll} style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: BRAND.coral, background: "none", border: "none", cursor: "pointer", padding: 0 }}>Mark all read</button>
+            )}
+          </div>
+          {failed && items.length === 0 ? (
+            <div style={{ padding: 16, fontFamily: FONT, fontSize: 12.5, color: "#7A746F" }}>Couldn't load notifications. <button onClick={load} style={{ color: BRAND.coral, background: "none", border: "none", cursor: "pointer", fontWeight: 600, padding: 0 }}>Retry</button></div>
+          ) : items.length === 0 ? (
+            <div style={{ padding: 16, fontFamily: FONT, fontSize: 12.5, color: "#7A746F" }}>You're all caught up.</div>
+          ) : items.map((n) => (
+            <button key={n.id} onClick={() => openItem(n)} style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 14px", border: "none", borderBottom: `1px solid ${BRAND.line}`, background: n.read_at ? "#fff" : "#FFF6F1", cursor: "pointer" }}>
+              <div style={{ fontFamily: FONT, fontSize: 12.5, color: BRAND.ink, fontWeight: n.read_at ? 400 : 600, lineHeight: 1.4 }}>{n.message}</div>
+              <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F", marginTop: 3 }}>
+                {n.project_code ? `${n.project_code} · ` : ""}{timeAgo(n.created_at)}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BuildNavBar({ view, setView, session, onLogout, canSeeDashboard, canSeeAdmin, onOpenProject }) {
   const items = [];
   if (session) items.push({ id: "my-work", label: "My work" });
   items.push({ id: "projects", label: "Projects" });
@@ -219,6 +308,7 @@ function BuildNavBar({ view, setView, session, onLogout, canSeeDashboard, canSee
         <div>
           {session ? (
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <NotificationBell onOpenProject={onOpenProject} />
               {/* Mockup: the user chip says who you are AND what you can see. */}
               <div style={{ textAlign: "right", lineHeight: 1.25 }}>
                 <div style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: BRAND.ink }}>{session.name}</div>
@@ -433,20 +523,21 @@ function ProjectListView({ session, onOpen, onNewProject }) {
   const withProductOwner = filters.productOwnerId
     ? projects.filter((p) => String(p.product_owner_user_id) === String(filters.productOwnerId))
     : projects;
+  const isClosedProject = (p) => p.status === "closed" || p.stage === "closed";
   const quickCounts = {
     all: withProductOwner.length,
     waiting: withProductOwner.filter((p) => isWaitingOnMe(p, session)).length,
     red_amber: withProductOwner.filter(isRedOrAmber).length,
     overdue: withProductOwner.filter((p) => p.updateOverdue).length,
     on_hold: withProductOwner.filter((p) => p.status === "on_hold").length,
-    closed: withProductOwner.filter((p) => p.status === "closed").length,
+    closed: withProductOwner.filter(isClosedProject).length,
   };
   const visible = withProductOwner.filter((p) => {
     if (quickFilter === "waiting") return isWaitingOnMe(p, session);
     if (quickFilter === "red_amber") return isRedOrAmber(p);
     if (quickFilter === "overdue") return p.updateOverdue;
     if (quickFilter === "on_hold") return p.status === "on_hold";
-    if (quickFilter === "closed") return p.status === "closed";
+    if (quickFilter === "closed") return isClosedProject(p);
     return true;
   });
 
@@ -1720,10 +1811,20 @@ function ProjectDetailView({ projectId, session, onBack }) {
   const [moreAction, setMoreAction] = useState(null); // 'hold' | 'stop' | 'close' | 'request-delete' | 'delete'
   const [notice, setNotice] = useState(null);
 
-  function load() {
-    setLoading(true);
-    api.getBuildProject(projectId).then(setData).catch((e) => setError(e.message || "Couldn't load this project.")).finally(() => setLoading(false));
+  // Sequence guard: only the newest request may write state, so a slow earlier
+  // fetch can't overwrite fresher data (e.g. the stage checklist after an ROI
+  // save). Re-loads after a save are silent -- no spinner flash -- and the
+  // first load shows the spinner.
+  const loadSeq = useRef(0);
+  function load(opts = {}) {
+    const seq = ++loadSeq.current;
+    if (!opts.silent) setLoading(true);
+    api.getBuildProject(projectId)
+      .then((d) => { if (seq === loadSeq.current) setData(d); })
+      .catch((e) => { if (seq === loadSeq.current && !opts.silent) setError(e.message || "Couldn't load this project."); })
+      .finally(() => { if (seq === loadSeq.current) setLoading(false); });
   }
+  const reload = () => load({ silent: true });
   useEffect(() => { load(); }, [projectId]);
 
   async function doAction(kind, payload) {
@@ -1739,7 +1840,7 @@ function ProjectDetailView({ projectId, session, onBack }) {
       else if (kind === "request-delete") { await api.requestBuildDelete(projectId, payload.reason); setNotice("Delete request sent to the RIV Admin. Nothing is deleted until they approve it."); }
       else if (kind === "delete") { await api.deleteBuildProject(projectId); onBack(); return; }
       setMoreAction(null);
-      load();
+      reload();
     } catch (e) {
       setError(e.message || "That action failed.");
     } finally { setBusy(false); }
@@ -1828,7 +1929,7 @@ function ProjectDetailView({ projectId, session, onBack }) {
       )}
 
       {showUpdate && (
-        <StatusUpdateModal project={project} permissions={perms} onClose={() => { setShowUpdate(false); load(); }} onSaved={() => {}} />
+        <StatusUpdateModal project={project} permissions={perms} onClose={() => { setShowUpdate(false); reload(); }} onSaved={() => {}} />
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(220px, 1fr)", gap: 24, alignItems: "flex-start" }}>
@@ -1843,10 +1944,10 @@ function ProjectDetailView({ projectId, session, onBack }) {
             ))}
           </div>
 
-          {tab === "overview" && <OverviewTab project={project} sources={sources} canEdit={canEditDetails} onSaved={load} session={session} />}
+          {tab === "overview" && <OverviewTab project={project} sources={sources} canEdit={canEditDetails} onSaved={reload} session={session} />}
           {tab === "updates" && <UpdatesTab updates={updates} canAdd={canAddUpdate && project.status !== "closed"} onAddClick={() => setShowUpdate(true)} />}
-          {tab === "roi" && <RoiTab project={project} canEdit={canEditRoi} isClientLeader={isClientLeader && !canEditDetails} onSaved={load} />}
-          {tab === "lessons" && <LessonsTab project={project} lessons={lessons} canEdit={canEditDetails} onSaved={load} />}
+          {tab === "roi" && <RoiTab project={project} canEdit={canEditRoi} isClientLeader={isClientLeader && !canEditDetails} onSaved={reload} />}
+          {tab === "lessons" && <LessonsTab project={project} lessons={lessons} canEdit={canEditDetails} onSaved={reload} />}
           {tab === "files" && <FilesTab project={project} files={files} canUpload={canUpload} onUploaded={load} />}
           {tab === "dealdocs" && (
             dealFiles.length === 0
@@ -2389,7 +2490,8 @@ function DashboardView({ session, onOpenProject }) {
   const isRivManager = session.role === "riv_manager";
   const myClients = useMyClients(session.role);
   const [pickedClientId, setPickedClientId] = useState(null);
-  const allClients = useClientOptions();
+  const allClientsState = useClientOptionsState();
+  const allClients = allClientsState.clients;
 
   return (
     <div style={{ maxWidth: 1180, margin: "0 auto", padding: "36px 24px 100px" }}>
@@ -2410,6 +2512,14 @@ function DashboardView({ session, onOpenProject }) {
             onChange={(v) => setPickedClientId(v ? Number(v) : null)}
             options={[{ value: "", label: "Choose a client…" }, ...allClients.map((c) => ({ value: String(c.id), label: c.company || c.name }))]}
           />
+        </div>
+      )}
+      {/* Issue 6: the picker used to just not render when the client list
+          failed to load, leaving "Choose a client above" pointing at nothing. */}
+      {isAdmin && sub === "client" && allClientsState.status === "error" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, fontFamily: FONT, fontSize: 13, color: "#C13B3B" }}>
+          Couldn't load the client list.
+          <button type="button" onClick={allClientsState.retry} style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, background: "#fff", color: BRAND.ink, cursor: "pointer" }}>Retry</button>
         </div>
       )}
 
@@ -2447,23 +2557,39 @@ function DashboardView({ session, onOpenProject }) {
    (manual / from an Ideathon winner / from a selected startup), assign
    people, and manage product_owner + riv_manager + startup_poc logins.
    ========================================================================= */
-// Admin and RIV Client Partner both reach the Build admin console, but only admin
-// can list every client (GET /api/admin/clients is admin-only). So this
-// tries to fetch the list -- which lets admin pick a client by name instead
-// of having to go find and type its numeric ID -- and if it 403s (a
-// riv_manager, who isn't allowed to see every client), it quietly falls
-// back to null, and callers show a plain numeric field with a hint instead.
-function useClientOptions() {
-  const [clients, setClients] = useState(null); // null = not loaded/unavailable
+// The client list behind every Build client dropdown. It comes from
+// GET /api/admin/build/client-options and is sent with the *Build* session
+// (admin: every client; RIV Client Partner: just their assigned ones).
+//
+// This used to call the main site's GET /api/admin/clients with the main-
+// site token. Anyone who entered through Build.RIV's own login screen has no
+// main-site token, so that call 401'd, the error was swallowed, and the
+// pickers silently turned into a free-text box (Create project) or vanished
+// altogether (Dashboard -> One client) -- E2E report Issues 3 and 6. Now a
+// failure is surfaced with a Retry instead of degrading quietly.
+function useClientOptionsState() {
+  const [state, setState] = useState({ clients: null, status: "loading" }); // status: loading | ready | error
+  const [tick, setTick] = useState(0);
   useEffect(() => {
-    api.listClients().then((d) => setClients(d.clients || [])).catch(() => setClients(null));
-  }, []);
-  return clients;
+    let alive = true;
+    setState((s) => ({ ...s, status: "loading" }));
+    api.listBuildClientOptions()
+      .then((d) => { if (alive) setState({ clients: d.clients || [], status: "ready" }); })
+      .catch(() => { if (alive) setState({ clients: null, status: "error" }); });
+    return () => { alive = false; };
+  }, [tick]);
+  return { ...state, retry: () => setTick((n) => n + 1) };
+}
+
+// Array-or-null view of the same list, for callers that only need the
+// options (null = not loaded yet, or failed).
+function useClientOptions() {
+  return useClientOptionsState().clients;
 }
 
 function ClientPicker({ value, onChange, required, label, hint }) {
-  const clients = useClientOptions();
-  if (clients && clients.length) {
+  const { clients, status, retry } = useClientOptionsState();
+  if (status === "ready" && clients.length) {
     return (
       <Field label={label} required={required} hint={hint}>
         <select style={selectStyle} value={value} onChange={(e) => onChange(e.target.value)}>
@@ -2473,11 +2599,20 @@ function ClientPicker({ value, onChange, required, label, hint }) {
       </Field>
     );
   }
-  // Fallback for a riv_manager (can't list every client) or if the list
-  // failed to load -- a plain numeric field, same as before this fix.
+  // Deliberately no free-text fallback: a typed client name never matched a
+  // real client record, so the Product Owner / Employee pickers below came
+  // up empty with no error (Issue 3). Say what's wrong instead.
+  const message = status === "loading" ? "Loading clients…"
+    : status === "ready" ? "No clients are available to you yet. A RIV Admin can assign clients to a RIV Client Partner under Logins."
+    : "Couldn't load the client list.";
   return (
-    <Field label={label} required={required} hint={hint || "Numeric client ID -- find it on the client's card under Manage Clients."}>
-      <input style={inputStyle} value={value} onChange={(e) => onChange(e.target.value)} inputMode="numeric" />
+    <Field label={label} required={required}>
+      <div style={{ ...inputStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, color: status === "error" ? "#C13B3B" : "#9B958F", background: BRAND.cream }}>
+        <span>{message}</span>
+        {status === "error" && (
+          <button type="button" onClick={retry} style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, background: "#fff", color: BRAND.ink, cursor: "pointer" }}>Retry</button>
+        )}
+      </div>
     </Field>
   );
 }
@@ -2749,7 +2884,7 @@ function ReadyForBuildPanel({ onReview }) {
         </Card>
       )}
       {items.length === 0 ? (
-        <EmptyState icon={CheckCircle2} title="Nothing waiting" text="Every selected idea and startup pilot already has a Build project." />
+        <EmptyState icon={CheckCircle2} title="Nothing waiting" text="Every selected idea and startup pilot already has a Build project. Ideas appear here once a client selects them for Build in Ideathon, and startups once an application is marked Selected for pilot." />
       ) : (
         <Card style={{ padding: 0, overflow: "hidden" }}>
           <div style={{ overflowX: "auto" }}>
@@ -3495,7 +3630,12 @@ export default function BuildRivApp() {
           body, .build-dashboard-no-print ~ * { background: #fff !important; }
         }
       `}</style>
-      <BuildNavBar view={view} setView={goToView} session={session} onLogout={handleLogout} canSeeDashboard={canSeeDashboard} canSeeAdmin={canSeeAdmin} />
+      <BuildNavBar view={view} setView={goToView} session={session} onLogout={handleLogout} canSeeDashboard={canSeeDashboard} canSeeAdmin={canSeeAdmin}
+        onOpenProject={(id) => {
+          window.history.pushState(null, "", BUILD_VIEW_TO_PATH.projects);
+          setView("projects");
+          setActiveProjectId(id);
+        }} />
 
       {view === "my-work" && (
         <MyWorkView
