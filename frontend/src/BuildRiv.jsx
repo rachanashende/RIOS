@@ -1006,7 +1006,12 @@ function OverviewTab({ project, sources, canEdit, onSaved, session }) {
 // gate(s) need, regardless of which stage the project is currently on --
 // gates are usually filled in ahead of time, not exactly when blocked.
 function StageDetailsForm({ project, onSaved }) {
+  const metrics = project.metrics || {};
   const [form, setForm] = useState({
+    kpiName: metrics.kpi_name || "",
+    kpiBaseline: metrics.baseline ?? "",
+    kpiTarget: metrics.target ?? "",
+    budgetEstimate: metrics.est_cost ?? "",
     targetEnd: project.target_end ? project.target_end.slice(0, 10) : "",
     ndaSignedAt: project.nda_signed_at ? project.nda_signed_at.slice(0, 10) : "",
     proposalAmount: project.proposal_amount ?? "",
@@ -1059,7 +1064,23 @@ function StageDetailsForm({ project, onSaved }) {
         rolloutScope: form.rolloutScope || null,
         contractValue: form.contractValue === "" ? null : Number(form.contractValue),
       };
-      await api.updateBuildDetails(project.id, payload);
+      // KPI name/baseline/target and Budget estimate are the four
+      // Requirements-gate fields that live in build_metrics, not
+      // build_projects -- they have to go through the metrics endpoint
+      // (same one the KPI & ROI tab uses), not /details. Previously these
+      // four had no input anywhere on this form, so "Approve & move to
+      // NDA" could never leave Requirements (missingFieldsForStage in
+      // backend/lib/buildWorkflow.js checks them, but nothing set them).
+      const metricsPayload = {
+        kpiName: form.kpiName || null,
+        baseline: form.kpiBaseline === "" ? null : Number(form.kpiBaseline),
+        target: form.kpiTarget === "" ? null : Number(form.kpiTarget),
+        estCost: form.budgetEstimate === "" ? null : Number(form.budgetEstimate),
+      };
+      await Promise.all([
+        api.updateBuildDetails(project.id, payload),
+        api.updateBuildMetrics(project.id, metricsPayload),
+      ]);
       setSaved(true);
       onSaved();
     } catch (e) {
@@ -1078,6 +1099,10 @@ function StageDetailsForm({ project, onSaved }) {
       <form onSubmit={submit}>
         <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coral, textTransform: "uppercase", letterSpacing: "0.03em", margin: "4px 0 10px" }}>Requirements</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0 20px" }}>
+          <Field label="KPI name"><input style={inputStyle} value={form.kpiName} onChange={set("kpiName")} /></Field>
+          <Field label="KPI baseline"><input type="number" style={inputStyle} value={form.kpiBaseline} onChange={set("kpiBaseline")} /></Field>
+          <Field label="KPI target"><input type="number" style={inputStyle} value={form.kpiTarget} onChange={set("kpiTarget")} /></Field>
+          <Field label="Budget estimate (USD)"><input type="number" style={inputStyle} value={form.budgetEstimate} onChange={set("budgetEstimate")} /></Field>
           <Field label="Target end date"><input type="date" style={inputStyle} value={form.targetEnd} onChange={set("targetEnd")} /></Field>
         </div>
 
