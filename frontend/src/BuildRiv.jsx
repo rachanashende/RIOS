@@ -523,20 +523,21 @@ function ProjectListView({ session, onOpen, onNewProject }) {
   const withProductOwner = filters.productOwnerId
     ? projects.filter((p) => String(p.product_owner_user_id) === String(filters.productOwnerId))
     : projects;
+  const isClosedProject = (p) => p.status === "closed" || p.stage === "closed";
   const quickCounts = {
     all: withProductOwner.length,
     waiting: withProductOwner.filter((p) => isWaitingOnMe(p, session)).length,
     red_amber: withProductOwner.filter(isRedOrAmber).length,
     overdue: withProductOwner.filter((p) => p.updateOverdue).length,
     on_hold: withProductOwner.filter((p) => p.status === "on_hold").length,
-    closed: withProductOwner.filter((p) => p.status === "closed").length,
+    closed: withProductOwner.filter(isClosedProject).length,
   };
   const visible = withProductOwner.filter((p) => {
     if (quickFilter === "waiting") return isWaitingOnMe(p, session);
     if (quickFilter === "red_amber") return isRedOrAmber(p);
     if (quickFilter === "overdue") return p.updateOverdue;
     if (quickFilter === "on_hold") return p.status === "on_hold";
-    if (quickFilter === "closed") return p.status === "closed";
+    if (quickFilter === "closed") return isClosedProject(p);
     return true;
   });
 
@@ -1810,10 +1811,20 @@ function ProjectDetailView({ projectId, session, onBack }) {
   const [moreAction, setMoreAction] = useState(null); // 'hold' | 'stop' | 'close' | 'request-delete' | 'delete'
   const [notice, setNotice] = useState(null);
 
-  function load() {
-    setLoading(true);
-    api.getBuildProject(projectId).then(setData).catch((e) => setError(e.message || "Couldn't load this project.")).finally(() => setLoading(false));
+  // Sequence guard: only the newest request may write state, so a slow earlier
+  // fetch can't overwrite fresher data (e.g. the stage checklist after an ROI
+  // save). Re-loads after a save are silent -- no spinner flash -- and the
+  // first load shows the spinner.
+  const loadSeq = useRef(0);
+  function load(opts = {}) {
+    const seq = ++loadSeq.current;
+    if (!opts.silent) setLoading(true);
+    api.getBuildProject(projectId)
+      .then((d) => { if (seq === loadSeq.current) setData(d); })
+      .catch((e) => { if (seq === loadSeq.current && !opts.silent) setError(e.message || "Couldn't load this project."); })
+      .finally(() => { if (seq === loadSeq.current) setLoading(false); });
   }
+  const reload = () => load({ silent: true });
   useEffect(() => { load(); }, [projectId]);
 
   async function doAction(kind, payload) {
@@ -1829,7 +1840,7 @@ function ProjectDetailView({ projectId, session, onBack }) {
       else if (kind === "request-delete") { await api.requestBuildDelete(projectId, payload.reason); setNotice("Delete request sent to the RIV Admin. Nothing is deleted until they approve it."); }
       else if (kind === "delete") { await api.deleteBuildProject(projectId); onBack(); return; }
       setMoreAction(null);
-      load();
+      reload();
     } catch (e) {
       setError(e.message || "That action failed.");
     } finally { setBusy(false); }
@@ -1918,7 +1929,7 @@ function ProjectDetailView({ projectId, session, onBack }) {
       )}
 
       {showUpdate && (
-        <StatusUpdateModal project={project} permissions={perms} onClose={() => { setShowUpdate(false); load(); }} onSaved={() => {}} />
+        <StatusUpdateModal project={project} permissions={perms} onClose={() => { setShowUpdate(false); reload(); }} onSaved={() => {}} />
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(220px, 1fr)", gap: 24, alignItems: "flex-start" }}>
@@ -1933,10 +1944,10 @@ function ProjectDetailView({ projectId, session, onBack }) {
             ))}
           </div>
 
-          {tab === "overview" && <OverviewTab project={project} sources={sources} canEdit={canEditDetails} onSaved={load} session={session} />}
+          {tab === "overview" && <OverviewTab project={project} sources={sources} canEdit={canEditDetails} onSaved={reload} session={session} />}
           {tab === "updates" && <UpdatesTab updates={updates} canAdd={canAddUpdate && project.status !== "closed"} onAddClick={() => setShowUpdate(true)} />}
-          {tab === "roi" && <RoiTab project={project} canEdit={canEditRoi} isClientLeader={isClientLeader && !canEditDetails} onSaved={load} />}
-          {tab === "lessons" && <LessonsTab project={project} lessons={lessons} canEdit={canEditDetails} onSaved={load} />}
+          {tab === "roi" && <RoiTab project={project} canEdit={canEditRoi} isClientLeader={isClientLeader && !canEditDetails} onSaved={reload} />}
+          {tab === "lessons" && <LessonsTab project={project} lessons={lessons} canEdit={canEditDetails} onSaved={reload} />}
           {tab === "files" && <FilesTab project={project} files={files} canUpload={canUpload} onUploaded={load} />}
           {tab === "dealdocs" && (
             dealFiles.length === 0
@@ -2873,7 +2884,7 @@ function ReadyForBuildPanel({ onReview }) {
         </Card>
       )}
       {items.length === 0 ? (
-        <EmptyState icon={CheckCircle2} title="Nothing waiting" text="Every selected idea and startup pilot already has a Build project." />
+        <EmptyState icon={CheckCircle2} title="Nothing waiting" text="Every selected idea and startup pilot already has a Build project. Ideas appear here once a client selects them for Build in Ideathon, and startups once an application is marked Selected for pilot." />
       ) : (
         <Card style={{ padding: 0, overflow: "hidden" }}>
           <div style={{ overflowX: "auto" }}>
