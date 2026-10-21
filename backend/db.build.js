@@ -410,4 +410,18 @@ export async function initBuildSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+
+  // Approved workflow v2 (Oct 2026):
+  // - one assigned Employee per Enterprise project (Admin picks them);
+  // - Client Partner delete requests ride on build_requests (kind='delete');
+  // - "Decline" on a Ready for Build row (permanent, unlike "Not now").
+  await pool.query(`ALTER TABLE build_projects ADD COLUMN IF NOT EXISTS employee_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
+  await pool.query(`ALTER TABLE build_requests ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'general';`);
+  await pool.query(`ALTER TABLE build_requests ADD COLUMN IF NOT EXISTS resolution TEXT;`);
+  await pool.query(`ALTER TABLE build_requests DROP CONSTRAINT IF EXISTS build_requests_status_check;`);
+  await pool.query(`ALTER TABLE build_requests ADD CONSTRAINT build_requests_status_check CHECK (status IN ('open','resolved','approved','rejected'));`);
+  await pool.query(`ALTER TABLE ideas ADD COLUMN IF NOT EXISTS build_declined_at TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE ideas ADD COLUMN IF NOT EXISTS build_declined_reason TEXT;`);
+  await pool.query(`ALTER TABLE rise_applications ADD COLUMN IF NOT EXISTS build_declined_at TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE rise_applications ADD COLUMN IF NOT EXISTS build_declined_reason TEXT;`);
 }

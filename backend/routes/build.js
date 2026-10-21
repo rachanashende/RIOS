@@ -16,11 +16,23 @@ import {
 } from "../lib/buildWorkflow.js";
 import {
   canSeeProject, canAddUpdate, canEditDetails, canEditRoi, canHoldOrStop, canClose, canApproveGate, canSendBack, isClientLeaderOf,
+  canRequestDelete, stripMoneyForStartupPoc,
 } from "../lib/buildPermissions.js";
 import { notifyBuild, recipientsForProject } from "../lib/buildNotify.js";
+import { QUESTIONS } from "../lib/scoring.js";
 
 const router = Router();
 router.use(requireAuth);
+
+// Startup POC never sees PO / contract / cost / benefit amounts (approved
+// workflow v2). Done once here, on the way out, so no individual route can
+// forget it.
+router.use((req, res, next) => {
+  if (req.user?.role !== "startup_poc") return next();
+  const json = res.json.bind(res);
+  res.json = (body) => json(stripMoneyForStartupPoc(body));
+  next();
+});
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const ALLOWED_FILE_TYPES = new Set([
@@ -57,9 +69,15 @@ async function pocClientId(user) {
 // in principle feed more than one project, so this returns a set of ids.
 async function employeeProjectIds(user) {
   if (user.role !== "junior_employee") return [];
+  // The Employee the Admin assigned on the project (approved workflow v2),
+  // plus -- for older projects created before that field existed -- the
+  // person who submitted the source idea.
   const { rows } = await pool.query(
-    `SELECT s.project_id FROM build_project_sources s
+    `SELECT p.id AS project_id FROM build_projects p WHERE p.employee_user_id = $1
+     UNION
+     SELECT s.project_id FROM build_project_sources s
      JOIN ideas i ON i.id = s.source_id AND s.source_type = 'idea'
+     JOIN build_projects p2 ON p2.id = s.project_id AND p2.employee_user_id IS NULL
      WHERE i.submitted_by = $1`,
     [user.id]
   );
@@ -73,13 +91,16 @@ async function loadProject(id) {
             c.name AS client_name, c.company AS client_company,
             po.name AS product_owner_name, po.email AS product_owner_email,
             sp.name AS startup_poc_name, sp.email AS startup_poc_email,
-            rm.name AS riv_manager_name, rm.email AS riv_manager_email
+            rm.name AS riv_manager_name, rm.email AS riv_manager_email,
+            em.name AS employee_name, em.email AS employee_email,
+            c.email AS client_email
      FROM build_projects p
      LEFT JOIN build_metrics m ON m.project_id = p.id
      LEFT JOIN users c ON c.id = p.client_id
      LEFT JOIN users po ON po.id = p.product_owner_user_id
      LEFT JOIN users sp ON sp.id = p.startup_poc_user_id
      LEFT JOIN users rm ON rm.id = p.riv_manager_id
+     LEFT JOIN users em ON em.id = p.employee_user_id
      WHERE p.id = $1`,
     [Number(id)]
   );
@@ -240,7 +261,7 @@ router.get("/my-work", async (req, res, next) => {
         latestKpiValue: r.kpi_now, needsHelp: r.latest_needs_help,
       });
       const rank = { on_track: 0, at_risk: 1, off_track: 2 };
-      const effectiveHealth = rank[auto.health] > rank[r.health] ? auto.health : r.health;
+      const effectiveHealth = rank[auto.health] > rank[r.health || "on_track"] ? auto.health : (r.health || "on_track");
       return {
         ...r, hasUpdate: !!r.has_update, updateOverdue, missing, effectiveHealth,
         healthReason: effectiveHealth === r.health ? null : auto.reason,
@@ -395,7 +416,10 @@ router.get("/projects", async (req, res, next) => {
 
     if (req.query.type) where.push(`p.type = ${p(req.query.type)}`);
     if (req.query.stage) where.push(`p.stage = ${p(req.query.stage)}`);
-    if (req.query.health) where.push(`p.health = ${p(req.query.health)}`);
+    // ?health= filters on the *effective* health (stored health raised by
+    // the automatic rules), applied after enrichment below -- filtering on
+    // the stored column hid new/late projects the list itself shows as red.
+    const healthFilter = req.query.health || null;
     if (req.query.status) where.push(`p.status = ${p(req.query.status)}`);
     if (req.query.q) where.push(`(p.code ILIKE ${p("%" + req.query.q + "%")} OR p.title ILIKE ${p("%" + req.query.q + "%")})`);
 
@@ -419,8 +443,7 @@ router.get("/projects", async (req, res, next) => {
       params
     );
 
-    res.json({
-      projects: rows.map((r) => {
+    const enriched = rows.map((r) => {
         const updateOverdue = Number(r.days_since_update) > 14 && r.status === "active";
         const stageList = STAGES[r.type] || [];
         const stageIndex = stageList.indexOf(r.stage);
@@ -443,7 +466,7 @@ router.get("/projects", async (req, res, next) => {
           latestKpiValue: r.kpi_now, needsHelp: r.latest_needs_help,
         });
         const rank = { on_track: 0, at_risk: 1, off_track: 2 };
-        const effectiveHealth = rank[auto.health] > rank[r.health] ? auto.health : r.health;
+        const effectiveHealth = rank[auto.health] > rank[r.health || "on_track"] ? auto.health : (r.health || "on_track");
         return {
           ...r,
           actual_cost: r.actual_cost != null ? Number(r.actual_cost) : null,
@@ -463,8 +486,11 @@ router.get("/projects", async (req, res, next) => {
           effectiveHealth,
           healthReason: effectiveHealth === r.health ? null : auto.reason,
         };
-      }),
-    });
+      });
+    const filtered = healthFilter ? enriched.filter((r) => r.effectiveHealth === healthFilter) : enriched;
+    const hRank = { off_track: 2, at_risk: 1, on_track: 0 };
+    filtered.sort((a, b) => (hRank[b.effectiveHealth] ?? 0) - (hRank[a.effectiveHealth] ?? 0));
+    res.json({ projects: filtered });
   } catch (err) {
     next(err);
   }
@@ -482,7 +508,19 @@ router.get("/projects/:id", async (req, res, next) => {
     if (!canSeeProject(req.user, project, assigned, pocClient, isLinkedEmployee)) return res.status(403).json({ error: "You don't have access to this project." });
 
     const [sources, history, updates, lessons, files, kpiReadings] = await Promise.all([
-      pool.query("SELECT * FROM build_project_sources WHERE project_id = $1", [project.id]),
+      // "Where it came from" (mockup screen 3): the idea / startup by name,
+      // who submitted it, and the audit opportunity it answers.
+      pool.query(
+        `SELECT s.*, i.title AS idea_title, iu.name AS idea_submitted_by_name,
+                a.startup_name, a.founder_name, o.title AS opportunity_title
+         FROM build_project_sources s
+         LEFT JOIN ideas i ON s.source_type = 'idea' AND i.id = s.source_id
+         LEFT JOIN users iu ON iu.id = i.submitted_by
+         LEFT JOIN rise_applications a ON s.source_type = 'rise_application' AND a.id = s.source_id
+         LEFT JOIN rise_opportunities o ON o.id = a.opportunity_id
+         WHERE s.project_id = $1`,
+        [project.id]
+      ),
       pool.query(
         `SELECT h.*, u.name AS by_name FROM build_stage_history h LEFT JOIN users u ON u.id = h.by_user_id
          WHERE h.project_id = $1 ORDER BY h.at DESC`,
@@ -513,14 +551,18 @@ router.get("/projects/:id", async (req, res, next) => {
       needsHelp: latestUpdate?.needs_help,
     });
     const rank = { on_track: 0, at_risk: 1, off_track: 2 };
-    const effectiveHealth = rank[auto.health] > rank[projOut.health] ? auto.health : projOut.health;
+    const effectiveHealth = rank[auto.health] > rank[projOut.health || "on_track"] ? auto.health : (projOut.health || "on_track");
 
     res.json({
       project: {
         ...projOut, effectiveHealth, healthReason: effectiveHealth === projOut.health ? null : auto.reason,
         kpi_now: latestKpiRow ? Number(latestKpiRow.value) : null,
+        // A project with no status update shows "No update yet", never a green "On track".
+        hasUpdate: updates.rows.length > 0,
       },
-      sources: sources.rows,
+      sources: sources.rows.map((r) => ({
+        ...r, auditQuestion: r.question_id != null ? ((QUESTIONS.find((q) => q.id === Number(r.question_id)) || {}).q || null) : null,
+      })),
       stageOrder: STAGES[project.type],
       stageLabels: STAGE_LABELS,
       history: history.rows,
@@ -530,6 +572,30 @@ router.get("/projects/:id", async (req, res, next) => {
       kpiReadings: kpiReadings.rows.map((k) => ({ ...k, value: Number(k.value) })),
       missingForNextStage: project.stage !== "closed" ? missingFieldsForStage(project.type, project.stage, project, project) : [],
       gateApprovers: project.stage !== "closed" ? gateApprovers(project.type, project.stage) : [],
+      // Mockup screen 3's "current stage checklist": every item the stage
+      // needs (asking missingFieldsForStage with nothing filled in gives
+      // the full list), each marked done or not.
+      stageChecklist: (() => {
+        if (project.stage === "closed") return [];
+        const all = missingFieldsForStage(project.type, project.stage, {}, {});
+        const missing = new Set(missingFieldsForStage(project.type, project.stage, project, project));
+        return all.map((label) => ({ label, done: !missing.has(label) }));
+      })(),
+      // What *this* viewer may do -- the screen shows/hides buttons from
+      // this, so the frontend never re-derives the permission table.
+      permissions: {
+        addUpdate: canAddUpdate(req.user, project, assigned, isLinkedEmployee),
+        editDetails: canEditDetails(req.user, project, assigned),
+        editRoi: canEditRoi(req.user, project, assigned),
+        approveStage: project.stage !== "closed" && canApproveGate(req.user, project, gateApprovers(project.type, project.stage), assigned),
+        holdOrStop: canHoldOrStop(req.user, project),
+        close: canClose(req.user),
+        requestDelete: canRequestDelete(req.user, project, assigned),
+        deleteProject: req.user.role === "admin",
+        raiseRequest: isClientLeaderOf(req.user, project) || req.user.role === "admin",
+        uploadFile: canAddUpdate(req.user, project, assigned, isLinkedEmployee),
+        seeMoney: req.user.role !== "startup_poc",
+      },
     });
   } catch (err) {
     next(err);
@@ -658,6 +724,43 @@ router.post("/projects/:id/requests", async (req, res, next) => {
       subject: `RIOS Build: new request on ${project.code}`,
       heading: "A Client Partner has a request",
       body: `${project.title} (${project.code}): "${message}"`,
+    });
+    res.status(201).json({ request: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/build/projects/:id/delete-request { reason } -- a RIV Client
+// Partner can't delete a project themselves (approved workflow v2); this
+// raises a delete request that only the RIV Admin can approve or reject
+// (Admin console -> Requests). Stored in build_requests with kind='delete'.
+router.post("/projects/:id/delete-request", async (req, res, next) => {
+  try {
+    const project = await loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found." });
+    const assigned = await assignedClientIds(req.user);
+    if (!canRequestDelete(req.user, project, assigned)) {
+      return res.status(403).json({ error: "Only the RIV Client Partner assigned to this project can request deletion." });
+    }
+    const reason = String(req.body?.reason || "").trim();
+    if (!reason) return res.status(400).json({ error: "A reason is required." });
+    const { rows: open } = await pool.query(
+      "SELECT id FROM build_requests WHERE project_id = $1 AND kind = 'delete' AND status = 'open'",
+      [project.id]
+    );
+    if (open.length) return res.status(409).json({ error: "A delete request for this project is already waiting for the RIV Admin." });
+    const { rows } = await pool.query(
+      "INSERT INTO build_requests (project_id, requested_by, message, kind) VALUES ($1,$2,$3,'delete') RETURNING *",
+      [project.id, req.user.id, reason]
+    );
+    const recipients = await recipientsForProject(project, ["admins"]);
+    await notifyBuild(recipients, {
+      projectId: project.id, projectCode: project.code, kind: "client_request",
+      message: `${project.code}: delete requested by the Client Partner -- "${reason}"`,
+      subject: `RIOS Build: delete requested for ${project.code}`,
+      heading: "A Client Partner asked to delete a project",
+      body: `${project.title} (${project.code}). Reason: "${reason}". Approve or reject it in the Admin console.`,
     });
     res.status(201).json({ request: rows[0] });
   } catch (err) {
