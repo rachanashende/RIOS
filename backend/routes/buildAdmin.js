@@ -99,6 +99,33 @@ async function assertClientInScope(req, clientId) {
   return true;
 }
 
+// GET /api/admin/build/client-options -- id/name/company of the clients the
+// caller may pick in Build's client dropdowns (Create project, the Projects
+// list's client filter, Dashboard -> One client, the Logins panel).
+// Admin: every client. RIV Client Partner: only their assigned clients.
+//
+// This is a Build-token-reachable twin of the main site's heavier
+// GET /api/admin/clients. The dropdowns used to call that main-site route
+// with the *main-site* token, which doesn't exist for anyone who entered
+// through Build.RIV's own login screen -- the call 401'd, the error was
+// swallowed, and the pickers silently degraded to a free-text box (E2E
+// report Issue 3) or disappeared (Issue 6).
+router.get("/client-options", async (req, res, next) => {
+  try {
+    const assigned = await assignedClientIds(req.user); // null = admin, no restriction
+    const params = [];
+    let where = "role = 'client' AND audit_owner_id IS NULL";
+    if (assigned !== null) { params.push(assigned); where += " AND id = ANY($1::int[])"; }
+    const { rows } = await pool.query(
+      `SELECT id, name, company FROM users WHERE ${where} ORDER BY COALESCE(NULLIF(company, ''), name)`,
+      params
+    );
+    res.json({ clients: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /* =========================================================================
    READY FOR BUILD (Oct 2026 "Proposed Screens" -- admin console, screen 3)
    ========================================================================= */

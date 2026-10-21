@@ -2389,7 +2389,8 @@ function DashboardView({ session, onOpenProject }) {
   const isRivManager = session.role === "riv_manager";
   const myClients = useMyClients(session.role);
   const [pickedClientId, setPickedClientId] = useState(null);
-  const allClients = useClientOptions();
+  const allClientsState = useClientOptionsState();
+  const allClients = allClientsState.clients;
 
   return (
     <div style={{ maxWidth: 1180, margin: "0 auto", padding: "36px 24px 100px" }}>
@@ -2410,6 +2411,14 @@ function DashboardView({ session, onOpenProject }) {
             onChange={(v) => setPickedClientId(v ? Number(v) : null)}
             options={[{ value: "", label: "Choose a client…" }, ...allClients.map((c) => ({ value: String(c.id), label: c.company || c.name }))]}
           />
+        </div>
+      )}
+      {/* Issue 6: the picker used to just not render when the client list
+          failed to load, leaving "Choose a client above" pointing at nothing. */}
+      {isAdmin && sub === "client" && allClientsState.status === "error" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, fontFamily: FONT, fontSize: 13, color: "#C13B3B" }}>
+          Couldn't load the client list.
+          <button type="button" onClick={allClientsState.retry} style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, background: "#fff", color: BRAND.ink, cursor: "pointer" }}>Retry</button>
         </div>
       )}
 
@@ -2447,23 +2456,39 @@ function DashboardView({ session, onOpenProject }) {
    (manual / from an Ideathon winner / from a selected startup), assign
    people, and manage product_owner + riv_manager + startup_poc logins.
    ========================================================================= */
-// Admin and RIV Client Partner both reach the Build admin console, but only admin
-// can list every client (GET /api/admin/clients is admin-only). So this
-// tries to fetch the list -- which lets admin pick a client by name instead
-// of having to go find and type its numeric ID -- and if it 403s (a
-// riv_manager, who isn't allowed to see every client), it quietly falls
-// back to null, and callers show a plain numeric field with a hint instead.
-function useClientOptions() {
-  const [clients, setClients] = useState(null); // null = not loaded/unavailable
+// The client list behind every Build client dropdown. It comes from
+// GET /api/admin/build/client-options and is sent with the *Build* session
+// (admin: every client; RIV Client Partner: just their assigned ones).
+//
+// This used to call the main site's GET /api/admin/clients with the main-
+// site token. Anyone who entered through Build.RIV's own login screen has no
+// main-site token, so that call 401'd, the error was swallowed, and the
+// pickers silently turned into a free-text box (Create project) or vanished
+// altogether (Dashboard -> One client) -- E2E report Issues 3 and 6. Now a
+// failure is surfaced with a Retry instead of degrading quietly.
+function useClientOptionsState() {
+  const [state, setState] = useState({ clients: null, status: "loading" }); // status: loading | ready | error
+  const [tick, setTick] = useState(0);
   useEffect(() => {
-    api.listClients().then((d) => setClients(d.clients || [])).catch(() => setClients(null));
-  }, []);
-  return clients;
+    let alive = true;
+    setState((s) => ({ ...s, status: "loading" }));
+    api.listBuildClientOptions()
+      .then((d) => { if (alive) setState({ clients: d.clients || [], status: "ready" }); })
+      .catch(() => { if (alive) setState({ clients: null, status: "error" }); });
+    return () => { alive = false; };
+  }, [tick]);
+  return { ...state, retry: () => setTick((n) => n + 1) };
+}
+
+// Array-or-null view of the same list, for callers that only need the
+// options (null = not loaded yet, or failed).
+function useClientOptions() {
+  return useClientOptionsState().clients;
 }
 
 function ClientPicker({ value, onChange, required, label, hint }) {
-  const clients = useClientOptions();
-  if (clients && clients.length) {
+  const { clients, status, retry } = useClientOptionsState();
+  if (status === "ready" && clients.length) {
     return (
       <Field label={label} required={required} hint={hint}>
         <select style={selectStyle} value={value} onChange={(e) => onChange(e.target.value)}>
@@ -2473,11 +2498,20 @@ function ClientPicker({ value, onChange, required, label, hint }) {
       </Field>
     );
   }
-  // Fallback for a riv_manager (can't list every client) or if the list
-  // failed to load -- a plain numeric field, same as before this fix.
+  // Deliberately no free-text fallback: a typed client name never matched a
+  // real client record, so the Product Owner / Employee pickers below came
+  // up empty with no error (Issue 3). Say what's wrong instead.
+  const message = status === "loading" ? "Loading clients…"
+    : status === "ready" ? "No clients are available to you yet. A RIV Admin can assign clients to a RIV Client Partner under Logins."
+    : "Couldn't load the client list.";
   return (
-    <Field label={label} required={required} hint={hint || "Numeric client ID -- find it on the client's card under Manage Clients."}>
-      <input style={inputStyle} value={value} onChange={(e) => onChange(e.target.value)} inputMode="numeric" />
+    <Field label={label} required={required}>
+      <div style={{ ...inputStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, color: status === "error" ? "#C13B3B" : "#9B958F", background: BRAND.cream }}>
+        <span>{message}</span>
+        {status === "error" && (
+          <button type="button" onClick={retry} style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, background: "#fff", color: BRAND.ink, cursor: "pointer" }}>Retry</button>
+        )}
+      </div>
     </Field>
   );
 }

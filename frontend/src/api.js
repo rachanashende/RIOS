@@ -390,6 +390,12 @@ export const api = {
   // ordinary full-access clients. These are "client" role too, just flagged
   // so they only ever see Build.RIV (see db.build.js's build_scoped column).
   listBuildClients: () => buildRequest("/admin/build/clients"),
+  // Every Build client dropdown (Create project, Projects filter, Dashboard ->
+  // One client, Logins) reads from here. Unlike listClients() above, this one
+  // is sent with the *Build* session, so it works for anyone who entered
+  // through Build.RIV's own login -- and a RIV Client Partner gets just their
+  // assigned clients back.
+  listBuildClientOptions: () => buildRequest("/admin/build/client-options"),
   createBuildClient: (payload) => buildRequest("/admin/build/clients", { method: "POST", body: payload }),
   deleteBuildClient: (id) => buildRequest(`/admin/build/clients/${id}`, { method: "DELETE" }),
   listBuildManagers: () => buildRequest("/admin/build/managers"),
