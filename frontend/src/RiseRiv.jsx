@@ -184,7 +184,40 @@ function RiseNavBar({ view, setView, session, onLogout }) {
 /* =========================================================================
    LANDING — public opportunity page
    ========================================================================= */
-function LandingView({ opportunity, loading, setView, isAdmin }) {
+function fmtDeadline(d) { return new Date(d + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }); }
+
+// DR1-24: several calls can be open at once -- list each with its own Apply button.
+function CallListView({ calls, onOpen, onApply }) {
+  return (
+    <div style={{ maxWidth: 760, margin: "0 auto", padding: "48px 24px 100px" }}>
+      <img src="/riv-logo-full.png" alt="Retail Innovation Ventures" style={{ height: 38, margin: "0 auto 26px", display: "block" }} />
+      <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 26, color: BRAND.ink, textAlign: "center" }}>Open calls for startups</div>
+      <div style={{ fontFamily: FONT, fontSize: 14, color: "#7A746F", textAlign: "center", marginTop: 8, marginBottom: 26 }}>
+        Retailers working with RIV are looking for solutions to these challenges. Apply to each call separately.
+      </div>
+      <div style={{ display: "grid", gap: 14 }}>
+        {calls.map((c) => (
+          <Card key={c.id} style={{ padding: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ flex: "1 1 320px" }}>
+                <button onClick={() => onOpen(c)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", fontFamily: FONT, fontWeight: 700, fontSize: 17, color: BRAND.ink }}>{c.title}</button>
+                {c.public_retailer_label && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#9B958F", marginTop: 4 }}>For {c.public_retailer_label}</div>}
+                {c.description && <div style={{ fontFamily: FONT, fontSize: 13.5, color: "#5F5954", marginTop: 8, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{c.description.length > 260 ? `${c.description.slice(0, 260)}…` : c.description}</div>}
+                {c.deadline && <div style={{ display: "inline-block", marginTop: 10, fontFamily: FONT, fontWeight: 600, fontSize: 12, color: BRAND.coralDark, background: "#FCEEE1", borderRadius: 999, padding: "4px 12px" }}>Apply by {fmtDeadline(c.deadline)}</div>}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "stretch" }}>
+                <PrimaryButton onClick={() => onApply(c)} icon={ArrowRight}>Apply to this call</PrimaryButton>
+                <GhostButton onClick={() => onOpen(c)}>Details</GhostButton>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LandingView({ opportunity, loading, setView, isAdmin, onBackToList }) {
   const [criteria, setCriteria] = useState([]);
   useEffect(() => { api.getRiseCriteria().then((d) => setCriteria(d.criteria || [])).catch(() => {}); }, []);
   if (loading) return <Spinner label="Loading opportunity…" />;
@@ -199,13 +232,20 @@ function LandingView({ opportunity, loading, setView, isAdmin }) {
 
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: "48px 24px 100px", textAlign: "center" }}>
+      {onBackToList && (
+        <div style={{ textAlign: "left", marginBottom: 12 }}>
+          <GhostButton onClick={onBackToList}>All open calls</GhostButton>
+        </div>
+      )}
       <img src="/riv-logo-full.png" alt="Retail Innovation Ventures" style={{ height: 38, margin: "0 auto 26px", display: "block" }} />
       {opportunity ? (
         <>
           <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 27, color: BRAND.ink }}>{opportunity.title}</div>
+          {/* DR1-25: the retailer is described, never named */}
+          {opportunity.public_retailer_label && <div style={{ fontFamily: FONT, fontSize: 13.5, color: "#9B958F", marginTop: 6 }}>For {opportunity.public_retailer_label}</div>}
           {opportunity.deadline && (
             <div style={{ display: "inline-block", marginTop: 12, fontFamily: FONT, fontWeight: 600, fontSize: 12.5, color: BRAND.coralDark, background: "#FCEEE1", borderRadius: 999, padding: "5px 14px" }}>
-              Apply by {new Date(opportunity.deadline + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}
+              Apply by {fmtDeadline(opportunity.deadline)}
             </div>
           )}
           {opportunity.description && (
@@ -232,7 +272,7 @@ function LandingView({ opportunity, loading, setView, isAdmin }) {
         </>
       ) : (
         <>
-          <EmptyState icon={ClipboardList} title="Applications aren't open right now" text="Check back soon, or contact the Rise team directly." />
+          <EmptyState icon={ClipboardList} title="Applications aren't open right now" text="This call may have closed. Check back soon, or contact the Rise team directly." />
           {isAdmin && (
             <div style={{ fontFamily: FONT, fontSize: 13, color: "#7A746F", marginTop: 16, lineHeight: 1.6 }}>
               You're an admin: no call is open. <a href="/admin#startup-team" style={{ color: BRAND.coralDark, fontWeight: 600 }}>Open or create a call</a> under Admin → Startup team.
@@ -247,7 +287,7 @@ function LandingView({ opportunity, loading, setView, isAdmin }) {
 /* =========================================================================
    APPLICATION FORM + ACKNOWLEDGMENT
    ========================================================================= */
-function ApplyView({ onDone }) {
+function ApplyView({ opportunity, onDone }) {
   const [form, setForm] = useState({
     startupName: "", founderName: "", email: "", phone: "", website: "", sector: "", stage: "", pitch: "",
   });
@@ -267,8 +307,12 @@ function ApplyView({ onDone }) {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await api.submitRiseApplication(form);
-      setReceipt({ reference: res && res.reference, submittedAt: (res && res.submittedAt) || new Date().toISOString(), summary: { ...form } });
+      // DR1-24: the application goes to this call (and only this call's jury)
+      const res = await api.submitRiseApplication({ ...form, opportunityId: opportunity ? opportunity.id : undefined });
+      setReceipt({
+        reference: res && res.reference, submittedAt: (res && res.submittedAt) || new Date().toISOString(), summary: { ...form },
+        callTitle: (res && res.opportunityTitle) || (opportunity && opportunity.title) || null, // DR1-26
+      });
       setDone(true);
     } catch (e) {
       setError(e.message || "Couldn't submit your application — please try again.");
@@ -280,6 +324,7 @@ function ApplyView({ onDone }) {
   if (done) {
     const sm = (receipt && receipt.summary) || form;
     const rows = [
+      ["Call", receipt && receipt.callTitle], // DR1-26: which call this reference belongs to
       ["Startup", sm.startupName], ["Founder", sm.founderName], ["Email", sm.email], ["Phone", sm.phone],
       ["Website", sm.website], ["Sector", sm.sector], ["Stage", sm.stage],
     ].filter(([, v]) => v && String(v).trim());
@@ -333,6 +378,7 @@ function ApplyView({ onDone }) {
   return (
     <div style={{ maxWidth: 560, margin: "0 auto", padding: "44px 24px 100px" }}>
       <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: BRAND.ink, marginBottom: 4 }}>Startup application</div>
+      {opportunity && <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: BRAND.coralDark, marginBottom: 4 }}>Applying to: {opportunity.title}</div>}
       <div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F", marginBottom: 26 }}>
         Only your own submission is visible to you — other applicants' entries and jury scores are never shown here.
       </div>
@@ -630,6 +676,12 @@ function JuryScoreView({ applicationId, onBack }) {
       {application.pitch && (
         <div style={{ fontFamily: FONT, fontSize: 13.5, color: "#4A4642", marginTop: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{application.pitch}</div>
       )}
+      {/* DR1-29: why RIV passed this application to the jury */}
+      {application.riv_status === "approved" && application.riv_note && (
+        <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#1B7A5A", background: "#E7F5EF", borderRadius: 10, padding: "10px 14px", marginTop: 14, lineHeight: 1.5 }}>
+          <b>RIV note:</b> {application.riv_note}
+        </div>
+      )}
 
       <Card style={{ padding: 24, marginTop: 24 }}>
         <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: BRAND.ink, marginBottom: 18 }}>Your score</div>
@@ -670,15 +722,42 @@ export default function RiseRivApp() {
     return v === "jury-dashboard" && !getStoredRiseUser() ? "jury-login" : v;
   });
   const [session, setSession] = useState(getStoredRiseUser());
+  // DR1-24: every open call; /startup?call=<id> opens one call directly.
+  const [calls, setCalls] = useState([]);
   const [opportunity, setOpportunity] = useState(null);
   const [oppLoading, setOppLoading] = useState(true);
   const [activeApplicationId, setActiveApplicationId] = useState(null);
 
   useEffect(() => {
-    api.getRiseOpportunity()
-      .then((d) => setOpportunity(d.opportunity))
+    const wanted = Number(new URLSearchParams(window.location.search).get("call")) || null;
+    api.getRiseOpportunities()
+      .then(async (d) => {
+        const list = d.opportunities || [];
+        setCalls(list);
+        if (wanted) {
+          // a shared link to one call -- even if it has since closed, say so on its own page
+          const one = list.find((c) => c.id === wanted) || (await api.getRiseOpportunity(wanted).catch(() => ({}))).opportunity || null;
+          setOpportunity(one);
+        } else if (list.length === 1) {
+          setOpportunity(list[0]);
+        }
+      })
+      .catch(() => setCalls([]))
       .finally(() => setOppLoading(false));
   }, []);
+
+  function openCall(c) {
+    setOpportunity(c);
+    window.history.pushState(null, "", `/startup?call=${c.id}`);
+    setView("landing");
+  }
+  function applyToCall(c) { setOpportunity(c); setView("apply"); }
+  function backToList() {
+    setOpportunity(null);
+    window.history.pushState(null, "", "/startup");
+    setView("landing");
+  }
+  const showList = !oppLoading && !opportunity && calls.length > 1;
 
   // Keep the URL in sync on browser back/forward.
   useEffect(() => {
@@ -709,6 +788,8 @@ export default function RiseRivApp() {
   }
   function goToView(v) {
     if (v === "jury-dashboard" && !session) { setView("jury-login"); return; }
+    // DR1-24: the "Apply" tab goes back to the list of calls when several are open
+    if (v === "landing" && calls.length > 1) setOpportunity(null);
     const path = RISE_VIEW_TO_PATH[v];
     if (path) window.history.pushState(null, "", path);
     setView(v);
@@ -722,8 +803,12 @@ export default function RiseRivApp() {
       `}</style>
       <RiseNavBar view={view} setView={goToView} session={session} onLogout={handleLogout} />
 
-      {view === "landing" && <LandingView opportunity={opportunity} loading={oppLoading} setView={goToView} isAdmin={!!session && session.role === "admin"} />}
-      {view === "apply" && <ApplyView onDone={() => goToView("landing")} />}
+      {view === "landing" && showList && <CallListView calls={calls} onOpen={openCall} onApply={applyToCall} />}
+      {view === "landing" && !showList && (
+        <LandingView opportunity={opportunity} loading={oppLoading} setView={goToView} isAdmin={!!session && session.role === "admin"}
+          onBackToList={calls.length > 1 ? backToList : undefined} />
+      )}
+      {view === "apply" && <ApplyView opportunity={opportunity} onDone={() => (calls.length > 1 ? backToList() : goToView("landing"))} />}
       {view === "jury-login" && <JuryLoginView onAuthed={handleAuthed} />}
       {view === "jury-dashboard" && session && (
         <JuryDashboardView setView={goToView} setActiveApplicationId={setActiveApplicationId} />

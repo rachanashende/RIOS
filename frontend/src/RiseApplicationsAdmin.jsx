@@ -40,13 +40,16 @@ function ApplicationDetail({ id, onBack, onChanged }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(""); // DR1-29
 
   const load = () => api.getRiseApplicationAdmin(id).then(setData).catch((e) => setError(e.message || "Could not load this application."));
   useEffect(() => { setData(null); setError(""); load(); }, [id]);
 
   async function review(status) {
+    // DR1-29: a reason is required to reject; a note is optional to approve
+    if (status === "rejected" && !note.trim()) { setError("Write a reason in the note box before rejecting. It stays with RIV; the jury never sees rejected applications."); return; }
     setBusy(true); setError("");
-    try { await api.reviewRiseApplication(id, status); await load(); onChanged?.(); } catch (e) { setError(e.message); } finally { setBusy(false); }
+    try { await api.reviewRiseApplication(id, status, note.trim() || undefined); setNote(""); await load(); onChanged?.(); } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
   async function decide(decision) {
     setBusy(true); setError("");
@@ -60,7 +63,7 @@ function ApplicationDetail({ id, onBack, onChanged }) {
   if (error && !data) return <div>{backBtn}<div style={{ fontFamily: FONT, fontSize: 13, color: BRAND.coralDark }}>{error}</div></div>;
   if (!data) return <div>{backBtn}<div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F" }}>Loading…</div></div>;
 
-  const { application: a, scores, criteria } = data;
+  const { application: a, scores, criteria, reviews = [] } = data;
   const avg = scores.length ? scores.reduce((s, r) => s + r.total, 0) / scores.length : null;
   const extra = a.extra && typeof a.extra === "object" ? Object.entries(a.extra).filter(([, v]) => v !== "" && v != null) : [];
   const btnStyle = (active) => ({ fontFamily: FONT, fontSize: 12, fontWeight: 600, padding: "7px 12px", borderRadius: 8, border: `1px solid ${BRAND.line}`, background: active ? BRAND.ink : "#fff", color: active ? "#fff" : BRAND.ink, cursor: busy ? "not-allowed" : "pointer" });
@@ -92,11 +95,31 @@ function ApplicationDetail({ id, onBack, onChanged }) {
             {RIV_STATUS_LABEL[a.riv_status] || a.riv_status}
           </div>
           <div style={{ fontFamily: FONT, fontSize: 11, color: "#9B958F", marginTop: 4 }}>Only an approved application is ever shown to the retailer's jury.</div>
+          {a.riv_note && (
+            <div style={{ fontFamily: FONT, fontSize: 12, color: BRAND.ink, marginTop: 6 }}>
+              <b>{a.riv_status === "rejected" ? "Reason" : "Note to jury"}:</b> {a.riv_note}
+            </div>
+          )}
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button disabled={busy} onClick={() => review("approved")} style={btnStyle(a.riv_status === "approved")}>Approve for jury</button>
-          <button disabled={busy} onClick={() => review("rejected")} style={btnStyle(a.riv_status === "rejected")}>Reject</button>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: "1 1 280px", maxWidth: 420 }}>
+          {/* DR1-29: note travels with the decision -- shown to the jury when approved, RIV-only when rejected */}
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Note (optional to approve, shown to the jury; required to reject, RIV only)"
+            style={{ fontFamily: FONT, fontSize: 12.5, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: "8px 10px", resize: "vertical", boxSizing: "border-box", width: "100%" }} />
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button disabled={busy} onClick={() => review("approved")} style={btnStyle(a.riv_status === "approved")}>Approve for jury</button>
+            <button disabled={busy} onClick={() => review("rejected")} style={btnStyle(a.riv_status === "rejected")}>Reject</button>
+          </div>
         </div>
+        {reviews.length > 0 && (
+          <details style={{ flexBasis: "100%", fontFamily: FONT, fontSize: 12, color: "#7A746F" }}>
+            <summary style={{ cursor: "pointer" }}>Review history ({reviews.length})</summary>
+            {reviews.map((r) => (
+              <div key={r.id} style={{ marginTop: 6, paddingTop: 6, borderTop: `1px solid ${BRAND.line}` }}>
+                {fmtDate(r.created_at)} · {r.reviewed_by_name || "RIV"} · {RIV_STATUS_LABEL[r.status] || r.status}{r.note ? ` — ${r.note}` : ""}
+              </div>
+            ))}
+          </details>
+        )}
       </div>
 
       <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 16, background: "#fff", marginBottom: 20 }}>

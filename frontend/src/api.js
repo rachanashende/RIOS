@@ -233,7 +233,8 @@ export const api = {
   getEmployeeIdeas: (id) => request(`/admin/ideas/users/${id}/ideas`),
 
   // ---- Rise.RIV (public + jury) — uses its own isolated token ------
-  getRiseOpportunity: () => request("/rise/opportunity"), // public, no token needed either way
+  getRiseOpportunity: (id) => request(`/rise/opportunity${id ? `?id=${encodeURIComponent(id)}` : ""}`), // public, no token needed either way
+  getRiseOpportunities: () => request("/rise/opportunities"), // DR1-24: every open call (public)
   getRiseCriteria: () => request("/rise/criteria"),
   submitRiseApplication: (payload) => request("/rise/apply", { method: "POST", body: payload }),
   riseJuryLogin: (email, password) => loginRequest(email, password), // same endpoint, token just isn't attached to anything yet here
@@ -426,7 +427,8 @@ export const api = {
   // ---- Build.RIV: unblocking endpoints added to the owning modules (R21/R22)
   selectIdeaForBuild: (ideaId) => ideasAdminRequest(`/admin/ideas/${ideaId}/select-for-build`, { method: "PUT" }),
   decideRiseApplication: (applicationId, decision) => request(`/admin/rise/applications/${applicationId}/decision`, { method: "PUT", body: { decision } }),
-  reviewRiseApplication: (applicationId, status) => request(`/admin/rise/applications/${applicationId}/riv-review`, { method: "PUT", body: { status } }),
+  // DR1-29: optional note when approving (shown to the jury); a reason is required when rejecting
+  reviewRiseApplication: (applicationId, status, note) => request(`/admin/rise/applications/${applicationId}/riv-review`, { method: "PUT", body: { status, note } }),
   setRiseOpportunityClient: (opportunityId, clientId) => request(`/admin/rise/opportunities/${opportunityId}/client`, { method: "PUT", body: { clientId } }),
   assignRiseJuryClient: (id, clientId) => request(`/admin/rise/jury/${id}/client`, { method: "PUT", body: { clientId } }),
   getMyBuildPicksIdeas: () => ideasRequest("/build/my-picks"),

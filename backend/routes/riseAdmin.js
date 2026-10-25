@@ -10,15 +10,42 @@ router.use(requireAuth, requireAdmin);
 // Blank strings become NULL so empty optional fields don't render as empty sections.
 const clean = (v) => (v == null || String(v).trim() === "" ? null : String(v).trim());
 
+// DR1-25: calls stay anonymous on the public page. Flags which public fields
+// mention the linked retailer -- its full company name, or the first word of
+// it ("FreshKart" in "FreshKart Supermarkets") -- so the Admin is warned
+// before (and after) opening the call. A warning only; it never blocks.
+const PUBLIC_FIELDS = [["title", "Title"], ["description", "Description"], ["benefits", "What the programme offers"], ["eligibility", "Who can apply"], ["public_retailer_label", "Public description of the retailer"]];
+function retailerNameMentions(opp) {
+  const company = String(opp.client_company || opp.client_name || "").trim();
+  if (!company) return [];
+  const first = company.split(/\s+/)[0];
+  const names = [...new Set([company, first.length >= 4 ? first : null].filter(Boolean))];
+  const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`(^|[^\\p{L}\\p{N}])(${names.map(esc).join("|")})(?=$|[^\\p{L}\\p{N}])`, "iu");
+  return PUBLIC_FIELDS.filter(([k]) => opp[k] && re.test(String(opp[k]))).map(([, label]) => label);
+}
+async function withAnonymityCheck(opp) {
+  if (!opp) return opp;
+  let row = opp;
+  if (opp.client_id && opp.client_company === undefined) {
+    const { rows } = await pool.query("SELECT company, name FROM users WHERE id = $1", [opp.client_id]);
+    row = { ...opp, client_company: rows[0]?.company || null, client_name: rows[0]?.name || null };
+  }
+  const mentions = retailerNameMentions(row);
+  return { ...opp, retailer_name_mentions: mentions };
+}
+
 // GET /api/admin/rise/opportunities
 router.get("/opportunities", async (req, res, next) => {
   try {
     const { rows } = await pool.query(
       `SELECT o.*, to_char(o.deadline, 'YYYY-MM-DD') AS deadline,
-              (SELECT COUNT(*)::int FROM rise_applications a WHERE a.opportunity_id = o.id) AS application_count
-       FROM rise_opportunities o ORDER BY o.created_at DESC`
+              (SELECT COUNT(*)::int FROM rise_applications a WHERE a.opportunity_id = o.id) AS application_count,
+              c.company AS client_company, c.name AS client_name
+       FROM rise_opportunities o LEFT JOIN users c ON c.id = o.client_id
+       ORDER BY o.created_at DESC`
     );
-    res.json({ opportunities: rows });
+    res.json({ opportunities: await Promise.all(rows.map(withAnonymityCheck)) });
   } catch (err) {
     next(err);
   }
@@ -29,14 +56,14 @@ router.get("/opportunities", async (req, res, next) => {
 // before it goes live.
 router.post("/opportunities", async (req, res, next) => {
   try {
-    const { title, description, benefits, eligibility, deadline } = req.body || {};
+    const { title, description, benefits, eligibility, deadline, publicRetailerLabel } = req.body || {};
     if (!title) return res.status(400).json({ error: "Title is required." });
     const { rows } = await pool.query(
-      `INSERT INTO rise_opportunities (title, description, benefits, eligibility, deadline, is_open)
-       VALUES ($1,$2,$3,$4,$5,false) RETURNING *, to_char(deadline, 'YYYY-MM-DD') AS deadline`,
-      [String(title).trim(), clean(description), clean(benefits), clean(eligibility), clean(deadline)]
+      `INSERT INTO rise_opportunities (title, description, benefits, eligibility, deadline, public_retailer_label, is_open)
+       VALUES ($1,$2,$3,$4,$5,$6,false) RETURNING *, to_char(deadline, 'YYYY-MM-DD') AS deadline`,
+      [String(title).trim(), clean(description), clean(benefits), clean(eligibility), clean(deadline), clean(publicRetailerLabel)]
     );
-    res.status(201).json({ opportunity: rows[0] });
+    res.status(201).json({ opportunity: await withAnonymityCheck(rows[0]) });
   } catch (err) {
     next(err);
   }
@@ -46,17 +73,17 @@ router.post("/opportunities", async (req, res, next) => {
 // (ST6). Title is required; the other fields are optional and can be cleared.
 router.put("/opportunities/:id", async (req, res, next) => {
   try {
-    const { title, description, benefits, eligibility, deadline } = req.body || {};
+    const { title, description, benefits, eligibility, deadline, publicRetailerLabel } = req.body || {};
     if (!title || !String(title).trim()) return res.status(400).json({ error: "Title is required." });
     const { rows } = await pool.query(
       `UPDATE rise_opportunities
-       SET title = $1, description = $2, benefits = $3, eligibility = $4, deadline = $5
-       WHERE id = $6
+       SET title = $1, description = $2, benefits = $3, eligibility = $4, deadline = $5, public_retailer_label = $6
+       WHERE id = $7
        RETURNING *, to_char(deadline, 'YYYY-MM-DD') AS deadline`,
-      [String(title).trim(), clean(description), clean(benefits), clean(eligibility), clean(deadline), Number(req.params.id)]
+      [String(title).trim(), clean(description), clean(benefits), clean(eligibility), clean(deadline), clean(publicRetailerLabel), Number(req.params.id)]
     );
     if (!rows[0]) return res.status(404).json({ error: "Opportunity not found." });
-    res.json({ opportunity: rows[0] });
+    res.json({ opportunity: await withAnonymityCheck(rows[0]) });
   } catch (err) {
     next(err);
   }
@@ -78,20 +105,24 @@ router.put("/opportunities/:id/client", async (req, res, next) => {
       [clientId || null, Number(req.params.id)]
     );
     if (!rows[0]) return res.status(404).json({ error: "Opportunity not found." });
-    res.json({ opportunity: rows[0] });
+    res.json({ opportunity: await withAnonymityCheck(rows[0]) });
   } catch (err) {
     next(err);
   }
 });
 
-// PUT /api/admin/rise/opportunities/:id/open — mark this one open and
-// every other one closed. Only one opportunity accepts applications at a
-// time in this v1 (see rise.js POST /apply).
+// PUT /api/admin/rise/opportunities/:id/open -- open this call for
+// applications. DR1-24: several calls can be open at once; opening one no
+// longer closes the others (each closes on its own, below). The response
+// repeats the anonymity check (DR1-25) so the Admin is warned at the moment
+// the call goes public.
 router.put("/opportunities/:id/open", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    await pool.query("UPDATE rise_opportunities SET is_open = (id = $1)", [id]);
-    res.json({ ok: true });
+    const { rows } = await pool.query("UPDATE rise_opportunities SET is_open = true WHERE id = $1 RETURNING *", [id]);
+    if (!rows[0]) return res.status(404).json({ error: "Opportunity not found." });
+    const checked = await withAnonymityCheck(rows[0]);
+    res.json({ ok: true, retailerNameMentions: checked.retailer_name_mentions });
   } catch (err) {
     next(err);
   }
@@ -141,11 +172,22 @@ router.put("/applications/:id/riv-review", async (req, res, next) => {
     if (!["approved", "rejected"].includes(status)) {
       return res.status(400).json({ error: "status must be \"approved\" or \"rejected\"." });
     }
+    // DR1-29: optional note when approving (the jury sees it); a reason is
+    // required when rejecting (RIV only -- a juror never sees a rejected
+    // application). Every review is also kept in rise_application_reviews.
+    const note = clean(req.body && req.body.note);
+    if (status === "rejected" && !note) {
+      return res.status(400).json({ error: "Give a reason for rejecting this application." });
+    }
     const { rows } = await pool.query(
-      "UPDATE rise_applications SET riv_status = $1, riv_reviewed_by = $2, riv_reviewed_at = now() WHERE id = $3 RETURNING *",
-      [status, req.user.id, req.params.id]
+      "UPDATE rise_applications SET riv_status = $1, riv_reviewed_by = $2, riv_reviewed_at = now(), riv_note = $3 WHERE id = $4 RETURNING *",
+      [status, req.user.id, note, req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: "Application not found." });
+    await pool.query(
+      "INSERT INTO rise_application_reviews (application_id, status, note, reviewed_by) VALUES ($1,$2,$3,$4)",
+      [rows[0].id, status, note, req.user.id]
+    );
     res.json({ application: rows[0] });
   } catch (err) {
     next(err);
@@ -188,10 +230,17 @@ router.get("/applications/:id", async (req, res, next) => {
        WHERE s.application_id = $1 ORDER BY s.updated_at DESC`,
       [id]
     );
+    const { rows: reviewRows } = await pool.query(
+      `SELECT r.id, r.status, r.note, r.created_at, u.name AS reviewed_by_name
+       FROM rise_application_reviews r LEFT JOIN users u ON u.id = r.reviewed_by
+       WHERE r.application_id = $1 ORDER BY r.created_at DESC`,
+      [id]
+    );
     res.json({
       application,
       scores: scoreRows.map((r) => ({ ...r, total: Number(r.total) })),
       criteria: CRITERIA,
+      reviews: reviewRows, // DR1-29
     });
   } catch (err) {
     next(err);
