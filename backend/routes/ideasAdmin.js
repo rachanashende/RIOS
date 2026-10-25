@@ -142,6 +142,48 @@ router.put("/users/:id/client", async (req, res, next) => {
   }
 });
 
+// DR1-17: PUT /api/admin/ideas/users/:id/role { role } -- switch a login
+// between Employee and Jury without deleting and recreating it (e.g. a jury
+// member created as an Employee by mistake). Refused once the login has
+// activity in its current role, so nobody's ideas or ratings end up owned by
+// someone in the wrong role.
+router.put("/users/:id/role", async (req, res, next) => {
+  try {
+    const { role } = req.body || {};
+    if (!["junior_employee", "jury"].includes(role)) {
+      return res.status(400).json({ error: "Role must be 'junior_employee' (Employee) or 'jury'." });
+    }
+    const { rows: userRows } = await pool.query(
+      "SELECT id, name, role FROM users WHERE id = $1 AND role IN ('junior_employee','jury')",
+      [req.params.id]
+    );
+    const user = userRows[0];
+    if (!user) return res.status(404).json({ error: "Employee or jury login not found." });
+    if (user.role === role) return res.json({ ok: true, role });
+
+    if (user.role === "junior_employee") {
+      const { rows } = await pool.query(
+        `SELECT (SELECT COUNT(*)::int FROM ideas WHERE submitted_by = $1) AS ideas,
+                (SELECT COUNT(*)::int FROM build_projects WHERE employee_user_id = $1) AS projects`,
+        [user.id]
+      );
+      if (rows[0].ideas || rows[0].projects) {
+        const what = [rows[0].ideas ? `${rows[0].ideas} idea${rows[0].ideas === 1 ? "" : "s"}` : null, rows[0].projects ? `${rows[0].projects} Build project${rows[0].projects === 1 ? "" : "s"}` : null].filter(Boolean).join(" and ");
+        return res.status(409).json({ error: `${user.name} already has ${what} as an Employee, so the role can't be changed. Create a separate jury login instead.` });
+      }
+    } else {
+      const { rows } = await pool.query("SELECT COUNT(*)::int AS n FROM idea_ratings WHERE jury_user_id = $1", [user.id]);
+      if (rows[0].n) {
+        return res.status(409).json({ error: `${user.name} has already rated ${rows[0].n} idea${rows[0].n === 1 ? "" : "s"} as a jury member, so the role can't be changed. Create a separate employee login instead.` });
+      }
+    }
+    await pool.query("UPDATE users SET role = $1 WHERE id = $2", [role, user.id]);
+    res.json({ ok: true, role });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.delete("/users/:id", async (req, res, next) => {
   try {
     await pool.query("DELETE FROM users WHERE id = $1 AND role IN ('junior_employee','jury')", [req.params.id]);
@@ -164,7 +206,7 @@ router.get("/users/:id/ideas", async (req, res, next) => {
       [req.params.id]
     );
     const employee = userRows[0];
-    if (!employee) return res.status(404).json({ error: "Junior employee not found." });
+    if (!employee) return res.status(404).json({ error: "Employee not found." });
 
     const { rows } = await pool.query(
       `SELECT i.id, i.question_id, i.title, i.description, i.created_at,
@@ -183,6 +225,57 @@ router.get("/users/:id/ideas", async (req, res, next) => {
       question: questionById(row.question_id),
     }));
     res.json({ employee, ideas });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DR1-20: PUT /api/admin/ideas/:id/text { title, description } -- the RIV
+// Admin corrects typos in an idea, including one already locked because the
+// jury has started rating it. Only the title and description can change; the
+// idea is marked "Edited by RIV" and the old/new text goes into idea_edits.
+router.put("/:id/text", async (req, res, next) => {
+  const title = String((req.body && req.body.title) || "").trim();
+  const description = String((req.body && req.body.description) || "").trim() || null;
+  if (!title) return res.status(400).json({ error: "An idea needs a title." });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: cur } = await client.query("SELECT id, title, description FROM ideas WHERE id = $1 FOR UPDATE", [req.params.id]);
+    if (!cur.length) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Idea not found." }); }
+    const before = cur[0];
+    if (before.title === title && (before.description || null) === description) {
+      await client.query("ROLLBACK");
+      return res.json({ ok: true, unchanged: true });
+    }
+    await client.query(
+      "INSERT INTO idea_edits (idea_id, edited_by, old_title, old_description, new_title, new_description) VALUES ($1,$2,$3,$4,$5,$6)",
+      [before.id, req.user.id, before.title, before.description, title, description]
+    );
+    const { rows } = await client.query(
+      "UPDATE ideas SET title = $1, description = $2, riv_edited_at = now(), riv_edited_by = $3 WHERE id = $4 RETURNING id, title, description, riv_edited_at",
+      [title, description, req.user.id, before.id]
+    );
+    await client.query("COMMIT");
+    res.json({ idea: rows[0] });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(err);
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/admin/ideas/:id/edits -- the edit history for one idea (DR1-20)
+router.get("/:id/edits", async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT e.id, e.old_title, e.old_description, e.new_title, e.new_description, e.created_at, u.name AS edited_by_name
+       FROM idea_edits e LEFT JOIN users u ON u.id = e.edited_by
+       WHERE e.idea_id = $1 ORDER BY e.created_at DESC`,
+      [req.params.id]
+    );
+    res.json({ edits: rows });
   } catch (err) {
     next(err);
   }

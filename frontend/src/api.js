@@ -230,6 +230,8 @@ export const api = {
   assignIdeasUserClient: (id, clientId) => request(`/admin/ideas/users/${id}/client`, { method: "PUT", body: { clientId } }),
   createIdeasUser: (payload) => request("/admin/ideas/users", { method: "POST", body: payload }),
   deleteIdeasUser: (id) => request(`/admin/ideas/users/${id}`, { method: "DELETE" }),
+  // DR1-17: switch a login between Employee and Jury
+  setIdeasUserRole: (id, role) => request(`/admin/ideas/users/${id}/role`, { method: "PUT", body: { role } }),
   getEmployeeIdeas: (id) => request(`/admin/ideas/users/${id}/ideas`),
 
   // ---- Rise.RIV (public + jury) — uses its own isolated token ------
@@ -425,6 +427,9 @@ export const api = {
 
   // ---- Build.RIV: unblocking endpoints added to the owning modules (R21/R22)
   selectIdeaForBuild: (ideaId) => ideasAdminRequest(`/admin/ideas/${ideaId}/select-for-build`, { method: "PUT" }),
+  // DR1-20: RIV Admin corrects an idea's title/description (even once locked), with history
+  editIdeaText: (ideaId, payload) => ideasAdminRequest(`/admin/ideas/${ideaId}/text`, { method: "PUT", body: payload }),
+  getIdeaEdits: (ideaId) => ideasAdminRequest(`/admin/ideas/${ideaId}/edits`),
   decideRiseApplication: (applicationId, decision) => request(`/admin/rise/applications/${applicationId}/decision`, { method: "PUT", body: { decision } }),
   reviewRiseApplication: (applicationId, status) => request(`/admin/rise/applications/${applicationId}/riv-review`, { method: "PUT", body: { status } }),
   setRiseOpportunityClient: (opportunityId, clientId) => request(`/admin/rise/opportunities/${opportunityId}/client`, { method: "PUT", body: { clientId } }),
