@@ -60,7 +60,7 @@ function ApplicationDetail({ id, onBack, onChanged }) {
   if (error && !data) return <div>{backBtn}<div style={{ fontFamily: FONT, fontSize: 13, color: BRAND.coralDark }}>{error}</div></div>;
   if (!data) return <div>{backBtn}<div style={{ fontFamily: FONT, fontSize: 13, color: "#9B958F" }}>Loading…</div></div>;
 
-  const { application: a, scores, criteria } = data;
+  const { application: a, scores, criteria, files = [] } = data;
   const avg = scores.length ? scores.reduce((s, r) => s + r.total, 0) / scores.length : null;
   const extra = a.extra && typeof a.extra === "object" ? Object.entries(a.extra).filter(([, v]) => v !== "" && v != null) : [];
   const btnStyle = (active) => ({ fontFamily: FONT, fontSize: 12, fontWeight: 600, padding: "7px 12px", borderRadius: 8, border: `1px solid ${BRAND.line}`, background: active ? BRAND.ink : "#fff", color: active ? "#fff" : BRAND.ink, cursor: busy ? "not-allowed" : "pointer" });
@@ -118,7 +118,18 @@ function ApplicationDetail({ id, onBack, onChanged }) {
         <Field label="Website">{a.website}</Field>
         <Field label="Sector">{a.sector}</Field>
         <Field label="Stage">{a.stage}</Field>
+        <div style={{ gridColumn: "1 / -1" }}><Field label="Proposed solution">{a.proposed_solution}</Field></div>
         <div style={{ gridColumn: "1 / -1" }}><Field label="Pitch">{a.pitch}</Field></div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <Field label="Pitch deck / solution document">
+            {files.length ? files.map((f) => (
+              <button key={f.id} onClick={() => api.downloadRiseApplicationFile(a.id, f.id, f.file_name).catch((e) => setError(e.message))}
+                style={{ display: "inline-block", marginRight: 10, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: FONT, fontSize: 13.5, color: BRAND.blue, textDecoration: "underline" }}>
+                {f.file_name} ({(f.size_bytes / (1024 * 1024)).toFixed(1)} MB)
+              </button>
+            )) : null}
+          </Field>
+        </div>
         {extra.map(([k, v]) => (
           <div key={k} style={{ gridColumn: "1 / -1" }}><Field label={k}>{typeof v === "object" ? JSON.stringify(v) : String(v)}</Field></div>
         ))}
