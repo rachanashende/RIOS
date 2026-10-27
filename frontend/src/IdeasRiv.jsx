@@ -55,6 +55,24 @@ function fmtMoneyRange(low, high) {
   return a === b ? "~" + a : a + " – " + b;
 }
 
+// DR1-20: small marker shown wherever an idea's text appears once the RIV
+// Admin has corrected it.
+function EditedByRiv({ at }) {
+  if (!at) return null;
+  return (
+    <span title={`Text corrected by RIV on ${new Date(at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`}
+      style={{ fontFamily: "'Poppins',sans-serif", fontSize: 10.5, fontWeight: 600, color: "#9B958F", marginLeft: 8, whiteSpace: "nowrap" }}>
+      Edited by RIV
+    </span>
+  );
+}
+
+// DR1-18: "FreshKart Supermarkets'" not "FreshKart Supermarkets's"
+function possessive(name) {
+  const n = String(name || "").trim();
+  return /s$/i.test(n) ? `${n}'` : `${n}'s`;
+}
+
 function uid(prefix) {
   return prefix + "-" + Math.random().toString(36).slice(2, 9);
 }
@@ -198,7 +216,7 @@ function IdeasNavBar({ view, setView, session, onLogout }) {
           <div style={{ textAlign: "right" }}>
             <div style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: BRAND.ink }}>{session.name}</div>
             <div style={{ fontFamily: FONT, fontSize: 10.5, color: "#9B958F" }}>
-              {session.role === "jury" ? "Leader · Jury member" : session.role === "admin" ? "Admin" : "Junior Employee"}
+              {session.role === "jury" ? "Leader · Jury member" : session.role === "admin" ? "Admin" : "Employee"}
             </div>
           </div>
           <button onClick={onLogout} title="Log out" style={{
@@ -254,10 +272,10 @@ function LandingView({ session, setView, opportunities, ideas, loading, error, s
           </h1>
           <p style={{ fontFamily: SERIF, fontStyle: "italic", fontSize: "clamp(15px,1.6vw,18px)", color: "#D8D3CF", maxWidth: 600, marginTop: 18, lineHeight: 1.6 }}>
             {sourceClient
-              ? `These five opportunities are the current Top 5 from ${sourceClient.company || sourceClient.name}'s scored audit. Junior employees submit ideas against each one; leaders sit as jury and rate them.`
+              ? `These five opportunities are the current Top 5 from ${possessive(sourceClient.company || sourceClient.name)} scored audit. Employees submit ideas against each one; leaders sit as jury and rate them.`
               : unassigned
                 ? "Your account isn't linked to a client yet — please ask RIV to assign you, and your client's opportunities will appear here."
-                : "Junior employees submit ideas against each opportunity; leaders sit as jury and rate them."}
+                : "Employees submit ideas against each opportunity; leaders sit as jury and rate them."}
           </p>
         </div>
       </div>
@@ -488,17 +506,30 @@ function MyIdeasView({ myIdeas, loading, error, onChanged }) {
           ) : (
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginTop: 3 }}>
-                <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14.5, color: BRAND.ink }}>{idea.title}</div>
-                {idea.status === "published" ? <Pill tone="green">Published — one of the top ideas</Pill>
-                  : idea.status === "under_review" ? <Pill tone="blue">Under jury review</Pill>
-                  : <Pill tone="coral">Submitted</Pill>}
+                <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14.5, color: BRAND.ink }}>{idea.title}<EditedByRiv at={idea.riv_edited_at} /></div>
+                <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 6 }}>
+                  {idea.status === "published" ? <Pill tone="green">Published — one of the top ideas</Pill>
+                    : idea.status === "under_review" ? <Pill tone="blue">Under jury review</Pill>
+                    : <Pill tone="coral">Submitted</Pill>}
+                  {/* DR1-22: tell the employee her idea moved to Build */}
+                  {idea.build && (
+                    <Pill tone="green">
+                      Selected for Build{idea.build.code ? ` · ${idea.build.code}` : ""}{idea.build.stageLabel ? ` · ${idea.build.stageLabel}` : ""}
+                    </Pill>
+                  )}
+                </div>
               </div>
               {idea.description && <div style={{ fontFamily: FONT, fontSize: 12.5, color: "#7A746F", marginTop: 4, lineHeight: 1.5 }}>{idea.description}</div>}
               <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", marginTop: 8 }}>
                 Submitted {idea.created_at ? new Date(idea.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : ""}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
-                {idea.locked ? (
+                {idea.status === "published" ? (
+                  // DR1-21: judging is over for this idea -- say so, with its rank (never scores)
+                  <span style={{ fontFamily: FONT, fontSize: 12, color: "#1B7A5A", fontWeight: 600 }}>
+                    Judging complete{idea.rank ? ` — ranked #${idea.rank.rank}${idea.rank.tied ? " (tied)" : ""} of ${idea.rank.of}` : ""}
+                  </span>
+                ) : idea.locked ? (
                   <span style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F" }}>Locked while the jury reviews it</span>
                 ) : (
                   <>
@@ -558,7 +589,7 @@ function JuryListView({ opportunities, ideas, myRatings, loading, error, onOpenI
       <ErrorBanner text={error} />
 
       {allGroups.length === 0 && !error && (
-        <EmptyState icon={ClipboardList} title="No ideas submitted yet" text="Once junior employees submit ideas against an opportunity, they'll show up here for the jury to rate." />
+        <EmptyState icon={ClipboardList} title="No ideas submitted yet" text="Once employees submit ideas against an opportunity, they'll show up here for the jury to rate." />
       )}
 
       {allGroups.map(({ opp, ideas: ideaList, earlier: isEarlier }) => (
@@ -569,7 +600,7 @@ function JuryListView({ opportunities, ideas, myRatings, loading, error, onOpenI
             return (
               <Card key={idea.id} style={{ padding: 16, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 220 }}>
-                  <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14, color: BRAND.ink }}>{idea.title}</div>
+                  <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14, color: BRAND.ink }}>{idea.title}<EditedByRiv at={idea.riv_edited_at} /></div>
                   <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 4 }}>
                     By {idea.submitted_by_name}{idea.rating_count != null && <> · {idea.rating_count} jury rating{idea.rating_count !== 1 ? "s" : ""}</>}
                   </div>
@@ -630,7 +661,7 @@ function CriteriaRatingView({ idea, existingRating, onSaveRating, onBack }) {
       </button>
 
       <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{opp?.module} · {opp?.submodule}</div>
-      <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 21, color: BRAND.ink, marginTop: 4 }}>{idea.title}</div>
+      <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 21, color: BRAND.ink, marginTop: 4 }}>{idea.title}<EditedByRiv at={idea.riv_edited_at} /></div>
       {idea.description && <div style={{ fontFamily: FONT, fontSize: 13, color: "#7A746F", marginTop: 6, lineHeight: 1.55 }}>{idea.description}</div>}
       <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 6 }}>Submitted by {idea.submitted_by_name}</div>
 
@@ -713,7 +744,7 @@ export function LeaderboardView({ leaderboard, loading, error, onOpenIdea, isAdm
             }}>{r.awaiting ? "–" : (r.rank ?? i + 1)}</div>
             <div>
               <div style={{ fontFamily: FONT, fontSize: 11, color: "#B7B2AE", fontWeight: 600 }}>{r.question?.module} · {r.question?.submodule}</div>
-              <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14.5, color: BRAND.ink, marginTop: 2 }}>{r.title}</div>
+              <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 14.5, color: BRAND.ink, marginTop: 2 }}>{r.title}<EditedByRiv at={r.riv_edited_at} /></div>
               <div style={{ fontFamily: FONT, fontSize: 11.5, color: "#9B958F", marginTop: 4 }}>By {r.submitted_by_name}{r.rating_count != null && <> · {r.rating_count} jury rating{r.rating_count !== 1 ? "s" : ""}</>}</div>
             </div>
           </div>
@@ -783,7 +814,31 @@ function MyBuildPicksPanel() {
    backend enforces blind scoring everywhere else (a juror never sees
    this), but the admin view is explicitly allowed to see every rating.
    ========================================================================= */
-function IdeaRatingsDetailView({ idea, ratings, loading, error, onBack }) {
+function IdeaRatingsDetailView({ idea, ratings, loading, error, onBack, onEdited }) {
+  // DR1-20: the RIV Admin can correct typos in the title/description, even
+  // after the jury has started rating (the idea is locked to its author).
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({ title: idea.title, description: idea.description || "" });
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [edits, setEdits] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    api.getIdeaEdits(idea.id).then((d) => { if (alive) setEdits(d.edits || []); }).catch(() => {});
+    return () => { alive = false; };
+  }, [idea.id, idea.riv_edited_at]);
+  async function saveText() {
+    if (!draft.title.trim()) { setEditError("An idea needs a title."); return; }
+    setSaving(true); setEditError("");
+    try {
+      const d = await api.editIdeaText(idea.id, { title: draft.title, description: draft.description });
+      setEditing(false);
+      if (d.idea && onEdited) onEdited(d.idea);
+    } catch (e) { setEditError(e.message || "Couldn't save."); }
+    finally { setSaving(false); }
+  }
+  const field = { width: "100%", fontFamily: FONT, fontSize: 13, border: `1px solid ${BRAND.line}`, borderRadius: 8, padding: "9px 11px", boxSizing: "border-box", background: BRAND.cream, color: BRAND.ink };
+  const smallBtn = { fontFamily: FONT, fontSize: 12, fontWeight: 600, padding: "6px 11px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink };
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: "36px 24px 100px" }}>
       <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: FONT, fontSize: 12.5, color: "#9B958F", background: "none", border: "none", cursor: "pointer", marginBottom: 18 }}>
@@ -797,6 +852,39 @@ function IdeaRatingsDetailView({ idea, ratings, loading, error, onBack }) {
         {/* Build.RIV's "Create from idea" asks for this raw ID with no lookup of its own -- shown here so an admin never has to guess it. */}
         <span style={{ marginLeft: 8, fontFamily: "monospace", color: "#B7B2AE" }}>· Idea ID: {idea.id}</span>
       </div>
+      {idea.description && !editing && <div style={{ fontFamily: FONT, fontSize: 13, color: "#7A746F", marginTop: 10, lineHeight: 1.5 }}>{idea.description}</div>}
+
+      {/* DR1-20: correct typos without reopening the idea to the employee */}
+      {editing ? (
+        <Card style={{ padding: 16, marginTop: 14 }}>
+          <div style={{ fontFamily: FONT, fontSize: 12, color: "#9B958F", marginBottom: 8 }}>Fix spelling or wording only. The jury will see "Edited by RIV" on this idea, and the original text is kept in its history.</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} style={field} placeholder="Idea title" />
+            <textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} rows={4} style={{ ...field, resize: "vertical" }} placeholder="Description" />
+            {editError && <ErrorBanner text={editError} />}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button disabled={saving} onClick={saveText} style={{ ...smallBtn, background: BRAND.ink, color: "#fff", border: "none" }}>{saving ? "Saving…" : "Save correction"}</button>
+              <button disabled={saving} onClick={() => { setEditing(false); setDraft({ title: idea.title, description: idea.description || "" }); setEditError(""); }} style={smallBtn}>Cancel</button>
+            </div>
+          </div>
+        </Card>
+      ) : (
+        <div style={{ marginTop: 12 }}>
+          <button onClick={() => { setDraft({ title: idea.title, description: idea.description || "" }); setEditing(true); }} style={smallBtn}>Correct spelling</button>
+        </div>
+      )}
+      {edits.length > 0 && (
+        <details style={{ marginTop: 12, fontFamily: FONT, fontSize: 12, color: "#7A746F" }}>
+          <summary style={{ cursor: "pointer" }}>Edit history ({edits.length})</summary>
+          {edits.map((e) => (
+            <div key={e.id} style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${BRAND.line}`, lineHeight: 1.5 }}>
+              <div style={{ color: "#9B958F" }}>{new Date(e.created_at).toLocaleString()} · {e.edited_by_name || "RIV"}</div>
+              {e.old_title !== e.new_title && <div>Title: "{e.old_title}" → "{e.new_title}"</div>}
+              {(e.old_description || "") !== (e.new_description || "") && <div>Description: "{e.old_description || ""}" → "{e.new_description || ""}"</div>}
+            </div>
+          ))}
+        </details>
+      )}
 
       {loading && <Spinner label="Loading ratings…" />}
       <ErrorBanner text={error} />
@@ -1077,6 +1165,7 @@ function IdeasRivMain({ session, onLogout }) {
           <IdeaRatingsDetailView
             idea={activeLeaderboardIdea} ratings={ideaRatings} loading={loadingIdeaRatings} error={error}
             onBack={() => setActiveLeaderboardIdea(null)}
+            onEdited={(updated) => { setActiveLeaderboardIdea((cur) => (cur ? { ...cur, ...updated } : cur)); refreshLeaderboard(); }}
           />
         )}
 

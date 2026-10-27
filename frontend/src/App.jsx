@@ -873,6 +873,12 @@ function IdeasTeamPanel({ clients }) {
   async function createUser(e) {
     e.preventDefault();
     if (!selectedClientId) { setError("Choose a client above first — every employee and jury login belongs to one client."); return; }
+    // DR1-17: warn when the same person already has a login in the other list
+    // (the classic slip: creating a jury member while the toggle is still on Employee).
+    const sameName = (u) => (u.name || "").trim().toLowerCase() === form.name.trim().toLowerCase();
+    const otherList = form.role === "jury" ? (employees || []) : (jury || []);
+    const twin = otherList.find(sameName);
+    if (twin && !confirm(`${twin.name} already has ${form.role === "jury" ? "an Employee" : "a Jury"} login (${twin.email}).\n\nCreate a separate ${form.role === "jury" ? "Jury" : "Employee"} login as well?\n\nIf the first one was a mistake, cancel and use "Make ${form.role === "jury" ? "jury" : "employee"}" on it instead.`)) return;
     setError(""); showNotice(""); setBusy(true);
     try {
       await api.createIdeasUser({ ...form, clientId: Number(selectedClientId) });
@@ -887,6 +893,17 @@ function IdeasTeamPanel({ clients }) {
     try {
       const r = await api.assignIdeasUserClient(userId, Number(clientId));
       if (r?.ideasLeftBehind) showNotice(`Moved. ${r.ideasLeftBehind} idea${r.ideasLeftBehind === 1 ? "" : "s"} this person submitted earlier stay with the previous client's Ideathon, with their ratings.`);
+      refresh();
+    } catch (err) { setError(err.message); }
+  }
+  // DR1-17: fix a wrong role without deleting the login
+  async function changeRole(u, role) {
+    const label = role === "jury" ? "Jury" : "Employee";
+    if (!confirm(`Change ${u.name} to ${label}? Their email and password stay the same; they'll see the ${label} screens next time they log in.`)) return;
+    setError("");
+    try {
+      await api.setIdeasUserRole(u.id, role);
+      showNotice(`${u.name} is now ${role === "jury" ? "a Jury member" : "an Employee"}.`);
       refresh();
     } catch (err) { setError(err.message); }
   }
@@ -948,6 +965,7 @@ function IdeasTeamPanel({ clients }) {
                       <button onClick={() => toggleEmployeeIdeas(u.id)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "7px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: expandedEmployeeId === u.id ? BRAND.ink : "#fff", color: expandedEmployeeId === u.id ? "#fff" : BRAND.ink }}>
                         {expandedEmployeeId === u.id ? "Hide" : "View submissions"}
                       </button>
+                      <button onClick={() => changeRole(u, "jury")} title="Change this login to a jury member" style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "7px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink }}>Make jury</button>
                       <button onClick={() => adminResetPassword(u, showNotice, setError)} title="Reset password" style={resetBtnStyle("7px 9px")}><KeyRound size={13} /></button>
                       <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
                     </div>
@@ -992,8 +1010,11 @@ function IdeasTeamPanel({ clients }) {
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email} {u.company ? `· ${u.company}` : ""}</div>
                     <ClientTag user={u} clients={clients} onAssign={assignClient} />
                   </div>
-                  <button onClick={() => adminResetPassword(u, showNotice, setError)} title="Reset password" style={resetBtnStyle("7px 9px")}><KeyRound size={13} /></button>
-                      <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={() => changeRole(u, "junior_employee")} title="Change this login to an employee" style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "7px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink }}>Make employee</button>
+                    <button onClick={() => adminResetPassword(u, showNotice, setError)} title="Reset password" style={resetBtnStyle("7px 9px")}><KeyRound size={13} /></button>
+                    <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1014,7 +1035,7 @@ function IdeasTeamPanel({ clients }) {
             <input placeholder="Temporary password (min. 8 characters)" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: BRAND.coralDark, marginTop: 10 }}>{error}</div>}
             <Notice text={notice} />
-            <button type="submit" disabled={busy} style={{ width: "100%", marginTop: 14, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>Create login</button>
+            <button type="submit" disabled={busy} style={{ width: "100%", marginTop: 14, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>{form.role === "jury" ? "Create jury login" : "Create employee login"}</button>
           </form>
         </div>
       </div>

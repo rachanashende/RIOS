@@ -3,6 +3,7 @@ import pool from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { QUESTIONS, computeScores } from "../lib/scoring.js";
 import { CRITERIA, clamp5, averageScore } from "../lib/ideasScoring.js";
+import { STAGE_LABELS } from "../lib/buildWorkflow.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -107,7 +108,7 @@ router.get("/", requireRole("junior_employee", "jury", "admin"), async (req, res
     if (!clientId) return res.json({ ideas: [] });
     const params = [clientId];
     let sql = `
-      SELECT i.id, i.question_id, i.title, i.description, i.created_at,
+      SELECT i.id, i.question_id, i.title, i.description, i.created_at, i.riv_edited_at,
              u.name AS submitted_by_name,
              COUNT(r.id)::int AS rating_count,
              AVG(r.score) AS avg_score
@@ -153,24 +154,35 @@ router.get("/", requireRole("junior_employee", "jury", "admin"), async (req, res
 router.get("/mine", requireRole("junior_employee", "admin"), async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, question_id, title, description, created_at,
-              EXISTS (SELECT 1 FROM idea_ratings r WHERE r.idea_id = ideas.id) AS locked,
-              source_client_id
-       FROM ideas
-       WHERE submitted_by = $1
-       ORDER BY created_at DESC`,
+      `SELECT i.id, i.question_id, i.title, i.description, i.created_at, i.riv_edited_at,
+              EXISTS (SELECT 1 FROM idea_ratings r WHERE r.idea_id = i.id) AS locked,
+              i.source_client_id, i.selected_for_build_at,
+              p.code AS build_code, p.stage AS build_stage, p.status AS build_status
+       FROM ideas i
+       LEFT JOIN build_project_sources s ON s.source_type = 'idea' AND s.source_id = i.id
+       LEFT JOIN build_projects p ON p.id = s.project_id
+       WHERE i.submitted_by = $1
+       ORDER BY i.created_at DESC`,
       [req.user.id]
     );
     // I11: give the employee an outcome status -- never any scores.
     //   Submitted -> Under review (a juror has started rating) -> Published (top-3 rank)
-    const publishedIds = new Set();
+    // DR1-21: a published idea also carries its rank ("ranked #1 of 3") --
+    // the rank only, still no scores. DR1-22: plus whether it was selected for
+    // Build and, once a project exists, its code and stage.
+    const published = new Map(); // idea id -> { rank, of }
     for (const cid of new Set(rows.map((r) => r.source_client_id).filter(Boolean))) {
-      (await rankClientIdeas(cid)).filter((r) => r.published).forEach((r) => publishedIds.add(r.id));
+      const ranked = (await rankClientIdeas(cid)).filter((r) => r.rank != null);
+      ranked.filter((r) => r.published).forEach((r) => published.set(r.id, { rank: r.rank, of: ranked.length, tied: !!r.tied }));
     }
     res.json({
-      ideas: rows.map(({ source_client_id, ...row }) => ({
+      ideas: rows.map(({ source_client_id, selected_for_build_at, build_code, build_stage, build_status, ...row }) => ({
         ...row,
-        status: publishedIds.has(row.id) ? "published" : row.locked ? "under_review" : "submitted",
+        status: published.has(row.id) ? "published" : row.locked ? "under_review" : "submitted",
+        rank: published.get(row.id) || null,
+        build: selected_for_build_at
+          ? { selectedAt: selected_for_build_at, code: build_code || null, stage: build_stage || null, stageLabel: build_stage ? (STAGE_LABELS[build_stage] || build_stage) : null, status: build_status || null }
+          : null,
         question: questionById(row.question_id),
       })),
     });
@@ -374,9 +386,10 @@ router.post("/:id/ratings", requireRole("jury", "admin"), async (req, res, next)
 // (default 2, so one juror's score alone can never publish an idea). Set IDEAS_MIN_RATINGS to change it.
 const MIN_RATINGS = Math.max(1, Number(process.env.IDEAS_MIN_RATINGS) || 2);
 
-async function rankClientIdeas(clientId) {
+// Exported for Build's Ready for Build list (DR1-23), which shows each idea's jury average and rank.
+export async function rankClientIdeas(clientId) {
   const { rows } = await pool.query(`
-    SELECT i.id, i.question_id, i.title, i.description, i.created_at, i.selected_for_build_at,
+    SELECT i.id, i.question_id, i.title, i.description, i.created_at, i.selected_for_build_at, i.riv_edited_at,
            u.name AS submitted_by_name,
            COUNT(r.id)::int AS rating_count,
            AVG(r.score) AS avg_score

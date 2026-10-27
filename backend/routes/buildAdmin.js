@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs";
 import pool from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { QUESTIONS } from "../lib/scoring.js";
+import { rankClientIdeas } from "./ideas.js";
 import { STAGES } from "../lib/buildWorkflow.js";
 import { notifyBuild, recipientsForProject } from "../lib/buildNotify.js";
 import { sendBuildLoginInviteEmail } from "../lib/email.js";
@@ -178,12 +179,23 @@ router.get("/ready-for-build", adminOnly, async (req, res, next) => {
       clientParam
     );
 
+    // DR1-23: ideas show their Ideathon jury average and rank ("4.4 · #1"),
+    // like startups show their jury average, so the Admin can prioritise.
+    const ideaJury = new Map();
+    for (const cid of new Set(ideaRows.map((r) => r.client_id).filter(Boolean))) {
+      for (const r of await rankClientIdeas(cid)) {
+        if (r.avg_score == null) continue;
+        const avg = Number(r.avg_score).toFixed(1);
+        ideaJury.set(r.id, r.rank != null ? `${avg} · #${r.rank}${r.tied ? " (tied)" : ""}` : `${avg} (awaiting more ratings)`);
+      }
+    }
+
     const now = Date.now();
     const waitingDays = (d) => (d ? Math.max(0, Math.round((now - new Date(d)) / 86400000)) : null);
     const items = [
       ...ideaRows.map((r) => ({
         source: "idea", sourceId: r.id, title: r.title, clientId: r.client_id, clientName: r.client_name || "—",
-        selectedAt: r.selected_at, waitingDays: waitingDays(r.selected_at), juryScore: null, deferredUntil: r.build_deferred_until,
+        selectedAt: r.selected_at, waitingDays: waitingDays(r.selected_at), juryScore: ideaJury.get(r.id) || null, deferredUntil: r.build_deferred_until,
         description: r.description, submittedById: r.submitted_by, submittedByName: r.submitted_by_name,
         questionId: r.question_id, auditQuestion: (QUESTIONS.find((q) => q.id === Number(r.question_id)) || {}).q || null,
       })),

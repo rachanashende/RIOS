@@ -289,6 +289,22 @@ export async function initSchema() {
     FROM users u
     WHERE i.submitted_by = u.id AND i.source_client_id IS NULL AND u.client_id IS NOT NULL;
   `);
+
+  // DR1-20: once the jury starts, an idea is locked to its author, but the RIV
+  // Admin can still correct typos in the title/description. The idea is marked
+  // "Edited by RIV" and every edit keeps the before/after text.
+  await pool.query(`ALTER TABLE ideas ADD COLUMN IF NOT EXISTS riv_edited_at TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE ideas ADD COLUMN IF NOT EXISTS riv_edited_by INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS idea_edits (
+      id SERIAL PRIMARY KEY,
+      idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+      edited_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      old_title TEXT, old_description TEXT,
+      new_title TEXT, new_description TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
 }
 
 export default pool;
