@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { pool, initSchema } from "./db.js";
 
 const users = [
-  { email: "admin@rios.demo", password: "admin123", name: "Saravana Mani", role: "admin", company: "Retailx Innovation Ventures" },
+  { email: "admin@rios.demo", password: "admin123", name: "Saravana Mani", role: "admin", company: "Retail Innovation Ventures" },
   { email: "client@demo.retailer", password: "client123", name: "Demo Client Contact", role: "client", company: "Demo Retailer Pvt Ltd" },
   { email: "employee@demo.retailer", password: "employee123", name: "Demo Employee", role: "junior_employee", company: "Demo Retailer Pvt Ltd" },
   { email: "jury@demo.retailer", password: "jury123", name: "Demo Jury Member", role: "jury", company: "Demo Retailer Pvt Ltd" },

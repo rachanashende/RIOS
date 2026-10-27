@@ -290,6 +290,11 @@ export async function initSchema() {
     WHERE i.submitted_by = u.id AND i.source_client_id IS NULL AND u.client_id IS NOT NULL;
   `);
 
+  // DR1-05: the seeded RIV company name was misspelled "Retailx Innovation
+  // Ventures", and it shows next to the admin and on linked logins. Correct
+  // it in place (idempotent: matches nothing once fixed).
+  await pool.query(`UPDATE users SET company = 'Retail Innovation Ventures' WHERE company = 'Retailx Innovation Ventures';`);
+
   // DR1-20: once the jury starts, an idea is locked to its author, but the RIV
   // Admin can still correct typos in the title/description. The idea is marked
   // "Edited by RIV" and every edit keeps the before/after text.

@@ -235,7 +235,8 @@ export const api = {
   getEmployeeIdeas: (id) => request(`/admin/ideas/users/${id}/ideas`),
 
   // ---- Rise.RIV (public + jury) — uses its own isolated token ------
-  getRiseOpportunity: () => request("/rise/opportunity"), // public, no token needed either way
+  getRiseOpportunity: (id) => request(`/rise/opportunity${id ? `?id=${encodeURIComponent(id)}` : ""}`), // public, no token needed either way
+  getRiseOpportunities: () => request("/rise/opportunities"), // DR1-24: every open call (public)
   getRiseCriteria: () => request("/rise/criteria"),
   // Public application. Sent as multipart so an optional pitch deck / solution
   // document can travel with it (field "deck"); every other field is text.
@@ -462,7 +463,8 @@ export const api = {
   editIdeaText: (ideaId, payload) => ideasAdminRequest(`/admin/ideas/${ideaId}/text`, { method: "PUT", body: payload }),
   getIdeaEdits: (ideaId) => ideasAdminRequest(`/admin/ideas/${ideaId}/edits`),
   decideRiseApplication: (applicationId, decision) => request(`/admin/rise/applications/${applicationId}/decision`, { method: "PUT", body: { decision } }),
-  reviewRiseApplication: (applicationId, status) => request(`/admin/rise/applications/${applicationId}/riv-review`, { method: "PUT", body: { status } }),
+  // DR1-29: optional note when approving (shown to the jury); a reason is required when rejecting
+  reviewRiseApplication: (applicationId, status, note) => request(`/admin/rise/applications/${applicationId}/riv-review`, { method: "PUT", body: { status, note } }),
   setRiseOpportunityClient: (opportunityId, clientId) => request(`/admin/rise/opportunities/${opportunityId}/client`, { method: "PUT", body: { clientId } }),
   assignRiseJuryClient: (id, clientId) => request(`/admin/rise/jury/${id}/client`, { method: "PUT", body: { clientId } }),
   getMyBuildPicksIdeas: () => ideasRequest("/build/my-picks"),

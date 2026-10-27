@@ -125,6 +125,23 @@ export async function initRiseSchema() {
   `);
   await pool.query(`ALTER TABLE rise_applications ADD COLUMN IF NOT EXISTS riv_reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
   await pool.query(`ALTER TABLE rise_applications ADD COLUMN IF NOT EXISTS riv_reviewed_at TIMESTAMPTZ;`);
+  // DR1-29: the RIV quality check can carry a note -- optional when approving
+  // (shown to the jury), required when rejecting (RIV-only).
+  await pool.query(`ALTER TABLE rise_applications ADD COLUMN IF NOT EXISTS riv_note TEXT;`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS rise_application_reviews (
+      id SERIAL PRIMARY KEY,
+      application_id INTEGER NOT NULL REFERENCES rise_applications(id) ON DELETE CASCADE,
+      status TEXT NOT NULL,
+      note TEXT,
+      reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  // DR1-25: calls stay anonymous on the public page. Instead of the
+  // retailer's name, the Admin writes how to describe it publicly
+  // (e.g. "a 60-store grocery chain").
+  await pool.query(`ALTER TABLE rise_opportunities ADD COLUMN IF NOT EXISTS public_retailer_label TEXT;`);
   // CEO review (27 Oct): every application states the solution the startup
   // proposes for this call's problem, and may attach one pitch deck or
   // solution document. The file is stored in Postgres (bytea, 10 MB cap) --

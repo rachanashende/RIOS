@@ -43,13 +43,35 @@ function enrichScore(row) {
    and submit an application.
    ========================================================================= */
 
-// GET /api/rise/opportunity — the currently open posting, for the public
-// landing page copy. Returns { opportunity: null } if nothing is open.
-router.get("/opportunity", async (req, res, next) => {
+// Public fields of a call. Deliberately no client_id or retailer name:
+// calls stay anonymous publicly (DR1-25); public_retailer_label is the
+// Admin's anonymous description of the retailer.
+const PUBLIC_CALL_COLUMNS = "id, title, description, benefits, eligibility, public_retailer_label, to_char(deadline, 'YYYY-MM-DD') AS deadline, created_at";
+
+// DR1-24: GET /api/rise/opportunities -- every call that is open right now.
+// Several calls can be open at once; each has its own Apply button and link
+// (/startup?call=<id>). Soonest deadline first, then newest.
+router.get("/opportunities", async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, title, description, benefits, eligibility, to_char(deadline, 'YYYY-MM-DD') AS deadline, created_at FROM rise_opportunities WHERE is_open = true ORDER BY created_at DESC LIMIT 1"
+      `SELECT ${PUBLIC_CALL_COLUMNS} FROM rise_opportunities WHERE is_open = true
+       ORDER BY deadline ASC NULLS LAST, created_at DESC`
     );
+    res.json({ opportunities: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/rise/opportunity[?id=] -- one open call: the one asked for, or
+// the newest open call (kept for older links). Returns { opportunity: null }
+// if that call isn't open or nothing is open.
+router.get("/opportunity", async (req, res, next) => {
+  try {
+    const id = Number(req.query.id);
+    const { rows } = id
+      ? await pool.query(`SELECT ${PUBLIC_CALL_COLUMNS} FROM rise_opportunities WHERE is_open = true AND id = $1`, [id])
+      : await pool.query(`SELECT ${PUBLIC_CALL_COLUMNS} FROM rise_opportunities WHERE is_open = true ORDER BY created_at DESC LIMIT 1`);
     res.json({ opportunity: rows[0] || null });
   } catch (err) {
     next(err);
@@ -70,7 +92,7 @@ router.get("/criteria", (req, res) => {
 // look up or infer other entries.
 router.post("/apply", acceptDeck, async (req, res, next) => {
   try {
-    const { startupName, founderName, email, phone, website, sector, stage, pitch, proposedSolution, deck: _deckField, ...extra } = req.body || {};
+    const { startupName, founderName, email, phone, website, sector, stage, pitch, proposedSolution, deck: _deckField, opportunityId: requestedId, ...extra } = req.body || {};
     if (!startupName || !founderName || !email) {
       return res.status(400).json({ error: "Startup name, founder name, and email are required." });
     }
@@ -87,13 +109,25 @@ router.post("/apply", acceptDeck, async (req, res, next) => {
       if (!deck.size) return res.status(400).json({ error: "The uploaded file is empty." });
     }
 
+    // DR1-24: an application belongs to exactly one call. The form sends the
+    // call it was opened from; if it doesn't (an older page) and exactly one
+    // call is open, that one is used.
     const { rows: openRows } = await pool.query(
-      "SELECT id FROM rise_opportunities WHERE is_open = true ORDER BY created_at DESC LIMIT 1"
+      "SELECT id, title FROM rise_opportunities WHERE is_open = true ORDER BY created_at DESC"
     );
-    const opportunityId = openRows[0]?.id || null;
-    if (!opportunityId) {
+    if (!openRows.length) {
       return res.status(400).json({ error: "Applications aren't open right now." });
     }
+    let call;
+    if (requestedId != null && requestedId !== "") {
+      call = openRows.find((o) => o.id === Number(requestedId));
+      if (!call) return res.status(400).json({ error: "This call is no longer open for applications." });
+    } else if (openRows.length === 1) {
+      call = openRows[0];
+    } else {
+      return res.status(400).json({ error: "Several calls are open. Choose the call you're applying to." });
+    }
+    const opportunityId = call.id;
 
     const { rows: insertedRows } = await pool.query(
       `INSERT INTO rise_applications
@@ -128,6 +162,9 @@ router.post("/apply", acceptDeck, async (req, res, next) => {
       ok: true,
       reference: `RISE-${String(appId).padStart(5, "0")}`,
       submittedAt: insertedRows[0].created_at,
+      // DR1-26: the confirmation names the call applied to
+      opportunityId,
+      opportunityTitle: call.title,
       deckFileName: deck ? deck.originalname : null,
       message: "Thanks for filling in your details. We will get back to you.",
     });
@@ -169,8 +206,8 @@ async function jurorScope(user) {
   return { isAdmin: false, clientId: rows[0]?.client_id ?? null };
 }
 
-// GET /api/rise/applications — list of applications for the currently
-// open opportunity, each flagged with whether the logged-in juror has
+// GET /api/rise/applications — applications for this juror's retailer's
+// calls (open calls first), each flagged with whether the logged-in juror has
 // already scored it (drives the "X of Y scored" dashboard).
 router.get("/applications", async (req, res, next) => {
   try {

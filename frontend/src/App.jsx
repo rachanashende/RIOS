@@ -648,7 +648,7 @@ function AdminView({ setView, setSelectedClient }) {
 function RiseTeamPanel({ clients }) {
   const [opportunities, setOpportunities] = useState(null);
   const [jury, setJury] = useState(null);
-  const EMPTY_OPP = { title: "", description: "", benefits: "", eligibility: "", deadline: "" };
+  const EMPTY_OPP = { title: "", description: "", benefits: "", eligibility: "", deadline: "", publicRetailerLabel: "" };
   const [oppForm, setOppForm] = useState(EMPTY_OPP);
   const [editingOppId, setEditingOppId] = useState(null); // ST6: editing the public-page content of an existing call
   const [viewingOpp, setViewingOpp] = useState(null); // O3/ST3: opportunity whose applications are open
@@ -681,8 +681,11 @@ function RiseTeamPanel({ clients }) {
     setError(""); showOppNotice(""); setBusy(true);
     try {
       if (editingOppId) {
-        await api.updateRiseOpportunity(editingOppId, oppForm);
-        showOppNotice(`Opportunity "${oppForm.title}" updated. The public /startup page now shows the new text.`);
+        const upd = await api.updateRiseOpportunity(editingOppId, oppForm);
+        const m = (upd && upd.opportunity && upd.opportunity.retailer_name_mentions) || [];
+        showOppNotice(m.length
+          ? `Saved, but the retailer's name still appears in ${m.join(", ")}. Calls should stay anonymous.`
+          : `Opportunity "${oppForm.title}" updated. The public /startup page now shows the new text.`);
         setEditingOppId(null);
       } else {
         await api.createRiseOpportunity(oppForm);
@@ -694,10 +697,27 @@ function RiseTeamPanel({ clients }) {
   }
   function startEditOpp(o) {
     setEditingOppId(o.id);
-    setOppForm({ title: o.title || "", description: o.description || "", benefits: o.benefits || "", eligibility: o.eligibility || "", deadline: o.deadline || "" });
+    setOppForm({ title: o.title || "", description: o.description || "", benefits: o.benefits || "", eligibility: o.eligibility || "", deadline: o.deadline || "", publicRetailerLabel: o.public_retailer_label || "" });
     showOppNotice("");
   }
-  async function openOpportunity(id) { await api.openRiseOpportunity(id); refresh(); }
+  // DR1-24: opening a call leaves other open calls open. DR1-25: warn if the
+  // public text names the retailer -- calls stay anonymous.
+  async function openOpportunity(id) {
+    setError("");
+    try {
+      const r = await api.openRiseOpportunity(id);
+      const m = (r && r.retailerNameMentions) || [];
+      showOppNotice(m.length
+        ? `Call opened. Warning: the retailer's name appears in ${m.join(", ")}. Calls should stay anonymous — edit the public text and use "Public description of the retailer" instead.`
+        : "Call opened. It's listed on the public /startup page alongside any other open calls.");
+      refresh();
+    } catch (err) { setError(err.message); }
+  }
+  async function copyCallLink(id) {
+    const link = `${window.location.origin}/startup?call=${id}`;
+    try { await navigator.clipboard.writeText(link); showOppNotice(`Link copied: ${link}`); }
+    catch { showOppNotice(`Share this link: ${link}`); }
+  }
   async function closeOpportunity(id) { await api.closeRiseOpportunity(id); refresh(); }
 
   async function createJury(e) {
@@ -724,7 +744,7 @@ function RiseTeamPanel({ clients }) {
   return (
     <div id="startup-team" style={{ marginTop: 44 }}>
       <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 24, color: BRAND.ink, marginBottom: 4 }}>Startup team</div>
-      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Control which opportunity is open for startup applications, and create jury logins to review them.</div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#9B958F", marginBottom: 24 }}>Open one or more calls for startup applications (each has its own link), and create jury logins to review them. Calls stay anonymous on the public page: describe the retailer, don't name it.</div>
 
       <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 20, background: "#fff", marginBottom: 24 }}>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 12 }}>Opportunities</div>
@@ -739,6 +759,12 @@ function RiseTeamPanel({ clients }) {
                   <button onClick={() => setViewingOpp(o)} title="View applications" style={{ display: "block", textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13.5, color: BRAND.ink }}>{o.title}</button>
                   <button onClick={() => setViewingOpp(o)} title="View applications" style={{ display: "block", textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, color: BRAND.coralDark, textDecoration: "underline" }}>{o.application_count} application{o.application_count !== 1 ? "s" : ""} — view</button>
                   <button onClick={() => startEditOpp(o)} title="Edit the text shown on the public page" style={{ display: "block", textAlign: "left", background: "none", border: "none", padding: 0, marginTop: 2, cursor: "pointer", fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, color: "#7A746F", textDecoration: "underline" }}>Edit public page text</button>
+                  {o.public_retailer_label && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#7A746F", marginTop: 2 }}>Public: "For {o.public_retailer_label}"</div>}
+                  {(o.retailer_name_mentions || []).length > 0 && (
+                    <div role="alert" style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, color: BRAND.coralDark, marginTop: 4, maxWidth: 460 }}>
+                      ⚠ The retailer's name appears in: {o.retailer_name_mentions.join(", ")}. Calls stay anonymous on the public page.
+                    </div>
+                  )}
                   <select value={o.client_id || ""} onChange={(e) => assignOpportunityClient(o.id, e.target.value)} title="Which retailer this call belongs to -- needed so a selected startup's Build project has a client, and so that retailer's own jury only sees their own calls" style={{ ...inputStyle, marginTop: 6, width: "auto", padding: "4px 8px", fontSize: 11.5 }}>
                     <option value="">No retailer linked yet</option>
                     {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.company || c.name}</option>)}
@@ -749,6 +775,7 @@ function RiseTeamPanel({ clients }) {
                   <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 999, color: o.is_open ? "#1B7A5A" : "#6B6561", background: o.is_open ? "#E7F5EF" : "#EFEAE4" }}>
                     {o.is_open ? "Open for applications" : "Closed"}
                   </span>
+                  {o.is_open && <button onClick={() => copyCallLink(o.id)} title="Copy this call's own public link" style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "6px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink }}>Copy link</button>}
                   {o.is_open ? (
                     <button onClick={() => closeOpportunity(o.id)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, padding: "6px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink }}>Close this call</button>
                   ) : (
@@ -763,6 +790,9 @@ function RiseTeamPanel({ clients }) {
           {editingOppId && <div style={{ flexBasis: "100%", fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, color: BRAND.coralDark }}>Editing an existing call — the public /startup page shows this text.</div>}
           <input placeholder="Opportunity title" value={oppForm.title} onChange={(e) => setOppForm({ ...oppForm, title: e.target.value })} required style={{ ...inputStyle, marginTop: 0, flex: "1 1 200px" }} />
           <input placeholder="Description (optional)" value={oppForm.description} onChange={(e) => setOppForm({ ...oppForm, description: e.target.value })} style={{ ...inputStyle, marginTop: 0, flex: "2 1 260px" }} />
+          {/* DR1-25: how the retailer is described publicly instead of its name */}
+          <input placeholder={'Public description of the retailer (optional), e.g. "a 60-store grocery chain"'} value={oppForm.publicRetailerLabel} onChange={(e) => setOppForm({ ...oppForm, publicRetailerLabel: e.target.value })} style={{ ...inputStyle, marginTop: 0, flex: "1 1 100%" }} />
+          <div style={{ flexBasis: "100%", fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F", marginTop: -4 }}>Don't name the retailer in the title or text: the public page shows "For &lt;description&gt;" instead.</div>
           <textarea placeholder="What the programme offers (optional) — shown on the public page" value={oppForm.benefits} onChange={(e) => setOppForm({ ...oppForm, benefits: e.target.value })} rows={2} style={{ ...inputStyle, marginTop: 0, flex: "1 1 100%", resize: "vertical" }} />
           <textarea placeholder="Who can apply / eligibility (optional)" value={oppForm.eligibility} onChange={(e) => setOppForm({ ...oppForm, eligibility: e.target.value })} rows={2} style={{ ...inputStyle, marginTop: 0, flex: "1 1 100%", resize: "vertical" }} />
           <label style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#7A746F", display: "flex", alignItems: "center", gap: 8 }}>
