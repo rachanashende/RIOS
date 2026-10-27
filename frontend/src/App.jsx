@@ -1280,9 +1280,10 @@ function OpportunityCard({ rank, q, tag, muted, note }) {
         <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 700, color: muted ? "#8a8480" : BRAND.coralDark, background: muted ? "#EFEAE4" : "#FCEEE1", padding: "4px 9px", borderRadius: 999, whiteSpace: "nowrap", height: "fit-content" }}>{tag}</div>
       </div>
       <div style={{ display: "flex", gap: 14, marginTop: 10, fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}><span>Maturity {q.maturity}/4</span><span>AI weight ×{q.weight}</span></div>
-      {(q.aiAngle || q.incumbent || q.rivNetwork) && (
+      {/* DR1-14: "RIV network startups" removed -- the API no longer sends it (see SHOW_RIV_NETWORK in backend/lib/scoring.js). */}
+      {(q.aiAngle || q.incumbent) && (
         <div style={{ marginTop: 10, borderTop: `1px solid ${BRAND.line}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-          {[["How AI helps", q.aiAngle], ["Incumbent vendors", q.incumbent], ["RIV network startups", q.rivNetwork]].filter(([, v]) => v).map(([label, v]) => (
+          {[["How AI helps", q.aiAngle], ["Incumbent vendors", q.incumbent]].filter(([, v]) => v).map(([label, v]) => (
             <div key={label} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, lineHeight: 1.5, color: BRAND.ink }}>
               <span style={{ fontSize: 10.5, fontWeight: 700, color: "#9B958F", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</span><br />{v}
             </div>
@@ -1519,6 +1520,17 @@ export default function RiosApp() {
   const [saveStatus, setSaveStatus] = useState({ state: "saved", message: "" });
   const [retryTick, setRetryTick] = useState(0);
   const saveSeq = useRef(0); // only the latest save request may update the status
+  // DR1-15: saves are chained so they reach the server one at a time, in the
+  // order they were made. Each save sends the whole answer set, so a slow
+  // older request landing after a newer one used to overwrite it (e.g. a
+  // "Not applicable" that the screen showed as cleared came back after
+  // Submit). Every save now waits for the previous one to finish.
+  const saveChain = useRef(Promise.resolve());
+  const queueSave = useCallback((data, opts) => {
+    const run = saveChain.current.catch(() => {}).then(() => api.saveResponses(data, opts));
+    saveChain.current = run.catch(() => {});
+    return run;
+  }, []);
 
   // Load the instrument once (public) — skipped on the R-Index subdomain,
   // where this whole component tree short-circuits to IndexRivApp below
@@ -1576,8 +1588,15 @@ export default function RiosApp() {
     if (!confirm(msg)) return;
     try {
       await flushPendingSave();
+      await saveChain.current; // DR1-15: every earlier save has landed before we submit
       const d = await api.submitAudit();
       setSubmittedAt(d.submittedAt);
+      // DR1-15: show exactly what RIV will see -- reload the saved answers
+      // instead of trusting the local copy.
+      try {
+        const saved = await api.getResponses();
+        setResponses(saved.responses || {}); // no autosave: the audit is now submitted
+      } catch { /* keep the local copy if the reload fails */ }
     } catch (err) { alert(err.message || "Could not submit. Please try again."); }
   }
   useEffect(() => {
@@ -1588,7 +1607,7 @@ export default function RiosApp() {
     setSaveStatus({ state: "saving", message: "" });
     saveTimer.current = setTimeout(() => {
       const seq = ++saveSeq.current;
-      api.saveResponses(responses)
+      queueSave(responses)
         .then(() => {
           if (pendingSave.current === responses) pendingSave.current = null;
           if (seq === saveSeq.current) setSaveStatus({ state: "saved", message: "" });
@@ -1607,10 +1626,13 @@ export default function RiosApp() {
     const pending = pendingSave.current;
     if (!pending) return Promise.resolve();
     clearTimeout(saveTimer.current);
-    return api.saveResponses(pending, { keepalive: !!keepalive })
+    // When the page is closing (keepalive) there's no time to wait for the
+    // queue, so send straight away; otherwise keep saves in order (DR1-15).
+    const send = keepalive ? api.saveResponses(pending, { keepalive: true }) : queueSave(pending);
+    return send
       .then(() => { if (pendingSave.current === pending) pendingSave.current = null; })
       .catch(() => {});
-  }, []);
+  }, [queueSave]);
 
   // A4: closing the tab / navigating away / switching apps on mobile -> save what is pending first.
   useEffect(() => {

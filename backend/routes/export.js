@@ -3,7 +3,7 @@ import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import pool from "../db.js";
 import { requireAuth, blockBuildScopedClient } from "../middleware/auth.js";
-import { QUESTIONS, computeScores } from "../lib/scoring.js";
+import { QUESTIONS, computeScores, SHOW_RIV_NETWORK } from "../lib/scoring.js";
 
 // SC1: same US$ convention as the on-screen scorecard
 function fmtUSD(n) {
@@ -16,9 +16,11 @@ function fmtUSD(n) {
 }
 
 
-// SC4: AI angle, incumbent vendors and RIV network startups for an opportunity / gap
+// SC4: AI angle and incumbent vendors for an opportunity / gap.
+// DR1-14: "RIV network startups" is hidden until RIV keeps a verified list
+// (see SHOW_RIV_NETWORK in lib/scoring.js).
 function pdfSolutions(doc, o, gray) {
-  [["How AI helps", o.aiAngle], ["Incumbent vendors", o.incumbent], ["RIV network startups", o.rivNetwork]].forEach(([label, v]) => {
+  [["How AI helps", o.aiAngle], ["Incumbent vendors", o.incumbent], ...(SHOW_RIV_NETWORK ? [["RIV network startups", o.rivNetwork]] : [])].forEach(([label, v]) => {
     if (v) doc.fillColor(gray).fontSize(8.5).text(`   ${label}: ${v}`, { width: 480 });
   });
   doc.fontSize(9.5);
@@ -110,15 +112,15 @@ router.get("/excel", requireAuth, blockBuildScopedClient, async (req, res, next)
   os.addRow(["Generated", new Date().toISOString()]);
   os.addRow([]);
   os.addRow(["Top 5 Innovation Opportunities"]).font = { bold: true };
-  os.addRow(["Rank", "Module", "Opportunity", "Audit question", "Maturity", "Est. Remaining Benefit ($, scaled to maturity gap)", "How AI helps", "Incumbent vendors", "RIV network startups"]).font = { bold: true };
+  os.addRow(["Rank", "Module", "Opportunity", "Audit question", "Maturity", "Est. Remaining Benefit ($, scaled to maturity gap)", "How AI helps", "Incumbent vendors", ...(SHOW_RIV_NETWORK ? ["RIV network startups"] : [])]).font = { bold: true };
   scores.opportunities.forEach((o, i) => {
-    os.addRow([i + 1, o.module, o.submodule, o.q, o.maturity, Math.round(o.midpoint), o.aiAngle || "", o.incumbent || "", o.rivNetwork || ""]);
+    os.addRow([i + 1, o.module, o.submodule, o.q, o.maturity, Math.round(o.midpoint), o.aiAngle || "", o.incumbent || "", ...(SHOW_RIV_NETWORK ? [o.rivNetwork || ""] : [])]);
   });
   os.addRow([]);
   os.addRow(["Priority AI-Maturity Gaps (no $ data)"]).font = { bold: true };
-  os.addRow(["Rank", "Module", "Opportunity", "Audit question", "Maturity", "Weighted Severity", "How AI helps", "Incumbent vendors", "RIV network startups"]).font = { bold: true };
+  os.addRow(["Rank", "Module", "Opportunity", "Audit question", "Maturity", "Weighted Severity", "How AI helps", "Incumbent vendors", ...(SHOW_RIV_NETWORK ? ["RIV network startups"] : [])]).font = { bold: true };
   scores.priorityGaps.forEach((o, i) => {
-    os.addRow([i + 1, o.module, o.submodule, o.q, o.maturity, o.severity, o.aiAngle || "", o.incumbent || "", o.rivNetwork || ""]);
+    os.addRow([i + 1, o.module, o.submodule, o.q, o.maturity, o.severity, o.aiAngle || "", o.incumbent || "", ...(SHOW_RIV_NETWORK ? [o.rivNetwork || ""] : [])]);
   });
   os.columns.forEach((col) => { col.width = 30; });
 

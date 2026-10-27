@@ -3,7 +3,14 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const QUESTIONS = JSON.parse(fs.readFileSync(path.join(__dirname, "../data/questions.json"), "utf8"));
+// DR1-14: the "RIV network startups" text (rivNetwork) in questions.json is
+// fixed, unverified copy that isn't linked to the startup program. It is
+// stripped here, at the single load point, so it never reaches the API, the
+// scorecard or the Excel/PDF exports. The data stays in the file; set this to
+// true only once RIV has a verified, maintained list.
+export const SHOW_RIV_NETWORK = false;
+const RAW_QUESTIONS = JSON.parse(fs.readFileSync(path.join(__dirname, "../data/questions.json"), "utf8"));
+export const QUESTIONS = SHOW_RIV_NETWORK ? RAW_QUESTIONS : RAW_QUESTIONS.map(({ rivNetwork, ...q }) => q);
 export const MODULES = JSON.parse(fs.readFileSync(path.join(__dirname, "../data/modules.json"), "utf8"));
 
 export const TIER_BANDS = [
