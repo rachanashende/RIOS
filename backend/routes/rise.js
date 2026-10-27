@@ -2,6 +2,35 @@ import { Router } from "express";
 import pool from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { CRITERIA, clamp1to5, averageScore } from "../lib/riseScoring.js";
+import multer from "multer";
+
+// Pitch deck / solution document on the public application form.
+// One optional file, 10 MB, PDF / PowerPoint / Word only.
+export const DECK_MAX_BYTES = 10 * 1024 * 1024;
+const DECK_TYPES = {
+  ".pdf": "application/pdf",
+  ".ppt": "application/vnd.ms-powerpoint",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".doc": "application/msword",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+};
+export function deckExtension(name) {
+  const m = /\.[a-z0-9]+$/i.exec(String(name || ""));
+  return m ? m[0].toLowerCase() : "";
+}
+const deckUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: DECK_MAX_BYTES, files: 1 } });
+// Runs multer for multipart requests only (JSON applications still work) and
+// turns its errors into a plain 400 the form can show.
+function acceptDeck(req, res, next) {
+  if (!req.is("multipart/form-data")) return next();
+  deckUpload.single("deck")(req, res, (err) => {
+    if (!err) return next();
+    const msg = err.code === "LIMIT_FILE_SIZE" ? "The file is larger than 10 MB. Please upload a smaller file."
+      : err.code === "LIMIT_UNEXPECTED_FILE" ? "Attach one file only, in the deck field."
+      : "Couldn't read the uploaded file. Please try again.";
+    res.status(400).json({ error: msg });
+  });
+}
 
 const router = Router();
 
@@ -61,11 +90,23 @@ router.get("/criteria", (req, res) => {
 // acknowledgment — never the inserted row's id or any other applicant's
 // data — so there is nothing in the response an applicant could use to
 // look up or infer other entries.
-router.post("/apply", async (req, res, next) => {
+router.post("/apply", acceptDeck, async (req, res, next) => {
   try {
-    const { startupName, founderName, email, phone, website, sector, stage, pitch, opportunityId: requestedId, ...extra } = req.body || {};
+    const { startupName, founderName, email, phone, website, sector, stage, pitch, proposedSolution, deck: _deckField, opportunityId: requestedId, ...extra } = req.body || {};
     if (!startupName || !founderName || !email) {
       return res.status(400).json({ error: "Startup name, founder name, and email are required." });
+    }
+    const solution = String(proposedSolution || "").trim();
+    if (!solution) {
+      return res.status(400).json({ error: "Describe the solution you propose for this challenge." });
+    }
+    const deck = req.file || null;
+    if (deck) {
+      const ext = deckExtension(deck.originalname);
+      if (!DECK_TYPES[ext]) {
+        return res.status(400).json({ error: "The deck must be a PDF, PowerPoint (.ppt, .pptx) or Word (.doc, .docx) file." });
+      }
+      if (!deck.size) return res.status(400).json({ error: "The uploaded file is empty." });
     }
 
     // DR1-24: an application belongs to exactly one call. The form sends the
@@ -90,8 +131,8 @@ router.post("/apply", async (req, res, next) => {
 
     const { rows: insertedRows } = await pool.query(
       `INSERT INTO rise_applications
-         (opportunity_id, startup_name, founder_name, email, phone, website, sector, stage, pitch, extra)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         (opportunity_id, startup_name, founder_name, email, phone, website, sector, stage, pitch, extra, proposed_solution)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING id, created_at`,
       [
         opportunityId,
@@ -104,8 +145,16 @@ router.post("/apply", async (req, res, next) => {
         stage || null,
         pitch || null,
         JSON.stringify(extra || {}),
+        solution,
       ]
     );
+    if (deck) {
+      const ext = deckExtension(deck.originalname);
+      await pool.query(
+        "INSERT INTO rise_application_files (application_id, file_name, content_type, size_bytes, content) VALUES ($1,$2,$3,$4,$5)",
+        [insertedRows[0].id, String(deck.originalname).slice(0, 200), DECK_TYPES[ext], deck.size, deck.buffer]
+      );
+    }
 
     // ST8: give the founder something to keep -- a reference number they can quote.
     const appId = insertedRows[0].id;
@@ -116,6 +165,7 @@ router.post("/apply", async (req, res, next) => {
       // DR1-26: the confirmation names the call applied to
       opportunityId,
       opportunityTitle: call.title,
+      deckFileName: deck ? deck.originalname : null,
       message: "Thanks for filling in your details. We will get back to you.",
     });
   } catch (err) {

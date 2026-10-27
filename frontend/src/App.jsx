@@ -903,6 +903,12 @@ function IdeasTeamPanel({ clients }) {
   async function createUser(e) {
     e.preventDefault();
     if (!selectedClientId) { setError("Choose a client above first — every employee and jury login belongs to one client."); return; }
+    // DR1-17: warn when the same person already has a login in the other list
+    // (the classic slip: creating a jury member while the toggle is still on Employee).
+    const sameName = (u) => (u.name || "").trim().toLowerCase() === form.name.trim().toLowerCase();
+    const otherList = form.role === "jury" ? (employees || []) : (jury || []);
+    const twin = otherList.find(sameName);
+    if (twin && !confirm(`${twin.name} already has ${form.role === "jury" ? "an Employee" : "a Jury"} login (${twin.email}).\n\nCreate a separate ${form.role === "jury" ? "Jury" : "Employee"} login as well?\n\nIf the first one was a mistake, cancel and use "Make ${form.role === "jury" ? "jury" : "employee"}" on it instead.`)) return;
     setError(""); showNotice(""); setBusy(true);
     try {
       await api.createIdeasUser({ ...form, clientId: Number(selectedClientId) });
@@ -917,6 +923,17 @@ function IdeasTeamPanel({ clients }) {
     try {
       const r = await api.assignIdeasUserClient(userId, Number(clientId));
       if (r?.ideasLeftBehind) showNotice(`Moved. ${r.ideasLeftBehind} idea${r.ideasLeftBehind === 1 ? "" : "s"} this person submitted earlier stay with the previous client's Ideathon, with their ratings.`);
+      refresh();
+    } catch (err) { setError(err.message); }
+  }
+  // DR1-17: fix a wrong role without deleting the login
+  async function changeRole(u, role) {
+    const label = role === "jury" ? "Jury" : "Employee";
+    if (!confirm(`Change ${u.name} to ${label}? Their email and password stay the same; they'll see the ${label} screens next time they log in.`)) return;
+    setError("");
+    try {
+      await api.setIdeasUserRole(u.id, role);
+      showNotice(`${u.name} is now ${role === "jury" ? "a Jury member" : "an Employee"}.`);
       refresh();
     } catch (err) { setError(err.message); }
   }
@@ -978,6 +995,7 @@ function IdeasTeamPanel({ clients }) {
                       <button onClick={() => toggleEmployeeIdeas(u.id)} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "7px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: expandedEmployeeId === u.id ? BRAND.ink : "#fff", color: expandedEmployeeId === u.id ? "#fff" : BRAND.ink }}>
                         {expandedEmployeeId === u.id ? "Hide" : "View submissions"}
                       </button>
+                      <button onClick={() => changeRole(u, "jury")} title="Change this login to a jury member" style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "7px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink }}>Make jury</button>
                       <button onClick={() => adminResetPassword(u, showNotice, setError)} title="Reset password" style={resetBtnStyle("7px 9px")}><KeyRound size={13} /></button>
                       <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
                     </div>
@@ -1022,8 +1040,11 @@ function IdeasTeamPanel({ clients }) {
                     <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}>{u.email} {u.company ? `· ${u.company}` : ""}</div>
                     <ClientTag user={u} clients={clients} onAssign={assignClient} />
                   </div>
-                  <button onClick={() => adminResetPassword(u, showNotice, setError)} title="Reset password" style={resetBtnStyle("7px 9px")}><KeyRound size={13} /></button>
-                      <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={() => changeRole(u, "junior_employee")} title="Change this login to an employee" style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, fontWeight: 600, padding: "7px 10px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.ink }}>Make employee</button>
+                    <button onClick={() => adminResetPassword(u, showNotice, setError)} title="Reset password" style={resetBtnStyle("7px 9px")}><KeyRound size={13} /></button>
+                    <button onClick={() => removeUser(u.id)} title="Remove" style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 8, border: `1px solid ${BRAND.line}`, cursor: "pointer", background: "#fff", color: BRAND.coralDark }}><Trash2 size={13} /></button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1044,7 +1065,7 @@ function IdeasTeamPanel({ clients }) {
             <input placeholder="Temporary password (min. 8 characters)" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />
             {error && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: BRAND.coralDark, marginTop: 10 }}>{error}</div>}
             <Notice text={notice} />
-            <button type="submit" disabled={busy} style={{ width: "100%", marginTop: 14, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>Create login</button>
+            <button type="submit" disabled={busy} style={{ width: "100%", marginTop: 14, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", cursor: "pointer", opacity: busy ? 0.7 : 1 }}>{form.role === "jury" ? "Create jury login" : "Create employee login"}</button>
           </form>
         </div>
       </div>
@@ -1310,9 +1331,10 @@ function OpportunityCard({ rank, q, tag, muted, note }) {
         <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 700, color: muted ? "#8a8480" : BRAND.coralDark, background: muted ? "#EFEAE4" : "#FCEEE1", padding: "4px 9px", borderRadius: 999, whiteSpace: "nowrap", height: "fit-content" }}>{tag}</div>
       </div>
       <div style={{ display: "flex", gap: 14, marginTop: 10, fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: "#9B958F" }}><span>Maturity {q.maturity}/4</span><span>AI weight ×{q.weight}</span></div>
-      {(q.aiAngle || q.incumbent || q.rivNetwork) && (
+      {/* DR1-14: "RIV network startups" removed -- the API no longer sends it (see SHOW_RIV_NETWORK in backend/lib/scoring.js). */}
+      {(q.aiAngle || q.incumbent) && (
         <div style={{ marginTop: 10, borderTop: `1px solid ${BRAND.line}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-          {[["How AI helps", q.aiAngle], ["Incumbent vendors", q.incumbent], ["RIV network startups", q.rivNetwork]].filter(([, v]) => v).map(([label, v]) => (
+          {[["How AI helps", q.aiAngle], ["Incumbent vendors", q.incumbent]].filter(([, v]) => v).map(([label, v]) => (
             <div key={label} style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, lineHeight: 1.5, color: BRAND.ink }}>
               <span style={{ fontSize: 10.5, fontWeight: 700, color: "#9B958F", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</span><br />{v}
             </div>
@@ -1549,6 +1571,17 @@ export default function RiosApp() {
   const [saveStatus, setSaveStatus] = useState({ state: "saved", message: "" });
   const [retryTick, setRetryTick] = useState(0);
   const saveSeq = useRef(0); // only the latest save request may update the status
+  // DR1-15: saves are chained so they reach the server one at a time, in the
+  // order they were made. Each save sends the whole answer set, so a slow
+  // older request landing after a newer one used to overwrite it (e.g. a
+  // "Not applicable" that the screen showed as cleared came back after
+  // Submit). Every save now waits for the previous one to finish.
+  const saveChain = useRef(Promise.resolve());
+  const queueSave = useCallback((data, opts) => {
+    const run = saveChain.current.catch(() => {}).then(() => api.saveResponses(data, opts));
+    saveChain.current = run.catch(() => {});
+    return run;
+  }, []);
 
   // Load the instrument once (public) — skipped on the R-Index subdomain,
   // where this whole component tree short-circuits to IndexRivApp below
@@ -1606,8 +1639,15 @@ export default function RiosApp() {
     if (!confirm(msg)) return;
     try {
       await flushPendingSave();
+      await saveChain.current; // DR1-15: every earlier save has landed before we submit
       const d = await api.submitAudit();
       setSubmittedAt(d.submittedAt);
+      // DR1-15: show exactly what RIV will see -- reload the saved answers
+      // instead of trusting the local copy.
+      try {
+        const saved = await api.getResponses();
+        setResponses(saved.responses || {}); // no autosave: the audit is now submitted
+      } catch { /* keep the local copy if the reload fails */ }
     } catch (err) { alert(err.message || "Could not submit. Please try again."); }
   }
   useEffect(() => {
@@ -1618,7 +1658,7 @@ export default function RiosApp() {
     setSaveStatus({ state: "saving", message: "" });
     saveTimer.current = setTimeout(() => {
       const seq = ++saveSeq.current;
-      api.saveResponses(responses)
+      queueSave(responses)
         .then(() => {
           if (pendingSave.current === responses) pendingSave.current = null;
           if (seq === saveSeq.current) setSaveStatus({ state: "saved", message: "" });
@@ -1637,10 +1677,13 @@ export default function RiosApp() {
     const pending = pendingSave.current;
     if (!pending) return Promise.resolve();
     clearTimeout(saveTimer.current);
-    return api.saveResponses(pending, { keepalive: !!keepalive })
+    // When the page is closing (keepalive) there's no time to wait for the
+    // queue, so send straight away; otherwise keep saves in order (DR1-15).
+    const send = keepalive ? api.saveResponses(pending, { keepalive: true }) : queueSave(pending);
+    return send
       .then(() => { if (pendingSave.current === pending) pendingSave.current = null; })
       .catch(() => {});
-  }, []);
+  }, [queueSave]);
 
   // A4: closing the tab / navigating away / switching apps on mobile -> save what is pending first.
   useEffect(() => {

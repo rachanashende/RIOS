@@ -230,13 +230,46 @@ export const api = {
   assignIdeasUserClient: (id, clientId) => request(`/admin/ideas/users/${id}/client`, { method: "PUT", body: { clientId } }),
   createIdeasUser: (payload) => request("/admin/ideas/users", { method: "POST", body: payload }),
   deleteIdeasUser: (id) => request(`/admin/ideas/users/${id}`, { method: "DELETE" }),
+  // DR1-17: switch a login between Employee and Jury
+  setIdeasUserRole: (id, role) => request(`/admin/ideas/users/${id}/role`, { method: "PUT", body: { role } }),
   getEmployeeIdeas: (id) => request(`/admin/ideas/users/${id}/ideas`),
 
   // ---- Rise.RIV (public + jury) — uses its own isolated token ------
   getRiseOpportunity: (id) => request(`/rise/opportunity${id ? `?id=${encodeURIComponent(id)}` : ""}`), // public, no token needed either way
   getRiseOpportunities: () => request("/rise/opportunities"), // DR1-24: every open call (public)
   getRiseCriteria: () => request("/rise/criteria"),
-  submitRiseApplication: (payload) => request("/rise/apply", { method: "POST", body: payload }),
+  // Public application. Sent as multipart so an optional pitch deck / solution
+  // document can travel with it (field "deck"); every other field is text.
+  submitRiseApplication: async (payload, deckFile) => {
+    const form = new FormData();
+    Object.entries(payload || {}).forEach(([k, v]) => { if (v !== undefined && v !== null) form.append(k, String(v)); });
+    if (deckFile) form.append("deck", deckFile);
+    const res = await fetch(`${API_BASE}/api/rise/apply`, { method: "POST", body: form });
+    if (!res.ok) {
+      let message = res.status === 413 ? "The file is too large. Please upload a file under 10 MB." : `Request failed (${res.status})`;
+      try { message = (await res.json()).error || message; } catch {}
+      throw new Error(message);
+    }
+    return res.json();
+  },
+  // RIV Admin: download a startup's pitch deck / solution document
+  downloadRiseApplicationFile: async (applicationId, fileId, fileName) => {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/api/admin/rise/applications/${applicationId}/files/${fileId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      let message = `Download failed (${res.status})`;
+      try { message = (await res.json()).error || message; } catch {}
+      throw new Error(message);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = fileName || "deck";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  },
   riseJuryLogin: (email, password) => loginRequest(email, password), // same endpoint, token just isn't attached to anything yet here
   getRiseApplications: () => riseRequest("/rise/applications"),
   getRiseApplication: (id) => riseRequest(`/rise/applications/${id}`),
@@ -426,6 +459,9 @@ export const api = {
 
   // ---- Build.RIV: unblocking endpoints added to the owning modules (R21/R22)
   selectIdeaForBuild: (ideaId) => ideasAdminRequest(`/admin/ideas/${ideaId}/select-for-build`, { method: "PUT" }),
+  // DR1-20: RIV Admin corrects an idea's title/description (even once locked), with history
+  editIdeaText: (ideaId, payload) => ideasAdminRequest(`/admin/ideas/${ideaId}/text`, { method: "PUT", body: payload }),
+  getIdeaEdits: (ideaId) => ideasAdminRequest(`/admin/ideas/${ideaId}/edits`),
   decideRiseApplication: (applicationId, decision) => request(`/admin/rise/applications/${applicationId}/decision`, { method: "PUT", body: { decision } }),
   // DR1-29: optional note when approving (shown to the jury); a reason is required when rejecting
   reviewRiseApplication: (applicationId, status, note) => request(`/admin/rise/applications/${applicationId}/riv-review`, { method: "PUT", body: { status, note } }),

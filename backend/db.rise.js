@@ -142,6 +142,23 @@ export async function initRiseSchema() {
   // retailer's name, the Admin writes how to describe it publicly
   // (e.g. "a 60-store grocery chain").
   await pool.query(`ALTER TABLE rise_opportunities ADD COLUMN IF NOT EXISTS public_retailer_label TEXT;`);
+  // CEO review (27 Oct): every application states the solution the startup
+  // proposes for this call's problem, and may attach one pitch deck or
+  // solution document. The file is stored in Postgres (bytea, 10 MB cap) --
+  // same approach as build_files -- so it survives redeploys. Only the RIV
+  // Admin can download it; the jury sees the solution text, not the file.
+  await pool.query(`ALTER TABLE rise_applications ADD COLUMN IF NOT EXISTS proposed_solution TEXT;`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS rise_application_files (
+      id SERIAL PRIMARY KEY,
+      application_id INTEGER NOT NULL REFERENCES rise_applications(id) ON DELETE CASCADE,
+      file_name TEXT NOT NULL,
+      content_type TEXT,
+      size_bytes INTEGER NOT NULL,
+      content BYTEA NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
   // Backfill: this column didn't exist before, so any application already
   // scored by a juror clearly already passed review in practice -- auto-
   // approve those rather than retroactively locking live data behind a
