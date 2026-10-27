@@ -188,11 +188,36 @@ router.get("/applications/:id", async (req, res, next) => {
        WHERE s.application_id = $1 ORDER BY s.updated_at DESC`,
       [id]
     );
+    // Pitch deck / solution document (metadata only; the file itself via the route below)
+    const { rows: fileRows } = await pool.query(
+      "SELECT id, file_name, content_type, size_bytes, created_at FROM rise_application_files WHERE application_id = $1 ORDER BY id",
+      [id]
+    );
     res.json({
       application,
       scores: scoreRows.map((r) => ({ ...r, total: Number(r.total) })),
       criteria: CRITERIA,
+      files: fileRows,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/admin/rise/applications/:id/files/:fileId -- download the
+// startup's pitch deck / solution document. RIV Admin only (this router is
+// admin-only); the jury never gets the file.
+router.get("/applications/:id/files/:fileId", async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT file_name, content_type, content FROM rise_application_files WHERE id = $1 AND application_id = $2",
+      [Number(req.params.fileId), Number(req.params.id)]
+    );
+    const file = rows[0];
+    if (!file) return res.status(404).json({ error: "File not found." });
+    res.setHeader("Content-Type", file.content_type || "application/octet-stream");
+    res.setHeader("Content-Disposition", `attachment; filename="${String(file.file_name).replace(/[\r\n"]/g, "")}"`);
+    res.send(file.content);
   } catch (err) {
     next(err);
   }

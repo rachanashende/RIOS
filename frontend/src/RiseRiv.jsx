@@ -143,10 +143,14 @@ function RiseNavBar({ view, setView, session, onLogout }) {
             {/* Real link (full navigation) back to the main site's Overview
                 page — this module no longer renders inside the main site's
                 own header, so this is the only way back to it. */}
-            <a href="/" style={{
-              fontFamily: FONT, fontSize: 13.5, fontWeight: 500, padding: "8px 14px", borderRadius: 999,
-              textDecoration: "none", color: BRAND.ink, display: "inline-block",
-            }}>Overview</a>
+            {/* CEO review (27 Oct): public visitors (startups) shouldn't see a link
+                into RIOS -- only logged-in jury/admin get "Overview" back to the main site. */}
+            {session && (
+              <a href="/" style={{
+                fontFamily: FONT, fontSize: 13.5, fontWeight: 500, padding: "8px 14px", borderRadius: 999,
+                textDecoration: "none", color: BRAND.ink, display: "inline-block",
+              }}>Overview</a>
+            )}
             {items.map((it) => (
               <button key={it.id} onClick={() => setView(it.id)} style={{
                 fontFamily: FONT, fontSize: 13.5, fontWeight: 500, padding: "8px 14px", borderRadius: 999,
@@ -249,8 +253,20 @@ function LandingView({ opportunity, loading, setView, isAdmin }) {
    ========================================================================= */
 function ApplyView({ onDone }) {
   const [form, setForm] = useState({
-    startupName: "", founderName: "", email: "", phone: "", website: "", sector: "", stage: "", pitch: "",
+    startupName: "", founderName: "", email: "", phone: "", website: "", sector: "", stage: "", pitch: "", proposedSolution: "",
   });
+  const [deckFile, setDeckFile] = useState(null);
+  const [deckError, setDeckError] = useState(null);
+  const DECK_EXTS = [".pdf", ".ppt", ".pptx", ".doc", ".docx"];
+  function pickDeck(e) {
+    const f = e.target.files && e.target.files[0];
+    setDeckError(null);
+    if (!f) { setDeckFile(null); return; }
+    const ext = (f.name.match(/\.[a-z0-9]+$/i) || [""])[0].toLowerCase();
+    if (!DECK_EXTS.includes(ext)) { setDeckFile(null); e.target.value = ""; setDeckError("Please choose a PDF, PowerPoint (.ppt, .pptx) or Word (.doc, .docx) file."); return; }
+    if (f.size > 10 * 1024 * 1024) { setDeckFile(null); e.target.value = ""; setDeckError("That file is larger than 10 MB. Please choose a smaller file."); return; }
+    setDeckFile(f);
+  }
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(false);
@@ -264,11 +280,18 @@ function ApplyView({ onDone }) {
       setError("Startup name, founder name, and email are required.");
       return;
     }
+    if (!form.proposedSolution.trim()) {
+      setError("Describe the solution you propose for this challenge.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      const res = await api.submitRiseApplication(form);
-      setReceipt({ reference: res && res.reference, submittedAt: (res && res.submittedAt) || new Date().toISOString(), summary: { ...form } });
+      const res = await api.submitRiseApplication(form, deckFile);
+      setReceipt({
+        reference: res && res.reference, submittedAt: (res && res.submittedAt) || new Date().toISOString(), summary: { ...form },
+        deckFileName: (res && res.deckFileName) || (deckFile && deckFile.name) || null,
+      });
       setDone(true);
     } catch (e) {
       setError(e.message || "Couldn't submit your application — please try again.");
@@ -282,6 +305,7 @@ function ApplyView({ onDone }) {
     const rows = [
       ["Startup", sm.startupName], ["Founder", sm.founderName], ["Email", sm.email], ["Phone", sm.phone],
       ["Website", sm.website], ["Sector", sm.sector], ["Stage", sm.stage],
+      ["Attachment", receipt && receipt.deckFileName],
     ].filter(([, v]) => v && String(v).trim());
     return (
       <div style={{ maxWidth: 560, margin: "0 auto", padding: "64px 24px 90px" }}>
@@ -308,6 +332,12 @@ function ApplyView({ onDone }) {
               <div style={{ color: BRAND.ink, wordBreak: "break-word" }}>{v}</div>
             </div>
           ))}
+          {sm.proposedSolution && String(sm.proposedSolution).trim() && (
+            <div style={{ fontFamily: FONT, fontSize: 13, padding: "8px 0", borderTop: `1px solid ${BRAND.line}` }}>
+              <div style={{ color: "#9B958F", marginBottom: 4 }}>Proposed solution</div>
+              <div style={{ color: BRAND.ink, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{sm.proposedSolution}</div>
+            </div>
+          )}
           {sm.pitch && String(sm.pitch).trim() && (
             <div style={{ fontFamily: FONT, fontSize: 13, padding: "8px 0 0", borderTop: `1px solid ${BRAND.line}` }}>
               <div style={{ color: "#9B958F", marginBottom: 4 }}>Pitch</div>
@@ -359,8 +389,19 @@ function ApplyView({ onDone }) {
           <Field label="Stage">
             <input style={inputStyle} value={form.stage} onChange={set("stage")} placeholder="e.g. Seed, Series A" />
           </Field>
+          <Field label="Your proposed solution to this challenge" required>
+            <textarea style={{ ...inputStyle, minHeight: 130, resize: "vertical" }} value={form.proposedSolution} onChange={set("proposedSolution")}
+              placeholder="How would your product solve this problem? What would a pilot look like, and what results do you expect?" />
+          </Field>
           <Field label="Tell us about your startup">
-            <textarea style={{ ...inputStyle, minHeight: 110, resize: "vertical" }} value={form.pitch} onChange={set("pitch")} />
+            <textarea style={{ ...inputStyle, minHeight: 110, resize: "vertical" }} value={form.pitch} onChange={set("pitch")}
+              placeholder="Team, product, customers and traction so far." />
+          </Field>
+          <Field label="Pitch deck or solution document (optional)">
+            <input type="file" accept=".pdf,.ppt,.pptx,.doc,.docx" onChange={pickDeck} style={{ ...inputStyle, padding: "9px 10px", background: "#fff" }} />
+            <div style={{ fontFamily: FONT, fontSize: 11.5, color: deckError ? BRAND.coralDark : "#9B958F", marginTop: 5 }}>
+              {deckError || (deckFile ? `Attached: ${deckFile.name} (${(deckFile.size / (1024 * 1024)).toFixed(1)} MB)` : "PDF, PowerPoint or Word, up to 10 MB.")}
+            </div>
           </Field>
 
           <ErrorBanner text={error} />
@@ -627,8 +668,18 @@ function JuryScoreView({ applicationId, onBack }) {
           <a href={application.website} target="_blank" rel="noreferrer" style={{ color: BRAND.blue }}>{application.website}</a>
         </div>
       )}
+      {/* CEO review (27 Oct): the jury scores the solution proposed for this challenge */}
+      {application.proposed_solution && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#9B958F", textTransform: "uppercase", letterSpacing: "0.04em" }}>Proposed solution</div>
+          <div style={{ fontFamily: FONT, fontSize: 13.5, color: "#4A4642", marginTop: 4, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{application.proposed_solution}</div>
+        </div>
+      )}
       {application.pitch && (
-        <div style={{ fontFamily: FONT, fontSize: 13.5, color: "#4A4642", marginTop: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{application.pitch}</div>
+        <div style={{ marginTop: 14 }}>
+          {application.proposed_solution && <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#9B958F", textTransform: "uppercase", letterSpacing: "0.04em" }}>About the startup</div>}
+          <div style={{ fontFamily: FONT, fontSize: 13.5, color: "#4A4642", marginTop: 4, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{application.pitch}</div>
+        </div>
       )}
 
       <Card style={{ padding: 24, marginTop: 24 }}>

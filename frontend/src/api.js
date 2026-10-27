@@ -235,7 +235,38 @@ export const api = {
   // ---- Rise.RIV (public + jury) — uses its own isolated token ------
   getRiseOpportunity: () => request("/rise/opportunity"), // public, no token needed either way
   getRiseCriteria: () => request("/rise/criteria"),
-  submitRiseApplication: (payload) => request("/rise/apply", { method: "POST", body: payload }),
+  // Public application. Sent as multipart so an optional pitch deck / solution
+  // document can travel with it (field "deck"); every other field is text.
+  submitRiseApplication: async (payload, deckFile) => {
+    const form = new FormData();
+    Object.entries(payload || {}).forEach(([k, v]) => { if (v !== undefined && v !== null) form.append(k, String(v)); });
+    if (deckFile) form.append("deck", deckFile);
+    const res = await fetch(`${API_BASE}/api/rise/apply`, { method: "POST", body: form });
+    if (!res.ok) {
+      let message = res.status === 413 ? "The file is too large. Please upload a file under 10 MB." : `Request failed (${res.status})`;
+      try { message = (await res.json()).error || message; } catch {}
+      throw new Error(message);
+    }
+    return res.json();
+  },
+  // RIV Admin: download a startup's pitch deck / solution document
+  downloadRiseApplicationFile: async (applicationId, fileId, fileName) => {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/api/admin/rise/applications/${applicationId}/files/${fileId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      let message = `Download failed (${res.status})`;
+      try { message = (await res.json()).error || message; } catch {}
+      throw new Error(message);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = fileName || "deck";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  },
   riseJuryLogin: (email, password) => loginRequest(email, password), // same endpoint, token just isn't attached to anything yet here
   getRiseApplications: () => riseRequest("/rise/applications"),
   getRiseApplication: (id) => riseRequest(`/rise/applications/${id}`),
