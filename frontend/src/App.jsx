@@ -204,7 +204,20 @@ function NavBar({ view, setView, user, onLogout }) {
   );
 }
 
-function Hero({ setView, stats }) {
+// DR1-43: where "Go to my workspace" takes each role -- the same landing page
+// handleLogin() sends them to.
+function workspaceViewFor(user) {
+  if (!user) return "login";
+  if (user.role === "admin") return "admin";
+  if (user.role === "junior_employee" || user.role === "jury") return "ideas-riv";
+  if (user.role === "rise_jury") return "rise-riv";
+  if (user.role === "index_respondent") return "r-index";
+  if (["product_owner", "riv_manager", "startup_poc"].includes(user.role)) return "build-riv";
+  if (user.role === "client" && user.buildScoped) return "build-riv";
+  return "assess";
+}
+
+function Hero({ setView, stats, user }) {
   return (
     <div style={{ background: BRAND.ink, color: "#fff", position: "relative", overflow: "hidden" }}>
       <div style={{ position: "absolute", top: -180, right: -160, width: 480, height: 480, borderRadius: "50%", background: `radial-gradient(circle, ${BRAND.coral}55 0%, transparent 70%)` }} />
@@ -213,7 +226,19 @@ function Hero({ setView, stats }) {
         <h1 style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: "clamp(34px,5.2vw,58px)", lineHeight: 1.08, letterSpacing: "-0.02em", maxWidth: 780, margin: 0 }}>Never miss the next wave of retail innovation.</h1>
         <p style={{ fontFamily: "'Newsreader',Georgia,serif", fontStyle: "italic", fontSize: "clamp(17px,1.9vw,21px)", color: "#D8D3CF", maxWidth: 620, marginTop: 22, lineHeight: 1.55 }}>An evidence-based diagnostic across 19 operating modules and 165 questions — scored, ranked, and turned into the five opportunities worth acting on first.</p>
         <div style={{ display: "flex", gap: 14, marginTop: 38, flexWrap: "wrap" }}>
-          <button onClick={() => setView("login")} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14.5, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 10, padding: "14px 22px", cursor: "pointer" }}>Log in to your scorecard <ArrowRight size={16} /></button>
+          {/* DR1-43: a logged-in person goes to their own workspace instead of the login screen */}
+          <button onClick={() => setView(workspaceViewFor(user))} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14.5, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 10, padding: "14px 22px", cursor: "pointer" }}>{user ? "Go to my workspace" : "Log in to your scorecard"} <ArrowRight size={16} /></button>
+          {/* DR1-43: the R-Index benchmark is step 0 of the journey -- open to everyone */}
+          <button onClick={() => setView("r-index")} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14.5, background: "transparent", color: "#fff", border: "1px solid #6b6462", borderRadius: 10, padding: "14px 22px", cursor: "pointer" }}>Take the R-Index benchmark <ArrowRight size={16} /></button>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 22, fontFamily: "'Poppins',sans-serif", fontSize: 13, color: "#D8D3CF" }}>
+          {["R-Index benchmark", "Discover audit", "Ideathon & startups", "Build & measure"].map((step, i, all) => (
+            <span key={step} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, borderRadius: "50%", border: `1px solid ${BRAND.coral}`, color: "#F3B4B5", fontSize: 11, fontWeight: 700 }}>{i + 1}</span>
+              {step}
+              {i < all.length - 1 && <span style={{ color: "#8a8480" }}>→</span>}
+            </span>
+          ))}
         </div>
         <div style={{ display: "flex", gap: 40, marginTop: 64, flexWrap: "wrap" }}>
           {stats.map((s) => (
@@ -1858,7 +1883,7 @@ export default function RiosApp() {
       {view !== "ideas-riv" && view !== "rise-riv" && view !== "r-index" && view !== "build-riv" && (
         <NavBar view={view} setView={goToView} user={user} onLogout={handleLogout} />
       )}
-      {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip /></>)}
+      {view === "home" && (<><Hero setView={goToView} stats={stats} user={user} /><JourneyStrip /></>)}
       {view === "login" && <LoginView onLogin={handleLogin} setView={goToView} />}
       {(view === "forgot" || view === "reset") && <ForgotResetView mode={view} setView={goToView} />}
       {view === "change-password" && (user && user.mustChangePassword
