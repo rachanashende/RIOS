@@ -204,16 +204,32 @@ function NavBar({ view, setView, user, onLogout }) {
   );
 }
 
-function Hero({ setView, stats }) {
+// DR1-43: where "Go to my workspace" takes each role -- the same landing page
+// handleLogin() sends them to.
+function workspaceViewFor(user) {
+  if (!user) return "login";
+  if (user.role === "admin") return "admin";
+  if (user.role === "junior_employee" || user.role === "jury") return "ideas-riv";
+  if (user.role === "rise_jury") return "rise-riv";
+  if (user.role === "index_respondent") return "r-index";
+  if (["product_owner", "riv_manager", "startup_poc"].includes(user.role)) return "build-riv";
+  if (user.role === "client" && user.buildScoped) return "build-riv";
+  return "assess";
+}
+
+function Hero({ setView, stats, user }) {
   return (
     <div style={{ background: BRAND.ink, color: "#fff", position: "relative", overflow: "hidden" }}>
       <div style={{ position: "absolute", top: -180, right: -160, width: 480, height: 480, borderRadius: "50%", background: `radial-gradient(circle, ${BRAND.coral}55 0%, transparent 70%)` }} />
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "88px 24px 80px", position: "relative" }}>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#F3B4B5", border: "1px solid #4a4442", borderRadius: 999, padding: "6px 14px", marginBottom: 28 }}><Sparkles size={13} /> Retail Innovation Operating System</div>
         <h1 style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: "clamp(34px,5.2vw,58px)", lineHeight: 1.08, letterSpacing: "-0.02em", maxWidth: 780, margin: 0 }}>Never miss the next wave of retail innovation.</h1>
-        <p style={{ fontFamily: "'Newsreader',Georgia,serif", fontStyle: "italic", fontSize: "clamp(17px,1.9vw,21px)", color: "#D8D3CF", maxWidth: 620, marginTop: 22, lineHeight: 1.55 }}>An evidence-based diagnostic across 19 operating modules and 165 questions — scored, ranked, and turned into the five opportunities worth acting on first.</p>
+        <p style={{ fontFamily: "'Newsreader',Georgia,serif", fontStyle: "italic", fontSize: "clamp(17px,1.9vw,21px)", color: "#D8D3CF", maxWidth: 620, marginTop: 22, lineHeight: 1.55 }}>Benchmark against the market, diagnose your business across 19 operating modules, turn the gaps into ideas from your own people and the best startups, and deliver every winner as a tracked project.</p>
         <div style={{ display: "flex", gap: 14, marginTop: 38, flexWrap: "wrap" }}>
-          <button onClick={() => setView("login")} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14.5, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 10, padding: "14px 22px", cursor: "pointer" }}>Log in to your scorecard <ArrowRight size={16} /></button>
+          {/* DR1-43: a logged-in person goes to their own workspace instead of the login screen */}
+          <button onClick={() => setView(workspaceViewFor(user))} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14.5, background: BRAND.coral, color: "#fff", border: "none", borderRadius: 10, padding: "14px 22px", cursor: "pointer" }}>{user ? "Go to my workspace" : "Log in to your scorecard"} <ArrowRight size={16} /></button>
+          {/* DR1-43: the R-Index benchmark is step 0 of the journey -- open to everyone */}
+          <button onClick={() => setView("r-index")} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14.5, background: "transparent", color: "#fff", border: "1px solid #6b6462", borderRadius: 10, padding: "14px 22px", cursor: "pointer" }}>Take the R-Index benchmark <ArrowRight size={16} /></button>
         </div>
         <div style={{ display: "flex", gap: 40, marginTop: 64, flexWrap: "wrap" }}>
           {stats.map((s) => (
@@ -229,18 +245,29 @@ function Hero({ setView, stats }) {
 }
 
 function JourneyStrip() {
-  const steps = ["Observe", "Evaluate", "Prioritise", "Connect", "Pilot", "Measure", "Build Capability", "Strategic Review"];
+  // DR1-43 / CEO review (28 Oct): the steps follow the product's modules, in order.
+  const steps = [
+    { name: "Benchmark", module: "R-Index" },
+    { name: "Diagnose", module: "Discover audit" },
+    { name: "Prioritise", module: "Top 5 opportunities" },
+    { name: "Ideate", module: "Ideathon" },
+    { name: "Connect", module: "Startup program" },
+    { name: "Pilot", module: "Build" },
+    { name: "Measure", module: "Dashboard & ROI" },
+    { name: "Scale", module: "Build → Production" },
+  ];
   return (
     <div style={{ background: BRAND.cream, borderBottom: `1px solid ${BRAND.line}` }}>
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "56px 24px" }}>
-        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 22, color: BRAND.ink, marginBottom: 6 }}>How RIoS works</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 22, color: BRAND.ink, marginBottom: 6 }}>How RIOS works</div>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14, color: "#7A746F", marginBottom: 30 }}>Innovation becomes a continuous operating rhythm — not an annual initiative.</div>
         <div style={{ display: "flex", gap: 0, flexWrap: "wrap" }}>
           {steps.map((s, i) => (
-            <div key={s} style={{ display: "flex", alignItems: "center" }}>
+            <div key={s.name} style={{ display: "flex", alignItems: "center" }}>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "0 18px", minWidth: 92 }}>
                 <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#fff", border: `2px solid ${BRAND.coral}`, color: BRAND.coral, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 13 }}>{i + 1}</div>
-                <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 500, color: BRAND.ink, textAlign: "center" }}>{s}</div>
+                <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, color: BRAND.ink, textAlign: "center" }}>{s.name}</div>
+                <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: "#9B958F", textAlign: "center", marginTop: -4 }}>{s.module}</div>
               </div>
               {i < steps.length - 1 && <div style={{ width: 26, height: 1, background: BRAND.line }} />}
             </div>
@@ -1823,7 +1850,7 @@ export default function RiosApp() {
     setView(v);
   }
 
-  const stats = [{ value: "165", label: "diagnostic questions" }, { value: "19", label: "operating modules" }, { value: "5", label: "maturity bands" }];
+  const stats = [{ value: "30", label: "R-Index benchmark questions" }, { value: "165", label: "diagnostic questions" }, { value: "19", label: "operating modules" }, { value: "5", label: "maturity bands" }];
 
   // On the R-Index subdomain (audit.retailinnovation.ai), this is a
   // completely different site as far as the visitor's concerned — skip
@@ -1858,7 +1885,7 @@ export default function RiosApp() {
       {view !== "ideas-riv" && view !== "rise-riv" && view !== "r-index" && view !== "build-riv" && (
         <NavBar view={view} setView={goToView} user={user} onLogout={handleLogout} />
       )}
-      {view === "home" && (<><Hero setView={goToView} stats={stats} /><JourneyStrip /></>)}
+      {view === "home" && (<><Hero setView={goToView} stats={stats} user={user} /><JourneyStrip /></>)}
       {view === "login" && <LoginView onLogin={handleLogin} setView={goToView} />}
       {(view === "forgot" || view === "reset") && <ForgotResetView mode={view} setView={goToView} />}
       {view === "change-password" && (user && user.mustChangePassword
