@@ -106,11 +106,14 @@ function NavBar({ view, setView, user, onLogout }) {
   // see Build.RIV only, not the main audit/scorecard.
   const buildScopedClientItems = [{ id: "build-riv", label: "Build" }];
   // O4: admins can open the Ideathon, Startup, R-Index and Build screens from the menu (their own admin login works in each).
+  // CEO review (28 Oct): the menu follows the business cycle -- R-Index (market
+  // benchmark, the front door) -> Manage Clients (Discover audit) -> Ideathon
+  // -> Startup -> Build.
   const adminItems = [
+    { id: "r-index", label: "R-Index" },
     { id: "admin", label: "Manage Clients" },
     { id: "ideas-riv", label: "Ideathon" },
     { id: "rise-riv", label: "Startup" },
-    { id: "r-index", label: "R-Index" },
     { id: "build-riv", label: "Build" },
   ];
   // Ideathon/Startup tabs are each gated to the exact role that belongs
@@ -541,12 +544,27 @@ function AdminView({ setView, setSelectedClient }) {
   const refresh = useCallback(() => { api.listClients().then((d) => setClients(d.clients)).catch(() => setClients([])); }, []);
   useEffect(() => { refresh(); }, [refresh]);
 
+  // R-Index -> Discover hand-off: "Invite to Discover" on an R-Index entry
+  // opens /admin?invite=1&name=&email=&company=&score= and pre-fills the new
+  // client login form here. The URL is then cleaned so a refresh doesn't
+  // pre-fill again.
+  const [inviteNote, setInviteNote] = useState("");
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("invite") !== "1") return;
+    setForm((f) => ({ ...f, name: q.get("name") || "", email: q.get("email") || "", company: q.get("company") || "" }));
+    const score = q.get("score");
+    setInviteNote(`From the R-Index: ${q.get("company") || q.get("name") || "this respondent"}${score ? ` scored ${score}/5` : ""}. Check the details, set a temporary password and create their Discover login. If the email is already used by their R-Index account, use their work email instead.`);
+    window.history.replaceState(null, "", "/admin");
+  }, []);
+
   async function createClient(e) {
     e.preventDefault();
     setError(""); showNotice(""); setBusy(true);
     try {
       await api.createClient(form);
       showNotice(`Login created for ${form.name}${form.company ? ` (${form.company})` : ""}. Share the email and temporary password with the client.`);
+      setInviteNote("");
       setForm({ name: "", email: "", company: "", password: "" });
       refresh();
     } catch (err) { setError(err.message); } finally { setBusy(false); }
@@ -627,6 +645,7 @@ function AdminView({ setView, setSelectedClient }) {
         <div style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 20, background: "#fff", height: "fit-content" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: BRAND.ink, marginBottom: 14 }}><UserPlus size={15} /> New client login</div>
           <form onSubmit={createClient}>
+            {inviteNote && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, lineHeight: 1.5, color: "#1B7A5A", background: "#E7F5EF", borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>{inviteNote}</div>}
             <input placeholder="Contact name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required style={{ ...inputStyle, marginTop: 0 }} />
             <input placeholder="Company" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} style={{ ...inputStyle, marginTop: 10 }} />
             <input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required style={{ ...inputStyle, marginTop: 10 }} />

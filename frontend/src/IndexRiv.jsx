@@ -1085,6 +1085,29 @@ function AdminCampaignsView({ setView, setActiveCampaignId }) {
    ADMIN — entries for one campaign: full list, manual add (interview-sheet
    entry), and report export.
    ========================================================================= */
+// R-Index -> Discover hand-off (CEO review, 28 Oct). The last survey section
+// asks whether the retailer wants an assessment (K01, 1-5), a private
+// benchmark (K03) or a follow-up (K04); those answers flag a lead.
+function interestTags(entry) {
+  const a = (entry && entry.answers) || {};
+  const tags = [];
+  if (Number(a.K01) >= 4) tags.push("Wants an assessment");
+  if (a.K04 === "Yes") tags.push("Wants a follow-up");
+  else if (a.K03 === "Yes") tags.push("Wants a benchmark");
+  return tags;
+}
+// Opens the main site's Manage Clients with the new client login pre-filled.
+function discoverInviteUrl(entry) {
+  const q = new URLSearchParams({
+    invite: "1",
+    name: entry.respondent_name || "",
+    email: entry.respondent_email || "",
+    company: entry.company || "",
+    ...(entry.score != null ? { score: Number(entry.score).toFixed(1) } : {}),
+  });
+  return `${isIndexSubdomain() ? MAIN_SITE_URL : ""}/admin?${q.toString()}`;
+}
+
 function AdminEntriesView({ campaignId, onBack }) {
   const [campaign, setCampaign] = useState(null);
   const [entries, setEntries] = useState([]);
@@ -1205,10 +1228,18 @@ function AdminEntriesView({ campaignId, onBack }) {
                   {e.respondent_email}{e.company ? ` · ${e.company}` : ""} · {e.source === "admin" ? "Added by admin" : "Self-signup"}{!e.account_email && e.source === "admin" ? " (no account yet)" : ""}
                 </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                {/* R-Index -> Discover: the survey's opportunity questions flag who wants help */}
+                {interestTags(e).map((t) => (
+                  <span key={t} style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: BRAND.coralDark, background: "#FCEEE1", padding: "4px 9px", borderRadius: 999 }}>{t}</span>
+                ))}
                 <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1B7A5A", background: "#E7F5EF", padding: "4px 10px", borderRadius: 999 }}>
                   {e.score != null ? `${e.score.toFixed(1)}/5` : "Not scored"}
                 </span>
+                <a href={discoverInviteUrl(e)} title="Create this retailer's Discover (audit) login, pre-filled from this entry"
+                  style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, padding: "6px 11px", borderRadius: 8, background: BRAND.ink, color: "#fff", textDecoration: "none", whiteSpace: "nowrap" }}>
+                  Invite to Discover
+                </a>
                 <button onClick={() => removeEntry(e.id)} aria-label={`Remove ${e.respondent_name}`} style={{ background: "none", border: "none", cursor: "pointer", color: "#B7B2AE", display: "flex", alignItems: "center", padding: 4 }}>
                   <Trash2 size={15} />
                 </button>
