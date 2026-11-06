@@ -1126,6 +1126,14 @@ function AdminEntriesView({ campaignId, onBack }) {
   }
   useEffect(load, [campaignId]);
 
+  async function resetPassword(entry) {
+    const pw = window.prompt(`New temporary password for ${entry.respondent_name || entry.account_email} (at least 8 characters).\nThey will be asked to choose their own when they next log in.`);
+    if (pw === null) return;
+    if (pw.length < 8) { setError("The temporary password must be at least 8 characters."); return; }
+    try { await api.resetIndexRespondentPassword(entry.user_id, pw); setError(null); window.alert(`Password reset for ${entry.respondent_name || entry.account_email}.`); }
+    catch (err) { setError(err.message || "Couldn't reset the password."); }
+  }
+
   async function addEntry(e) {
     e.preventDefault();
     if (!form.respondentName.trim() || !form.respondentEmail.trim()) {
@@ -1240,6 +1248,12 @@ function AdminEntriesView({ campaignId, onBack }) {
                   style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, padding: "6px 11px", borderRadius: 8, background: BRAND.ink, color: "#fff", textDecoration: "none", whiteSpace: "nowrap" }}>
                   Invite to Discover
                 </a>
+                {e.user_id && (
+                  <button onClick={() => resetPassword(e)} title="Set a temporary password for this respondent's R-Index login"
+                    style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, padding: "6px 11px", borderRadius: 8, background: "#fff", color: BRAND.ink, border: `1px solid ${BRAND.line}`, cursor: "pointer", whiteSpace: "nowrap" }}>
+                    Reset password
+                  </button>
+                )}
                 <button onClick={() => removeEntry(e.id)} aria-label={`Remove ${e.respondent_name}`} style={{ background: "none", border: "none", cursor: "pointer", color: "#B7B2AE", display: "flex", alignItems: "center", padding: 4 }}>
                   <Trash2 size={15} />
                 </button>

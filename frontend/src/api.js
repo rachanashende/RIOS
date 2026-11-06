@@ -341,6 +341,8 @@ export const api = {
   featureIndexCampaign: (id) => indexRequest(`/admin/index/campaigns/${id}/feature`, { method: "PUT" }),
   unfeatureIndexCampaign: (id) => indexRequest(`/admin/index/campaigns/${id}/unfeature`, { method: "PUT" }),
   listIndexEntriesAdmin: (campaignId) => indexRequest(`/admin/index/campaigns/${campaignId}/entries`),
+  // R-Index admin: set a temporary password for a respondent (same admin route as the other modules)
+  resetIndexRespondentPassword: (userId, password) => indexRequest(`/admin/users/${userId}/password`, { method: "PUT", body: { password } }),
   createIndexEntryAdmin: (payload) => indexRequest("/admin/index/entries", { method: "POST", body: payload }),
   updateIndexEntryAdmin: (id, payload) => indexRequest(`/admin/index/entries/${id}`, { method: "PUT", body: payload }),
   deleteIndexEntryAdmin: (id) => indexRequest(`/admin/index/entries/${id}`, { method: "DELETE" }),
