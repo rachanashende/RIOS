@@ -910,14 +910,13 @@ function Footer({ setTab }) {
           </div>
           <a href="mailto:contact@retailinnovation.ventures?subject=RIOS%20enquiry">
   contact@retailinnovation.ventures
-</a>
-{" · "}
 <a
   href="https://mail.google.com/mail/?view=cm&fs=1&to=contact@retailinnovation.ventures&su=RIOS%20enquiry"
   target="_blank"
   rel="noopener noreferrer"
+  style={{ display: "inline-block", marginTop: 12, fontFamily: "'Poppins',sans-serif", fontSize: 14, color: BRAND.blue, textDecoration: "underline" }}
 >
-  Open in Gmail
+  contact@retailinnovation.ventures
 </a>
           <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: "#9B958F", marginTop: 28 }}>© 2026 by Retail Innovation Ventures</div>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
