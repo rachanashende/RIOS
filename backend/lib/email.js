@@ -36,7 +36,13 @@ async function send({ to, subject, html }) {
     const resp = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: FROM, to, subject, html }),
+      body: JSON.stringify({
+        from: FROM,
+        to,
+        subject,
+        html,
+        reply_to: process.env.EMAIL_REPLY_TO || "contact@retailinnovation.ventures",
+      }),
     });
     const body = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(body.message || `Resend responded ${resp.status}`);
