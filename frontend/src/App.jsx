@@ -1904,7 +1904,17 @@ export default function RiosApp() {
         <DashboardView questions={questions} modules={modules} responses={responses} setView={goToView} user={user} viewingClient={viewingClient} reassessLinks={reassessLinks} />
       )}
       <div style={{ borderTop: `1px solid ${BRAND.line}`, padding: "28px 24px", textAlign: "center", fontFamily: "'Poppins',sans-serif", fontSize: 12, color: "#B7B2AE", display: (view === "ideas-riv" || view === "rise-riv" || view === "r-index" || view === "build-riv") ? "none" : "block" }}>
-        <div>Questions? Write to us at <a href="mailto:contact@retailinnovation.ventures" style={{ color: BRAND.coralDark }}>contact@retailinnovation.ventures</a></div>
+        <div>Questions? Write to us at <a href="mailto:contact@retailinnovation.ventures?subject=RIOS%20enquiry">
+  contact@retailinnovation.ventures
+</a>
+{" · "}
+<a
+  href="https://mail.google.com/mail/?view=cm&fs=1&to=contact@retailinnovation.ventures&su=RIOS%20enquiry"
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  Open in Gmail
+</a></div>
       </div>
     </div>
   );
